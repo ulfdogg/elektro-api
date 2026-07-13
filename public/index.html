@@ -161,12 +161,15 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
     </div>
     <div class="tb-row">
       <span class="t-label">Ader:</span>
-      <div class="swatch active" style="background:#8B4513" title="L – Phase (braun)" onclick="pickWireColor('L','#8B4513',this)"></div>
-      <div class="swatch" style="background:#1a56db" title="N – Neutralleiter (blau)" onclick="pickWireColor('N','#1a56db',this)"></div>
-      <div class="swatch swatch-pe" title="PE – Schutzleiter (grün-gelb)" onclick="pickWireColor('PE','#16a34a',this)"></div>
-      <div class="swatch" style="background:#111" title="L1 schwarz" onclick="pickWireColor('L1','#222',this)"></div>
-      <div class="swatch" style="background:#222" title="L2 schwarz" onclick="pickWireColor('L2','#222',this)"></div>
-      <div class="swatch" style="background:#6b7280" title="L3 grau" onclick="pickWireColor('L3','#6b7280',this)"></div>
+      <div style="display:flex;align-items:center;gap:3px">
+        <div class="swatch active" style="background:#8B4513" title="L – Phase (braun)" onclick="pickWireColor('L','#8B4513',this)"></div>
+        <div class="swatch" style="background:#1a56db" title="N – Neutralleiter (blau)" onclick="pickWireColor('N','#1a56db',this)"></div>
+        <div class="swatch swatch-pe" title="PE – Schutzleiter (grün-gelb)" onclick="pickWireColor('PE','#16a34a',this)"></div>
+        <div class="swatch" style="background:#111" title="L1 schwarz" onclick="pickWireColor('L1','#222',this)"></div>
+        <div class="swatch" style="background:#222" title="L2 schwarz" onclick="pickWireColor('L2','#222',this)"></div>
+        <div class="swatch" style="background:#6b7280" title="L3 grau" onclick="pickWireColor('L3','#6b7280',this)"></div>
+        <div class="swatch" style="background:#ef4444" title="Rot" onclick="pickWireColor('Rot','#ef4444',this)"></div>
+      </div>
       <div class="t-sep"></div>
       <span class="t-label">Kabel:</span>
       <button class="t-btn" id="cbtn-3x15" onclick="pickCable('3x1.5')">3×1,5</button>
@@ -2708,7 +2711,11 @@ function render() {
       const sw = cabType!=='single'?12:7;
       const onCurrentPath = activeWireIds.has(w.id);
       if (pot & ElektroSim.ANY_L) {
-        mk('path',{d,fill:'none',stroke:'rgba(251,191,36,0.55)',
+        // L1/L2/L3 leicht unterschiedliche Gelb-/Orangetöne, damit die Phase erkennbar bleibt
+        const lStroke = (pot & ElektroSim.POT_L2) ? 'rgba(245,158,11,0.55)'
+          : (pot & ElektroSim.POT_L3) ? 'rgba(252,211,77,0.55)'
+          : 'rgba(251,191,36,0.55)'; // L1 / einphasig
+        mk('path',{d,fill:'none',stroke:lStroke,
           'stroke-width':sw,'stroke-linecap':'round','stroke-linejoin':'round','pointer-events':'none'},WG);
       }
       if (onCurrentPath && (pot & ElektroSim.POT_N)) {
@@ -4759,7 +4766,7 @@ function simulate(comps, wires, simSt, _depth){
   return{state:result, portPot, faults, activeWires:[...activeWires]};
 }
 
-global.ElektroSim={simulate, ANY_L, POT_N:N, POT_PE:PE};
+global.ElektroSim={simulate, ANY_L, POT_N:N, POT_PE:PE, POT_L1:L1, POT_L2:L2, POT_L3:L3};
 })(window);
 </script>
 
