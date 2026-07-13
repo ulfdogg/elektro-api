@@ -2763,7 +2763,9 @@ function render() {
   // Components (sorted: uv/hutschiene first so they render behind)
   const sorted = [...comps].sort((a,b)=>{
     const order = {uv:0,kabelkanal:1,hutschiene:2};
-    return (order[a.type]??3)-(order[b.type]??3);
+    const oa = order[a.type] ?? (a.def?.isContainer ? 2 : 3);
+    const ob = order[b.type] ?? (b.def?.isContainer ? 2 : 3);
+    return oa-ob;
   });
   const renderedLabels = []; // track placed labels for overlap avoidance
   sorted.forEach(comp => {
