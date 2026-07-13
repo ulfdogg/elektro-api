@@ -245,6 +245,7 @@ async function handleChangePassword(request, db) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, request);
   const user = await getCurrentUser(request, db);
   if (!user) return json({ error: "Nicht angemeldet" }, 401, request);
+  if (user.is_demo) return json({ error: "Demo-Konto kann Passwort nicht \xE4ndern" }, 403, request);
   const body = await request.json().catch(() => ({}));
   const currentPassword = body.current_password || "";
   const newPassword = body.new_password || "";
