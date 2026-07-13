@@ -2508,7 +2508,7 @@ function drawPorts(g, comp) {
   comp.def.ports.forEach((pd, i) => {
     const lx = pd.er ? dx+(pd.x||0) : (pd.x||0);
     const ly = pd.er ? dy+(pd.y||0) : (pd.y||0);
-    const used = wires.some(w=>(w.fid===comp.id&&w.fp===i)||(w.tid===comp.id&&w.tp===i));
+    const used = wires.some(w=>!w.bridge&&((w.fid===comp.id&&w.fp===i)||(w.tid===comp.id&&w.tp===i)));
     const pR = comp.def.portR || 5.5;
     // In sim mode: color port by potential
     let pfill = used ? pd.color||'#22c55e' : '#fff';
