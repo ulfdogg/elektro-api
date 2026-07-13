@@ -2358,17 +2358,40 @@ function kanalPt(c, end) {
 function setKanalPt(c, end, x, y) {
   if (end==='X') { c.x=x; c.y=y; } else { c.ex=x; c.ey=y; }
 }
+function closestPtOnSeg(ax,ay,bx,by,px,py) {
+  const dx=bx-ax, dy=by-ay, len2=dx*dx+dy*dy;
+  let t = len2>0 ? ((px-ax)*dx+(py-ay)*dy)/len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return {x:ax+t*dx, y:ay+t*dy, t};
+}
 function findKanalSnap(comp, x, y) {
   let best=null, bestD=KANAL_SNAP_DIST;
   comps.forEach(c=>{
     if (c.id===comp.id || !c.def.isKanal) return;
+    // Corner: end-to-end
     ['X','E'].forEach(oend=>{
       const [ox,oy]=kanalPt(c,oend);
       const d=Math.hypot(ox-x,oy-y);
       if (d<bestD) { bestD=d; best={comp:c, end:oend, x:ox, y:oy}; }
     });
+    // T-Abzweig: Punkt entlang der Kanalstrecke (nicht an den Enden)
+    const [ax,ay]=kanalPt(c,'X'), [bx,by]=kanalPt(c,'E');
+    const cp = closestPtOnSeg(ax,ay,bx,by,x,y);
+    if (cp.t>0.04 && cp.t<0.96) {
+      const d = Math.hypot(cp.x-x, cp.y-y);
+      if (d<bestD) { bestD=d; best={comp:c, end:'T', t:cp.t, x:cp.x, y:cp.y}; }
+    }
   });
   return best;
+}
+function clearKanalReferences(comp) {
+  delete comp.joinE;
+  comps.forEach(c=>{
+    if (!c.def.isKanal || c.id===comp.id) return;
+    if (c.joinX && c.joinX.id===comp.id) delete c.joinX;
+    if (c.joinE && c.joinE.id===comp.id) delete c.joinE;
+    if (c.tChildren) c.tChildren = c.tChildren.filter(t=>t.id!==comp.id);
+  });
 }
 function syncKanalJoins(comp, visited) {
   visited = visited || new Set();
@@ -2383,6 +2406,15 @@ function syncKanalJoins(comp, visited) {
     setKanalPt(other, j.end, x, y);
     syncKanalJoins(other, visited);
   });
+  if (comp.tChildren && comp.tChildren.length) {
+    const [ax,ay]=kanalPt(comp,'X'), [bx,by]=kanalPt(comp,'E');
+    comp.tChildren.forEach(tc=>{
+      const child = comps.find(c=>c.id===tc.id);
+      if (!child) return;
+      setKanalPt(child, tc.end, ax+tc.t*(bx-ax), ay+tc.t*(by-ay));
+      syncKanalJoins(child, visited);
+    });
+  }
 }
 
 function drawCable(g, comp) {
@@ -3316,14 +3348,20 @@ SVG.addEventListener('pointermove', e=>{
       drag.comp.cx=nx; drag.comp.cy=ny;
     } else if (drag.endDrag) {
       if (drag.comp.def.isKanal) {
+        clearKanalReferences(drag.comp);
         const snap = findKanalSnap(drag.comp, nx, ny);
         if (snap) {
           drag.comp.ex=snap.x; drag.comp.ey=snap.y;
-          drag.comp.joinE = {id:snap.comp.id, end:snap.end};
-          if (snap.end==='X') snap.comp.joinX={id:drag.comp.id,end:'E'};
-          else snap.comp.joinE={id:drag.comp.id,end:'E'};
+          if (snap.end==='T') {
+            drag.comp.joinE = {id:snap.comp.id, end:'T', t:snap.t};
+            snap.comp.tChildren = snap.comp.tChildren || [];
+            snap.comp.tChildren.push({id:drag.comp.id, end:'E', t:snap.t});
+          } else {
+            drag.comp.joinE = {id:snap.comp.id, end:snap.end};
+            if (snap.end==='X') snap.comp.joinX={id:drag.comp.id,end:'E'};
+            else snap.comp.joinE={id:drag.comp.id,end:'E'};
+          }
         } else {
-          delete drag.comp.joinE;
           drag.comp.ex=nx; drag.comp.ey=ny;
         }
       } else {
