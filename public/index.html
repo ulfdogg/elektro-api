@@ -820,8 +820,8 @@ const D = {
     ports:[
       {x:10,y:0,  dir:'n',color:'#6b7280',label:''},
       {x:10,y:40, dir:'s',color:'#6b7280',label:''},
-      {x:20,y:20, dir:'e',color:'#f59e0b',label:''}, // Brücke rechts
-      {x:0, y:20, dir:'w',color:'#f59e0b',label:''}, // Brücke links
+      {x:20,y:20, dir:'e',color:'#f59e0b',label:'',r:2}, // Brücke rechts
+      {x:0, y:20, dir:'w',color:'#f59e0b',label:'',r:2}, // Brücke links
     ],
     label:'Klemme 16mm²'
   },
@@ -830,8 +830,8 @@ const D = {
     ports:[
       {x:5,y:0,  dir:'n',color:'#6b7280',label:''},
       {x:5,y:32, dir:'s',color:'#6b7280',label:''},
-      {x:10,y:16, dir:'e',color:'#f59e0b',label:''}, // Brücke rechts
-      {x:0, y:16, dir:'w',color:'#f59e0b',label:''}, // Brücke links
+      {x:10,y:16, dir:'e',color:'#f59e0b',label:'',r:2}, // Brücke rechts
+      {x:0, y:16, dir:'w',color:'#f59e0b',label:'',r:2}, // Brücke links
     ],
     label:'Klemme 2.5mm²'
   },
@@ -841,8 +841,8 @@ const D = {
       {x:5,y:0,  dir:'n',color:'#6b7280',label:''}, // oben (1. Etage)
       {x:5,y:10, dir:'n',color:'#6b7280',label:''}, // oben (2. Etage, darunter)
       {x:5,y:36, dir:'s',color:'#6b7280',label:''}, // unten
-      {x:10,y:23,dir:'e',color:'#f59e0b',label:''}, // Brücke rechts
-      {x:0, y:23,dir:'w',color:'#f59e0b',label:''}, // Brücke links
+      {x:10,y:23,dir:'e',color:'#f59e0b',label:'',r:2}, // Brücke rechts
+      {x:0, y:23,dir:'w',color:'#f59e0b',label:'',r:2}, // Brücke links
     ],
     label:'Klemme 2.5mm² Twin'
   },
@@ -2556,7 +2556,7 @@ function drawPorts(g, comp) {
     const lx = pd.er ? dx+(pd.x||0) : (pd.x||0);
     const ly = pd.er ? dy+(pd.y||0) : (pd.y||0);
     const used = wires.some(w=>!w.bridge&&((w.fid===comp.id&&w.fp===i)||(w.tid===comp.id&&w.tp===i)));
-    const pR = comp.def.portR || 5.5;
+    const pR = pd.r || comp.def.portR || 5.5;
     // In sim mode: color port by potential
     let pfill = used ? pd.color||'#22c55e' : '#fff';
     let pstroke = used ? '#fff' : pd.color||'#ef4444';
