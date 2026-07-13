@@ -136,6 +136,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <div class="t-sep"></div>
       <button class="t-btn active" id="btn-sel" onclick="setMode('select')">▶ Auswählen</button>
       <button class="t-btn" id="btn-wire" onclick="setMode('wire')">〰 Kabel</button>
+      <button class="t-btn" id="btn-bridge" onclick="setMode('bridge')" title="Zwei benachbarte Klemmen direkt verbinden">🌉 Brücke</button>
       <button class="t-btn" id="btn-frame" onclick="setMode('frame')">▭ Rahmen</button>
       <button class="t-btn" id="btn-text" onclick="setMode('text')">T Text</button>
       <div class="t-sep"></div>
@@ -687,7 +688,7 @@ let history = [], spaceDown = false;
 let activePointers = new Map(); // pointerId→{x,y} for multi-touch tracking
 let pinchState = null; // {dist,vpX,vpY,vpZ,mx,my} on pinch start
 let longPressTimer = null, longPressStartX = 0, longPressStartY = 0, longPressComp = null;
-let mode = 'select', drag = null, wfrom = null;
+let mode = 'select', drag = null, wfrom = null, bridgeFrom = null;
 let lastClickId = null, lastClickTime = 0; // for double-click detection
 // ── Simulation ────────────────────────────────────────────────────────────────
 let simMode = false, simState = {}, portPotMap = {}, activeWireIds = new Set();
@@ -2539,6 +2540,7 @@ function drawPorts(g, comp) {
       .textContent = portLabel;
     c.addEventListener('pointerdown', e => {
       if (mode==='wire') e.stopPropagation();
+      if (mode==='bridge') { e.stopPropagation(); onBridgePortDown(comp, i, pd); return; }
       onPortDown(comp, i, pd);
     });
     c.addEventListener('dblclick', e => {
@@ -2633,6 +2635,25 @@ function render() {
     const fpDir = rotDir(fp.dir, fc.rot||0);
     const tpDir = rotDir(tp.dir, tc.rot||0);
 
+    const isSel = selWire===w.id;
+
+    // Klemmenbrücke: kurzer starrer Steg, keine Routenführung
+    if (w.bridge) {
+      w.pts = [[x1,y1],[x2,y2]];
+      mk('line',{x1,y1,x2,y2,stroke:'#6b7280','stroke-width':7,'stroke-linecap':'round'},WG);
+      mk('line',{x1,y1,x2,y2,stroke:'#d1d5db','stroke-width':3,'stroke-linecap':'round','pointer-events':'none'},WG);
+      if (isSel) mk('line',{x1,y1,x2,y2,stroke:'#3b82f6','stroke-width':11,'stroke-linecap':'round',
+        opacity:0.3,'pointer-events':'none'},WG);
+      const hit=mk('line',{x1,y1,x2,y2,stroke:'transparent','stroke-width':14,cursor:'pointer',
+        'pointer-events':mode==='select'?'stroke':'none'},WG);
+      hit.addEventListener('pointerdown',e=>{
+        if (mode!=='select') return;
+        e.stopPropagation();
+        selWire=w.id; sel=null; selSet.clear(); selFrame=null; selText=null; render();
+      });
+      return;
+    }
+
     // Use stored manual path or auto-route
     let d;
     if (w.manual && w.pts && w.pts.length > 1) {
@@ -2644,7 +2665,6 @@ function render() {
     }
     pathToSoftCells(d).forEach(c=>softOccupied.add(c));
 
-    const isSel = selWire===w.id;
     const cabType = w.cable || 'single';
     const strokeW = cabType!=='single' ? 7 : (isSel ? 3.5 : 2.5);
     const strokeC = cabType!=='single' ? '#374151' : w.color;
@@ -3178,6 +3198,34 @@ function cancelWire() {
   TWIRE.parentNode && TWIRE.parentNode.querySelectorAll('.wdot').forEach(d=>d.remove());
 }
 
+// ── Klemmenbrücke: zwei benachbarte Klemmen ohne Ader direkt verbinden ─────────
+function onBridgePortDown(comp, pi, pd) {
+  const isTerminal = comp.type==='klemme' || comp.type==='klemme25';
+  if (!isTerminal) { bridgeFrom=null; return; }
+  if (!bridgeFrom) { bridgeFrom={id:comp.id, p:pi}; return; }
+  if (bridgeFrom.id===comp.id && bridgeFrom.p===pi) { bridgeFrom=null; return; }
+  const fc = comps.find(c=>c.id===bridgeFrom.id);
+  if (!fc) { bridgeFrom=null; return; }
+  const fpd = fc.def.ports[bridgeFrom.p];
+  const bbA = compBBox(fc), bbB = compBBox(comp);
+  const adjacent = fc.railId!=null && fc.railId===comp.railId &&
+    (Math.abs(bbA.x2-bbB.x1)<=2 || Math.abs(bbB.x2-bbA.x1)<=2);
+  if (fpd.dir!==pd.dir || !adjacent) {
+    alert('Brücken sind nur zwischen unmittelbar benachbarten Klemmen auf derselben Hutschiene möglich (gleiche Seite oben/unten).');
+    bridgeFrom=null; return;
+  }
+  const exists = wires.some(w=>
+    (w.fid===bridgeFrom.id&&w.fp===bridgeFrom.p&&w.tid===comp.id&&w.tp===pi)||
+    (w.tid===bridgeFrom.id&&w.tp===bridgeFrom.p&&w.fid===comp.id&&w.fp===pi));
+  if (!exists) {
+    pushHistory();
+    wires.push({id:++wid, fid:bridgeFrom.id, fp:bridgeFrom.p, tid:comp.id, tp:pi,
+      color:'#9ca3af', label:'', cable:'single', bridge:true});
+  }
+  bridgeFrom=null;
+  render();
+}
+
 // ── Pointer events (Maus + Touch + Stift) ──────────────────────────────────
 let panDrag = null;
 function onBgTarget(e) {
@@ -3639,10 +3687,12 @@ function setMode(m) {
   mode=m;
   document.getElementById('btn-sel').classList.toggle('active',m==='select');
   document.getElementById('btn-wire').classList.toggle('active',m==='wire');
+  document.getElementById('btn-bridge').classList.toggle('active',m==='bridge');
   document.getElementById('btn-frame').classList.toggle('active',m==='frame');
   document.getElementById('btn-text').classList.toggle('active',m==='text');
-  SVG.style.cursor = (m==='wire'||m==='frame'||m==='text')?'crosshair':'grab';
+  SVG.style.cursor = (m==='wire'||m==='bridge'||m==='frame'||m==='text')?'crosshair':'grab';
   if (m!=='wire') cancelWire();
+  if (m!=='bridge') bridgeFrom=null;
   if (m!=='frame') { frameDrawing=null; document.getElementById('fpreview').style.display='none'; }
 }
 
