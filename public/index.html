@@ -2637,14 +2637,20 @@ function render() {
 
     const isSel = selWire===w.id;
 
-    // Klemmenbrücke: kurzer starrer Steg, keine Routenführung
+    // Klemmenbrücke: kurzer starrer Steg als abgesetzter Clip, keine Routenführung
     if (w.bridge) {
-      w.pts = [[x1,y1],[x2,y2]];
-      mk('line',{x1,y1,x2,y2,stroke:'#6b7280','stroke-width':7,'stroke-linecap':'round'},WG);
-      mk('line',{x1,y1,x2,y2,stroke:'#d1d5db','stroke-width':3,'stroke-linecap':'round','pointer-events':'none'},WG);
-      if (isSel) mk('line',{x1,y1,x2,y2,stroke:'#3b82f6','stroke-width':11,'stroke-linecap':'round',
+      const OFF = 5;
+      let ox=0, oy=0;
+      if (fpDir==='n') oy=-OFF; else if (fpDir==='s') oy=OFF;
+      else if (fpDir==='w') ox=-OFF; else if (fpDir==='e') ox=OFF;
+      const pts = [[x1,y1],[x1+ox,y1+oy],[x2+ox,y2+oy],[x2,y2]];
+      w.pts = pts;
+      const d = ptsToPath(pts);
+      mk('path',{d,fill:'none',stroke:'#6b7280','stroke-width':6,'stroke-linecap':'round','stroke-linejoin':'round'},WG);
+      mk('path',{d,fill:'none',stroke:'#d1d5db','stroke-width':2.5,'stroke-linecap':'round','stroke-linejoin':'round','pointer-events':'none'},WG);
+      if (isSel) mk('path',{d,fill:'none',stroke:'#3b82f6','stroke-width':10,'stroke-linecap':'round','stroke-linejoin':'round',
         opacity:0.3,'pointer-events':'none'},WG);
-      const hit=mk('line',{x1,y1,x2,y2,stroke:'transparent','stroke-width':14,cursor:'pointer',
+      const hit=mk('path',{d,fill:'none',stroke:'transparent','stroke-width':14,cursor:'pointer',
         'pointer-events':mode==='select'?'stroke':'none'},WG);
       hit.addEventListener('pointerdown',e=>{
         if (mode!=='select') return;
