@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>LOGO! FBD Programmiereditor</title>
+<script>
+(function(){
+  document.documentElement.style.visibility='hidden';
+  fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
+    if(!d.user){ location.href='/login.html'; return; }
+    window._esUser=d.user;
+    document.documentElement.style.visibility='';
+    document.addEventListener('DOMContentLoaded',()=>{
+      const el=document.getElementById('es-username');
+      if(el) el.textContent=d.user.username;
+    });
+  }).catch(()=>{ location.href='/login.html'; });
+})();
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;font-size:12px;background:#e8e4dc;color:#1a1a1a}
+
+/* ── Toolbar ── */
+#toolbar{height:34px;background:linear-gradient(180deg,#d8d4cc,#c4c0b8);border-bottom:2px solid #808070;display:flex;align-items:center;padding:0 6px;gap:1px;flex-shrink:0;user-select:none}
+.tb-group{display:flex;align-items:center;gap:1px;padding:0 4px;border-right:1px solid #9c9888}
+.tb-group:last-child{border-right:none;margin-left:auto}
+.tb-btn{padding:3px 10px;background:linear-gradient(180deg,#ece8e0,#d8d4cc);border:1px solid #9c9888;border-radius:2px;cursor:pointer;font-size:11px;font-family:inherit;white-space:nowrap}
+.tb-btn:hover{background:linear-gradient(180deg,#f8f4ec,#ece8e0)}
+.tb-btn:active,.tb-btn.active{background:linear-gradient(180deg,#c8c4bc,#d4d0c8);box-shadow:inset 1px 1px 2px rgba(0,0,0,.2)}
+.tb-info{font-size:11px;color:#444;padding:0 8px}
+
+/* ── Layout ── */
+#app{display:flex;height:calc(100vh - 34px)}
+
+/* ── Sidebar ── */
+#sidebar{width:170px;background:#f0ede6;border-right:2px solid #c0bdb5;overflow-y:auto;flex-shrink:0;user-select:none}
+.sb-section{}
+.sb-head{padding:5px 8px;background:linear-gradient(180deg,#dcd8d0,#ccc8c0);border-bottom:1px solid #b0aca4;cursor:pointer;font-size:11px;font-weight:700;color:#333;display:flex;align-items:center;gap:5px}
+.sb-head:hover{background:linear-gradient(180deg,#e8e4dc,#d8d4cc)}
+.sb-head .arrow{font-size:8px;transition:transform .15s}
+.sb-head.closed .arrow{transform:rotate(-90deg)}
+.sb-body{}
+.sb-body.hidden{display:none}
+.sb-item{padding:4px 8px 4px 24px;cursor:grab;font-size:11px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #e4e0d8}
+.sb-item:hover{background:#dce8f8}
+.sb-item:active{cursor:grabbing}
+.sb-icon{width:28px;height:18px;background:#fde68a;border:1.5px solid #b45309;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#1c1c1c;flex-shrink:0;font-family:monospace;position:relative}
+.sb-icon.inv::after{content:'○';position:absolute;right:-6px;top:50%;transform:translateY(-50%);font-size:8px;color:#b45309}
+.sb-icon.edge::before{content:'↑';position:absolute;bottom:0;right:1px;font-size:7px;color:#b45309;line-height:1}
+
+/* ── Canvas area ── */
+#canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#e0dcd4}
+
+/* ── I/O bar ── */
+#io-bar{height:42px;background:#1e2535;border-bottom:1px solid #0f1420;display:flex;align-items:center;padding:0 14px;gap:0;flex-shrink:0}
+.io-section{display:flex;align-items:center;gap:8px;padding:0 12px}
+.io-section+.io-section{border-left:1px solid #374151}
+.io-group-label{font-size:9px;font-weight:800;letter-spacing:.9px;color:#6b7280;margin-right:6px}
+.io-leds{display:flex;gap:7px}
+.io-led{display:flex;flex-direction:column;align-items:center;gap:2px;cursor:default}
+.io-dot{width:11px;height:11px;border-radius:50%;background:#374151;border:1.5px solid #1f2937;transition:background .1s,box-shadow .1s}
+.io-dot.on-i{background:#22c55e;border-color:#16a34a;box-shadow:0 0 6px #22c55e}
+.io-dot.on-q{background:#ef4444;border-color:#dc2626;box-shadow:0 0 6px #ef4444}
+.io-name{font-size:9px;color:#6b7280;font-family:monospace;font-weight:700}
+#sim-status{margin-left:auto;font-size:10px;color:#6b7280;padding:0 8px}
+#sim-status.live{color:#22c55e}
+
+/* ── SVG canvas ── */
+#svg-wrap{flex:1;overflow:hidden;position:relative;cursor:default}
+svg#cv{width:100%;height:100%;display:block}
+
+/* ── Context menu ── */
+#ctx{position:fixed;background:#fff;border:1px solid #808080;box-shadow:2px 2px 6px rgba(0,0,0,.25);z-index:500;display:none;min-width:130px}
+.ctx-item{padding:5px 16px;cursor:pointer;font-size:11px}
+.ctx-item:hover{background:#0066cc;color:#fff}
+.ctx-sep{height:1px;background:#e0e0e0;margin:2px 0}
+
+/* ── Timer dialog ── */
+#dlg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#d4d0c8;border:2px solid #606060;box-shadow:4px 4px 14px rgba(0,0,0,.45);padding:0;z-index:1000;display:none;width:340px;font-size:12px}
+.dlg-head{background:linear-gradient(180deg,#1a3a8c,#1028a0,#0c1e7a);color:#fff;padding:5px 10px 5px 12px;font-weight:700;font-size:12px;display:flex;justify-content:space-between;align-items:center}
+.dlg-head-x{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;padding:0 5px;cursor:pointer;font-size:11px;line-height:16px}
+.dlg-tabs{display:flex;background:#c0bcb4;border-bottom:2px solid #808070}
+.dlg-tab{padding:4px 14px;cursor:pointer;font-size:11px;position:relative;top:2px;border:1px solid transparent;border-bottom:none}
+.dlg-tab.active{background:#d4d0c8;border-color:#808070;border-bottom-color:#d4d0c8;font-weight:700}
+.dlg-tab:not(.active):hover{background:#ccc8c0}
+.dlg-body{padding:10px 14px 6px}
+.dlg-fs{border:1px solid #9c9888;margin-bottom:8px;padding:4px 10px 8px;background:#e0dcd4}
+.dlg-fs legend{font-size:11px;font-weight:700;padding:0 4px;color:#222}
+.dlg-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.dlg-label{font-size:11px;color:#333;text-align:right;min-width:75px}
+.dlg-inp{border:1px solid #9c9888;padding:3px 5px;font-size:12px;background:#fff;font-family:inherit}
+.dlg-spin{border:1px solid #9c9888;padding:3px 4px;font-size:12px;width:48px;background:#fff;font-family:inherit;text-align:right}
+.dlg-colon{font-weight:800;font-size:14px;line-height:1}
+.dlg-sel{border:1px solid #9c9888;padding:2px 3px;font-size:11px;background:#fff;font-family:inherit}
+.dlg-chk{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;cursor:pointer}
+.dlg-foot{padding:7px 14px;border-top:1px solid #9c9888;display:flex;justify-content:flex-end;gap:6px;background:#ccc8c0}
+.dlg-btn{padding:4px 16px;border:1px solid #808070;background:linear-gradient(180deg,#ece8e0,#d8d4cc);cursor:pointer;font-size:11px;font-family:inherit;border-radius:2px}
+.dlg-btn.ok{background:linear-gradient(180deg,#4a8adc,#2266aa);color:#fff;border-color:#1a5594}
+.dlg-btn:hover{filter:brightness(1.08)}
+.dlg-btn:disabled{opacity:.5;cursor:default;filter:none}
+#dlg-comment{width:100%;height:90px;border:1px solid #9c9888;resize:vertical;font-family:inherit;font-size:11px;padding:5px;background:#fff}
+
+/* ── Input count dialog ── */
+#inp-dlg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#f0ede6;border:2px solid #808070;box-shadow:4px 4px 12px rgba(0,0,0,.35);padding:0;z-index:1000;display:none;min-width:220px}
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="tb-group">
+    <button class="tb-btn" onclick="clearAll()" title="Alles löschen">🗑 Neu</button>
+  </div>
+  <div class="tb-group">
+    <button class="tb-btn" onclick="zoomFit()" title="Ansicht anpassen">⊞ Fit</button>
+    <button class="tb-btn" onclick="zoom(1.25)">＋</button>
+    <button class="tb-btn" onclick="zoom(0.8)">－</button>
+  </div>
+  <div class="tb-group">
+    <button class="tb-btn" onclick="deleteSelected()" title="Ausgewähltes löschen (Del)">✕ Löschen</button>
+  </div>
+  <div class="tb-group">
+    <span class="tb-info" id="tb-comp-label">LOGO! FBD Editor</span>
+  </div>
+  <div class="tb-group">
+    <button class="tb-btn" onclick="serverSaveFbd()">☁ Speichern</button>
+    <button class="tb-btn" onclick="serverLoadFbd()">☁ Laden</button>
+  </div>
+  <div class="tb-group">
+    <span id="sim-status">Simulation: inaktiv</span>
+  </div>
+  <div class="tb-group" style="margin-left:auto">
+    <span id="es-username" style="font-size:11px;color:#9ca3af;padding:0 4px"></span>
+    <button class="tb-btn" onclick="doLogout()" style="color:#f87171">⏻</button>
+  </div>
+</div>
+
+<div id="app">
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <!-- Konstanten -->
+    <div class="sb-section">
+      <div class="sb-head" onclick="toggleSec(this)"><span class="arrow">▼</span> Konstanten</div>
+      <div class="sb-body">
+        <div class="sb-head" style="padding-left:20px;font-weight:600;font-size:10px;letter-spacing:.5px;background:linear-gradient(180deg,#e4e0d8,#d8d4cc)" onclick="toggleSec(this)"><span class="arrow">▼</span> Eingänge</div>
+        <div class="sb-body" id="inputs-list"></div>
+        <div class="sb-head" style="padding-left:20px;font-weight:600;font-size:10px;letter-spacing:.5px;background:linear-gradient(180deg,#e4e0d8,#d8d4cc)" onclick="toggleSec(this)"><span class="arrow">▼</span> Ausgänge</div>
+        <div class="sb-body" id="outputs-list"></div>
+      </div>
+    </div>
+    <!-- Grundfunktionen -->
+    <div class="sb-section">
+      <div class="sb-head" onclick="toggleSec(this)"><span class="arrow">▼</span> Grundfunktionen</div>
+      <div class="sb-body">
+        <div class="sb-item" draggable="true" data-type="and"><div class="sb-icon">&amp;</div>AND</div>
+        <div class="sb-item" draggable="true" data-type="and_edge"><div class="sb-icon edge">&amp;</div>AND (Flanke)</div>
+        <div class="sb-item" draggable="true" data-type="nand"><div class="sb-icon inv">&amp;</div>NAND</div>
+        <div class="sb-item" draggable="true" data-type="nand_edge"><div class="sb-icon inv edge">&amp;</div>NAND (Flanke)</div>
+        <div class="sb-item" draggable="true" data-type="or"><div class="sb-icon">≥1</div>OR</div>
+        <div class="sb-item" draggable="true" data-type="nor"><div class="sb-icon inv">≥1</div>NOR</div>
+        <div class="sb-item" draggable="true" data-type="xor"><div class="sb-icon">=1</div>XOR</div>
+        <div class="sb-item" draggable="true" data-type="not"><div class="sb-icon inv">1</div>NOT</div>
+      </div>
+    </div>
+    <!-- Sonderfunktionen -->
+    <div class="sb-section">
+      <div class="sb-head" onclick="toggleSec(this)"><span class="arrow">▼</span> Sonderfunktionen</div>
+      <div class="sb-body">
+        <div class="sb-head" style="padding-left:20px;font-weight:600;font-size:10px;letter-spacing:.5px;background:linear-gradient(180deg,#e4e0d8,#d8d4cc)" onclick="toggleSec(this)"><span class="arrow">▼</span> Timer</div>
+        <div class="sb-body">
+          <div class="sb-item" draggable="true" data-type="ton"><div class="sb-icon" style="font-size:7px">TON</div>Einschaltverzög.</div>
+          <div class="sb-item" draggable="true" data-type="tof"><div class="sb-icon" style="font-size:7px">TOF</div>Ausschaltverzög.</div>
+          <div class="sb-item" draggable="true" data-type="tonoff"><div class="sb-icon" style="font-size:6.5px">T↑↓</div>Ein-/Ausschaltverzög.</div>
+          <div class="sb-item" draggable="true" data-type="ttonr"><div class="sb-icon" style="font-size:6.5px">TONR</div>Speich. Einschaltverz.</div>
+        </div>
+        <div class="sb-head" style="padding-left:20px;font-weight:600;font-size:10px;letter-spacing:.5px;background:linear-gradient(180deg,#e4e0d8,#d8d4cc)" onclick="toggleSec(this)"><span class="arrow">▼</span> Flip-Flops</div>
+        <div class="sb-body">
+          <div class="sb-item" draggable="true" data-type="rs"><div class="sb-icon" style="font-size:8px">RS</div>RS Flip-Flop</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Canvas area -->
+  <div id="canvas-area">
+    <!-- Live I/O bar -->
+    <div id="io-bar">
+      <div class="io-section">
+        <span class="io-group-label">EINGÄNGE</span>
+        <div class="io-leds" id="i-leds"></div>
+      </div>
+      <div class="io-section">
+        <span class="io-group-label">AUSGÄNGE</span>
+        <div class="io-leds" id="q-leds"></div>
+      </div>
+      <span id="sim-status">⬤ Simulation inaktiv — starte Simulation im Hauptfenster</span>
+    </div>
+    <!-- SVG canvas -->
+    <div id="svg-wrap">
+      <svg id="cv" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+</div>
+
+<!-- Context menu -->
+<div id="ctx">
+  <div class="ctx-item" id="ctx-del" onclick="ctxDelete()">✕ Löschen</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-inp-add" onclick="ctxAddInput()" style="display:none">＋ Eingang hinzufügen</div>
+  <div class="ctx-item" id="ctx-inp-rm" onclick="ctxRemoveInput()" style="display:none">－ Eingang entfernen</div>
+  <div class="ctx-item" id="ctx-param" onclick="ctxEditParam()" style="display:none">⏱ Zeit einstellen</div>
+</div>
+
+<!-- Timer dialog -->
+<div id="dlg">
+  <div class="dlg-head">
+    <span id="dlg-title">Parameter</span>
+    <button class="dlg-head-x" onclick="closeDlg()">✕</button>
+  </div>
+  <div class="dlg-tabs">
+    <div class="dlg-tab active" id="dlg-tab-btn-param" onclick="dlgTab('param')">Parameter</div>
+    <div class="dlg-tab" id="dlg-tab-btn-kommentar" onclick="dlgTab('kommentar')">Kommentar</div>
+  </div>
+  <!-- Parameter tab -->
+  <div id="dlg-tab-param" class="dlg-body">
+    <fieldset class="dlg-fs">
+      <legend>Parameter</legend>
+      <div class="dlg-row">
+        <span class="dlg-label">Blockname:</span>
+        <input class="dlg-inp" id="dlg-blockname" type="text" style="width:138px">
+      </div>
+    </fieldset>
+    <fieldset class="dlg-fs" id="dlg-time1-fs">
+      <legend id="dlg-time1-label">Einschaltverzögerung</legend>
+      <div class="dlg-row" style="gap:3px">
+        <input class="dlg-spin" id="dlg-min1" type="number" min="0" max="99" value="0">
+        <span style="font-size:9px;color:#666">&nbsp;</span>
+        <span class="dlg-colon">:</span>
+        <input class="dlg-spin" id="dlg-sec1" type="number" min="0" max="59" value="5">
+        <span style="font-size:9px;color:#666">&nbsp;</span>
+        <select class="dlg-sel" id="dlg-unit1">
+          <option value="s">Sekunden (s:1/...)</option>
+          <option value="m">Minuten (m:1/...)</option>
+          <option value="h">Stunden (h:1/...)</option>
+        </select>
+      </div>
+    </fieldset>
+    <fieldset class="dlg-fs" id="dlg-time2-fs" style="display:none">
+      <legend>Ausschaltzeit (TL)</legend>
+      <div class="dlg-row" style="gap:3px">
+        <input class="dlg-spin" id="dlg-min2" type="number" min="0" max="99" value="0">
+        <span style="font-size:9px;color:#666">&nbsp;</span>
+        <span class="dlg-colon">:</span>
+        <input class="dlg-spin" id="dlg-sec2" type="number" min="0" max="59" value="5">
+        <span style="font-size:9px;color:#666">&nbsp;</span>
+        <select class="dlg-sel" id="dlg-unit2">
+          <option value="s">Sekunden (s:1/...)</option>
+          <option value="m">Minuten (m:1/...)</option>
+          <option value="h">Stunden (h:1/...)</option>
+        </select>
+      </div>
+    </fieldset>
+    <fieldset class="dlg-fs">
+      <legend>Andere</legend>
+      <label class="dlg-chk"><input type="checkbox" id="dlg-remanenz"> Remanenz</label>
+      <label class="dlg-chk"><input type="checkbox" id="dlg-schutz"> Schutz aktiv</label>
+    </fieldset>
+  </div>
+  <!-- Kommentar tab -->
+  <div id="dlg-tab-kommentar" class="dlg-body" style="display:none">
+    <textarea id="dlg-comment" placeholder="Kommentar..."></textarea>
+  </div>
+  <div class="dlg-foot">
+    <button class="dlg-btn" onclick="closeDlg()">Abbrechen</button>
+    <button class="dlg-btn ok" onclick="saveDlg()">OK</button>
+    <button class="dlg-btn" disabled>Hilfe</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ── Block definitions ─────────────────────────────────────────────────────────
+const BD = {
+  input:     { sym:'I',    W:48, H:28, ins:0, outs:1 },
+  output:    { sym:'Q',    W:48, H:28, ins:1, outs:1 },
+  and:       { sym:'&',    W:52, H:0,  ins:4, outs:1, resize:true },
+  and_edge:  { sym:'&',    W:52, H:0,  ins:4, outs:1, resize:true, edge:true },
+  nand:      { sym:'&',    W:52, H:0,  ins:4, outs:1, resize:true, invOut:true },
+  nand_edge: { sym:'&',    W:52, H:0,  ins:4, outs:1, resize:true, invOut:true, edge:true },
+  or:        { sym:'≥1',   W:52, H:0,  ins:4, outs:1, resize:true },
+  nor:       { sym:'≥1',   W:52, H:0,  ins:4, outs:1, resize:true, invOut:true },
+  xor:       { sym:'=1',   W:52, H:0,  ins:4, outs:1 },
+  not:       { sym:'1',    W:52, H:28, ins:1, outs:1, invOut:true },
+  ton:       { sym:'TON',  W:64, H:54, ins:1, outs:1, hasParam:true, smallSym:true },
+  tof:       { sym:'TOF',  W:64, H:54, ins:1, outs:1, hasParam:true, smallSym:true },
+  tonoff:    { sym:'T',    W:64, H:90, ins:1, outs:1, hasParam:true, hasParam2:true, smallSym:true },
+  ttonr:     { sym:'T',    W:64, H:54, ins:2, outs:1, hasParam:true, smallSym:true, inLabels:['En','R'] },
+  rs:        { sym:'RS',   W:52, H:50, ins:2, outs:1, inLabels:['S','R'], smallSym:true },
+};
+
+function bH(b) {
+  const d=BD[b.type]; if(!d) return 30;
+  return d.H>0 ? d.H : Math.max(38, (b.inputCount||d.ins)*14+14);
+}
+function bW(b){ return BD[b.type]?.W||52; }
+
+// Port positions (SVG coords relative to block origin)
+function inPortY(b, i) {
+  const n=b.inputCount||BD[b.type]?.ins||1, h=bH(b);
+  return (i+1)*h/(n+1);
+}
+function outPortY(b){ return bH(b)/2; }
+
+// Absolute port positions in SVG canvas coords
+function portAbs(b, isOut, portIdx=0) {
+  const x=b.x, y=b.y;
+  if(isOut) return { x: x+bW(b), y: y+outPortY(b) };
+  return { x: x, y: y+inPortY(b, portIdx) };
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let prog = { blocks:[], conns:[] };
+let vp = { x:60, y:60, z:1 };
+let selId = null;
+let dragBlk = null;      // { id, ox, oy }
+let panDrag = null;      // { sx,sy,vx,vy }
+let connDrag = null;     // { fromId, fromPort:0, x,y }
+let ctxTargetId = null;
+let dlgTargetId = null;
+let simLive = false;
+let simI = new Array(12).fill(false);
+let simQ = new Array(8).fill(false);
+let testInputs = new Array(12).fill(false);
+let compId = null;
+let channel = null;
+let blkCtr = 0;
+
+// ── BroadcastChannel setup ────────────────────────────────────────────────────
+function initChannel(cid) {
+  compId = cid;
+  if(channel) channel.close();
+  channel = new BroadcastChannel('logo-editor-'+cid);
+  channel.onmessage = e => {
+    const msg = e.data;
+    if(msg.type==='sim-state') {
+      simLive = msg.simMode;
+      simI = msg.i || new Array(12).fill(false);
+      simQ = msg.q || new Array(8).fill(false);
+      updateIOBar();
+    }
+    if(msg.type==='load-prog') {
+      prog = msg.prog || { blocks:[], conns:[] };
+      // Reset block counter
+      let max=0;
+      prog.blocks.forEach(b=>{ const n=parseInt((b.label||'').replace(/\D/g,'')); if(n>max) max=n; });
+      blkCtr=max;
+      render(); zoomFit();
+    }
+  };
+  // Request current state
+  channel.postMessage({ type:'editor-ready', compId:cid });
+  document.getElementById('tb-comp-label').textContent = 'LOGO! 230RCE — Komponente #'+cid;
+}
+
+function broadcastProg() {
+  if(!channel) return;
+  channel.postMessage({ type:'prog-update', compId, prog });
+  // Also save to localStorage as backup
+  try { localStorage.setItem('logo-prog-'+compId, JSON.stringify(prog)); } catch(e){}
+}
+
+// ── Sidebar init ──────────────────────────────────────────────────────────────
+(function buildSidebar() {
+  const iList = document.getElementById('inputs-list');
+  const qList = document.getElementById('outputs-list');
+  for(let i=1;i<=12;i++) {
+    const el=document.createElement('div');
+    el.className='sb-item'; el.draggable=true; el.dataset.type='input'; el.dataset.port='I'+i;
+    el.innerHTML=`<div class="sb-icon" style="font-size:10px;font-weight:800;font-family:monospace">I</div>Eingang I${i}`;
+    iList.appendChild(el);
+  }
+  for(let q=1;q<=8;q++) {
+    const el=document.createElement('div');
+    el.className='sb-item'; el.draggable=true; el.dataset.type='output'; el.dataset.port='Q'+q;
+    el.innerHTML=`<div class="sb-icon" style="font-size:10px;font-weight:800;font-family:monospace">Q</div>Ausgang Q${q}`;
+    qList.appendChild(el);
+  }
+})();
+
+function toggleSec(head) {
+  const body=head.nextElementSibling;
+  const arr=head.querySelector('.arrow');
+  if(!body) return;
+  const hidden=body.classList.toggle('hidden');
+  head.classList.toggle('closed',hidden);
+}
+
+// ── I/O bar ───────────────────────────────────────────────────────────────────
+(function buildIOBar(){
+  const iLeds=document.getElementById('i-leds');
+  const qLeds=document.getElementById('q-leds');
+  for(let i=0;i<12;i++){
+    iLeds.innerHTML+=`<div class="io-led"><div class="io-dot" id="iled${i}"></div><span class="io-name">I${i+1}</span></div>`;
+  }
+  for(let q=0;q<8;q++){
+    qLeds.innerHTML+=`<div class="io-led"><div class="io-dot" id="qled${q}"></div><span class="io-name">Q${q+1}</span></div>`;
+  }
+})();
+
+function updateIOBar() {
+  const ss=document.getElementById('sim-status');
+  if(simLive){ ss.textContent='⬤ Simulation aktiv (Live)'; ss.style.color='#22c55e'; }
+  else { ss.textContent='⬤ Test-Modus (Eingänge anklicken)'; ss.style.color='#f59e0b'; }
+  for(let i=0;i<12;i++){
+    const d=document.getElementById('iled'+i);
+    const active=simLive?simI[i]:testInputs[i];
+    if(d){ d.className='io-dot'+(active?' on-i':''); }
+  }
+  for(let q=0;q<8;q++){
+    const d=document.getElementById('qled'+q);
+    if(d){ d.className='io-dot'+(simQ[q]?' on-q':''); }
+  }
+  renderSimOverlay();
+}
+
+// ── SVG helpers ───────────────────────────────────────────────────────────────
+const SVG_NS='http://www.w3.org/2000/svg';
+const cv=document.getElementById('cv');
+let gGrid,gConns,gBlocks,gOverlay,gPreview;
+
+function mkEl(tag,attrs,parent){
+  const el=document.createElementNS(SVG_NS,tag);
+  for(const [k,v] of Object.entries(attrs)) el.setAttribute(k,v);
+  if(parent) parent.appendChild(el);
+  return el;
+}
+
+function initSVG(){
+  cv.innerHTML='';
+  // Defs: grid pattern + shadow + arrow marker
+  const defs=mkEl('defs',{},cv);
+  // Grid pattern
+  const pat=mkEl('pattern',{id:'grid',width:20,height:20,patternUnits:'userSpaceOnUse'},defs);
+  mkEl('circle',{cx:0,cy:0,r:0.8,fill:'#b0b0b0'},pat);
+  // Shadow filter
+  const flt=mkEl('filter',{id:'bshadow',x:'-10%',y:'-10%',width:'120%',height:'120%'},defs);
+  mkEl('feDropShadow',{dx:1,dy:1,stdDeviation:1.5,'flood-color':'rgba(0,0,0,0.25)'},flt);
+  // Arrow marker for connections
+  const mark=mkEl('marker',{id:'arr',markerWidth:6,markerHeight:6,refX:5,refY:3,orient:'auto'},defs);
+  mkEl('path',{d:'M0,0 L0,6 L6,3 Z',fill:'#3b5a90'},mark);
+
+  // Background rect (for pan detection)
+  mkEl('rect',{id:'cvbg',x:-5000,y:-5000,width:10000,height:10000,fill:'url(#grid)'},cv);
+
+  // Layer groups
+  gConns=mkEl('g',{id:'g-conns'},cv);
+  gBlocks=mkEl('g',{id:'g-blocks'},cv);
+  gOverlay=mkEl('g',{id:'g-overlay'},cv);
+  gPreview=mkEl('g',{id:'g-preview'},cv);
+
+  applyVP();
+}
+
+function applyVP(){
+  const t=`translate(${vp.x},${vp.y}) scale(${vp.z})`;
+  gConns.setAttribute('transform',t);
+  gBlocks.setAttribute('transform',t);
+  gOverlay.setAttribute('transform',t);
+  gPreview.setAttribute('transform',t);
+}
+
+function svgPt(clientX,clientY){
+  const r=cv.getBoundingClientRect();
+  return { x:(clientX-r.left-vp.x)/vp.z, y:(clientY-r.top-vp.y)/vp.z };
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render(){
+  gConns.innerHTML='';
+  gBlocks.innerHTML='';
+  gOverlay.innerHTML='';
+  gPreview.innerHTML='';
+
+  // Draw connections
+  for(const c of prog.conns) drawConn(c);
+
+  // Draw blocks
+  for(const b of prog.blocks) drawBlock(b);
+
+  // Selection highlight
+  if(selId){
+    const b=prog.blocks.find(x=>x.id===selId);
+    if(b){
+      mkEl('rect',{x:b.x-3,y:b.y-3,width:bW(b)+6,height:bH(b)+6,
+        fill:'none',stroke:'#1a66cc','stroke-width':1.5,'stroke-dasharray':'4 2',rx:3,
+        'pointer-events':'none'},gOverlay);
+    }
+  }
+
+  renderSimOverlay();
+}
+
+function drawConn(c){
+  const fb=prog.blocks.find(b=>b.id===c.fromId);
+  const tb=prog.blocks.find(b=>b.id===c.toId);
+  if(!fb||!tb) return;
+  const fp=portAbs(fb,true,0);
+  const tp=portAbs(tb,false,c.toPort);
+  const dx=Math.max(30,(tp.x-fp.x)*0.5);
+  const d=`M${fp.x},${fp.y} C${fp.x+dx},${fp.y} ${tp.x-dx},${tp.y} ${tp.x},${tp.y}`;
+  // Hit area
+  const hit=mkEl('path',{d,fill:'none',stroke:'transparent','stroke-width':8,cursor:'pointer'},gConns);
+  hit.dataset.cid=c.id;
+  hit.addEventListener('contextmenu',e=>{
+    e.preventDefault(); ctxTargetId=c.id; ctxTargetType='conn'; showCtx(e.clientX,e.clientY);
+  });
+  // Visual line
+  mkEl('path',{d,fill:'none',stroke:'#3b5a90','stroke-width':1.5},gConns);
+  // State overlay (always shown in test mode or when live)
+  const cs=connSimVal(c);
+  if(cs!==null){
+    mkEl('path',{d,fill:'none',stroke:cs?'#22c55e':'#94a3b8','stroke-width':2.5,opacity:0.7,'pointer-events':'none'},gConns);
+  }
+}
+
+function drawBlock(b){
+  const d=BD[b.type]; if(!d) return;
+  const w=bW(b), h=bH(b);
+  const g=mkEl('g',{'data-id':b.id,cursor:'grab'},gBlocks);
+
+  // Block label above (B001 etc.)
+  if(b.label){
+    mkEl('text',{x:b.x+w/2,y:b.y-2,'text-anchor':'middle','font-size':9,'font-family':'monospace',fill:'#555','pointer-events':'none'},gBlocks).textContent=b.label;
+  }
+
+  // Shadow + main rect
+  const rect=mkEl('rect',{x:b.x,y:b.y,width:w,height:h,fill:'#fde68a',stroke:'#b45309',
+    'stroke-width':1.5,rx:2,filter:'url(#bshadow)',cursor:'grab'},g);
+
+  // Function symbol (not for input/output — those render their own port labels)
+  if(b.type!=='input'&&b.type!=='output'){
+    const symY = ['ton','tof','tonoff','ttonr'].includes(b.type) ? b.y+16 : b.y+h/2+1;
+    const fontSize = d.smallSym ? 9 : (d.sym.length>1?9:13);
+    mkEl('text',{x:b.x+w/2,y:symY,'text-anchor':'middle','dominant-baseline':'middle',
+      'font-size':fontSize,'font-family':'monospace','font-weight':'800',fill:'#1c1c1c',
+      'pointer-events':'none'},g).textContent=d.sym;
+  }
+
+  // Input/Output blocks: show port name + arrow direction
+  if(b.type==='input'){
+    // Port name left-aligned, arrow pointing right
+    mkEl('text',{x:b.x+4,y:b.y+h/2+4,'font-size':10,'font-family':'monospace',
+      'font-weight':'800',fill:'#1c1c1c','pointer-events':'none'},g).textContent=b.port||'I';
+    mkEl('text',{x:b.x+w-4,y:b.y+h/2+4,'text-anchor':'end','font-size':9,fill:'#92400e',
+      'pointer-events':'none'},g).textContent='→';
+  } else if(b.type==='output'){
+    // Arrow on left, port name right-aligned
+    mkEl('text',{x:b.x+4,y:b.y+h/2+4,'font-size':9,fill:'#92400e',
+      'pointer-events':'none'},g).textContent='→';
+    mkEl('text',{x:b.x+w-4,y:b.y+h/2+4,'text-anchor':'end','font-size':10,'font-family':'monospace',
+      'font-weight':'800',fill:'#1c1c1c','pointer-events':'none'},g).textContent=b.port||'Q';
+    // Show that output has a pass-through: small arrow on right side
+    mkEl('text',{x:b.x+w-4,y:b.y+h/2-5,'text-anchor':'end','font-size':7,fill:'#9ca3af',
+      'pointer-events':'none'},g).textContent='→';
+  }
+
+  // Timer params — clickable rect(s) to open edit dialog
+  if(['ton','tof','tonoff','ttonr'].includes(b.type)){
+    const fmt=(min,sec,unit)=>`${min||0}:${String(sec||0).padStart(2,'0')} ${unit||'s'}`;
+    if(b.type==='tonoff'){
+      const box1=mkEl('rect',{x:b.x+4,y:b.y+h-37,width:w-8,height:15,rx:2,fill:'#fef3c7',stroke:'#d97706','stroke-width':1,cursor:'pointer'},g);
+      mkEl('text',{x:b.x+w/2,y:b.y+h-26,'text-anchor':'middle','font-size':7.5,fill:'#92400e','font-weight':'700','pointer-events':'none'},g).textContent='TH='+fmt(b.paramMin,b.paramSec,b.paramUnit);
+      box1.addEventListener('click',e=>{ e.stopPropagation(); openDlg(b); });
+      box1.addEventListener('pointerdown',e=>e.stopPropagation());
+      const box2=mkEl('rect',{x:b.x+4,y:b.y+h-19,width:w-8,height:15,rx:2,fill:'#fef3c7',stroke:'#d97706','stroke-width':1,cursor:'pointer'},g);
+      mkEl('text',{x:b.x+w/2,y:b.y+h-8,'text-anchor':'middle','font-size':7.5,fill:'#92400e','font-weight':'700','pointer-events':'none'},g).textContent='TL='+fmt(b.paramMin2,b.paramSec2,b.paramUnit2);
+      box2.addEventListener('click',e=>{ e.stopPropagation(); openDlg(b); });
+      box2.addEventListener('pointerdown',e=>e.stopPropagation());
+    } else {
+      const tpBox=mkEl('rect',{x:b.x+4,y:b.y+h-20,width:w-8,height:14,rx:2,fill:'#fef3c7',stroke:'#d97706','stroke-width':1,cursor:'pointer'},g);
+      mkEl('text',{x:b.x+w/2,y:b.y+h-10,'text-anchor':'middle','font-size':7.5,fill:'#92400e','font-weight':'700','pointer-events':'none'},g).textContent='T='+fmt(b.paramMin,b.paramSec,b.paramUnit);
+      tpBox.addEventListener('click',e=>{ e.stopPropagation(); openDlg(b); });
+      tpBox.addEventListener('pointerdown',e=>e.stopPropagation());
+    }
+  }
+
+  // Inverted output circle
+  if(d.invOut){
+    mkEl('circle',{cx:b.x+w+5,cy:b.y+outPortY(b),r:4,fill:'#fde68a',stroke:'#b45309','stroke-width':1.5,'pointer-events':'none'},g);
+  }
+
+  // Edge indicator
+  if(d.edge){
+    mkEl('text',{x:b.x+w-4,y:b.y+4,'text-anchor':'end','dominant-baseline':'hanging','font-size':7,fill:'#b45309','pointer-events':'none'},g).textContent='↑';
+  }
+
+  // Input labels (RS: S, R)
+  if(d.inLabels){
+    d.inLabels.forEach((lbl,i)=>{
+      mkEl('text',{x:b.x+4,y:b.y+inPortY(b,i),'dominant-baseline':'middle','font-size':8,fill:'#555','pointer-events':'none'},g).textContent=lbl;
+    });
+  }
+
+  // TON/TOF/TONOFF En+Q labels (ttonr uses inLabels for En/R)
+  if(['ton','tof','tonoff'].includes(b.type)){
+    mkEl('text',{x:b.x+4,y:b.y+inPortY(b,0),'dominant-baseline':'middle','font-size':8,fill:'#555','pointer-events':'none'},g).textContent='En';
+    mkEl('text',{x:b.x+w-4,y:b.y+outPortY(b),'text-anchor':'end','dominant-baseline':'middle','font-size':8,fill:'#555','pointer-events':'none'},g).textContent='Q';
+  }
+  if(b.type==='ttonr'){
+    mkEl('text',{x:b.x+w-4,y:b.y+outPortY(b),'text-anchor':'end','dominant-baseline':'middle','font-size':8,fill:'#555','pointer-events':'none'},g).textContent='Q';
+  }
+
+  // Input ports (left side)
+  const numIns = b.inputCount||d.ins;
+  for(let i=0;i<numIns;i++){
+    const py=b.y+inPortY(b,i);
+    const pc=mkEl('circle',{cx:b.x,cy:py,r:5,fill:'#fef9e7',stroke:'#b45309',
+      'stroke-width':1.5,cursor:'crosshair','pointer-events':'all'},g);
+    pc.dataset.portType='in'; pc.dataset.portIdx=i; pc.dataset.blkId=b.id;
+    // Dot if connected
+    if(prog.conns.some(c=>c.toId===b.id&&c.toPort===i)){
+      mkEl('circle',{cx:b.x,cy:py,r:2.5,fill:'#b45309','pointer-events':'none'},g);
+    }
+  }
+
+  // Output port (right side)
+  if(d.outs>0){
+    const outX = d.invOut ? b.x+w+10 : b.x+w;
+    const pc=mkEl('circle',{cx:outX,cy:b.y+outPortY(b),r:5,fill:'#fef9e7',stroke:'#b45309',
+      'stroke-width':1.5,cursor:'crosshair','pointer-events':'all'},g);
+    pc.dataset.portType='out'; pc.dataset.blkId=b.id;
+    if(prog.conns.some(c=>c.fromId===b.id)){
+      mkEl('circle',{cx:outX,cy:b.y+outPortY(b),r:2.5,fill:'#b45309','pointer-events':'none'},g);
+    }
+  }
+
+  // Drag on block body (not on ports)
+  rect.addEventListener('pointerdown', e=>{ if(e.button!==0) return; e.stopPropagation(); startBlkDrag(b.id,e); });
+  rect.addEventListener('contextmenu', e=>{ e.preventDefault(); ctxTargetId=b.id; ctxTargetType='block'; showCtxBlock(b,e.clientX,e.clientY); });
+  rect.addEventListener('dblclick', e=>{ e.stopPropagation(); onBlockDblClick(b); });
+  // Test mode: click input block to toggle test state
+  if(b.type==='input'){
+    rect.style.cursor='pointer';
+    rect.addEventListener('click', e=>{
+      if(simLive) return;
+      e.stopPropagation();
+      const ii=parseInt(b.port.slice(1))-1;
+      testInputs[ii]=!testInputs[ii];
+      _evalCache=null;
+      updateLogoLive();
+    });
+  }
+
+  // Sim state overlay on block
+  drawBlockSimState(g,b);
+}
+
+// Draw block sim state (live or test mode)
+function drawBlockSimState(g,b){
+  let val=null;
+  if(b.type==='input'){
+    const ii=parseInt(b.port.slice(1))-1;
+    val=simLive?(simI[ii]??null):(testInputs[ii]??false);
+  } else if(b.type==='output'){
+    val=simLive?(simQ[parseInt(b.port.slice(1))-1]??null):blockSimVal(b);
+  } else {
+    val=blockSimVal(b);
+  }
+  if(val===null) return;
+  const col=val?'#22c55e':'#94a3b8';
+  mkEl('rect',{x:b.x,y:b.y,width:bW(b),height:bH(b),rx:2,fill:val?'rgba(34,197,94,0.12)':'none',
+    stroke:val?col:'none','stroke-width':1.5,'pointer-events':'none'},gOverlay);
+}
+
+function renderSimOverlay(){
+  gOverlay.innerHTML='';
+  if(selId){
+    const b=prog.blocks.find(x=>x.id===selId);
+    if(b) mkEl('rect',{x:b.x-3,y:b.y-3,width:bW(b)+6,height:bH(b)+6,
+      fill:'none',stroke:'#1a66cc','stroke-width':1.5,'stroke-dasharray':'4 2',rx:3,'pointer-events':'none'},gOverlay);
+  }
+  _evalCache=null;
+  for(const b of prog.blocks) drawBlockSimState(gOverlay,b);
+}
+
+// ── FBD evaluation (for connection color overlay) ─────────────────────────────
+let _evalCache=null;
+function evalFBD(){
+  const iSrc=simLive?simI:testInputs;
+  const vals={};
+  for(const b of prog.blocks){
+    if(b.type==='input'){ const ii=parseInt(b.port.slice(1))-1; vals[b.id]=(iSrc[ii]??false); }
+  }
+  // Iterate until stable (max 30 rounds)
+  for(let iter=0;iter<30;iter++){
+    let changed=false;
+    // Propagate through connections
+    const inVals={};
+    for(const c of prog.conns){
+      if(vals[c.fromId]!==undefined){
+        if(!inVals[c.toId]) inVals[c.toId]=new Array(10).fill(null);
+        inVals[c.toId][c.toPort]=vals[c.fromId];
+      }
+    }
+    // Evaluate gates + output pass-through
+    for(const b of prog.blocks){
+      if(b.type==='input') continue;
+      const iv=inVals[b.id]||[];
+      const ic=b.inputCount||BD[b.type]?.ins||1;
+
+      // LOGO! Logic: Unconnected inputs have different defaults based on function type
+      // AND/NAND: unconnected = TRUE (so only connected inputs matter)
+      // OR/NOR/XOR: unconnected = FALSE (so only connected inputs can activate)
+      const isAndType = ['and','and_edge','nand','nand_edge'].includes(b.type);
+      const defaultVal = isAndType ? true : false;
+      const arr=Array.from({length:ic},(_,i)=>iv[i]??defaultVal);
+
+      let out;
+      switch(b.type){
+        case'output': out=iv[0]??false; break; // pass input through so downstream blocks can use Q
+        case'and': case'and_edge': out=arr.every(v=>v); break;
+        case'nand': case'nand_edge': out=!arr.every(v=>v); break;
+        case'or': out=arr.some(v=>v); break;
+        case'nor': out=!arr.some(v=>v); break;
+        case'xor': out=arr.reduce((a,v)=>a!==v,false); break;
+        case'not': out=!(iv[0]??false); break;
+        case'rs': out=(iv[0]??false)||(!(iv[1]??false)&&!!b._q); b._q=out; break;
+        case'ton': {
+          const en=iv[0]??false, ms=timerMs(b);
+          if(!en){ b._timerStart=undefined; out=false; }
+          else if(b._timerStart===undefined){ b._timerStart=Date.now(); out=false; setTimeout(()=>{ _evalCache=null; updateLogoLive(); },ms+20); }
+          else { out=Date.now()-b._timerStart>=ms; }
+          break;
+        }
+        case'tof': {
+          const en=iv[0]??false, ms=timerMs(b);
+          if(en){ b._timerStart=null; out=true; }
+          else if(b._timerStart===undefined){ out=false; }
+          else if(b._timerStart===null){ b._timerStart=Date.now(); out=true; setTimeout(()=>{ _evalCache=null; updateLogoLive(); },ms+20); }
+          else if(Date.now()-b._timerStart<ms){ out=true; }
+          else { b._timerStart=undefined; out=false; }
+          break;
+        }
+        case'tonoff': {
+          const en=iv[0]??false, msTH=timerMs(b,false), msTL=timerMs(b,true);
+          if(en){
+            b._timerOff=undefined;
+            if(b._timerOn===undefined){ b._timerOn=Date.now(); setTimeout(()=>{ _evalCache=null; updateLogoLive(); },msTH+20); }
+            out=!!(b._timerOn!==undefined && Date.now()-b._timerOn>=msTH);
+          } else {
+            b._timerOn=undefined;
+            if(b._timerOff===undefined && b._prevOut){ b._timerOff=Date.now(); setTimeout(()=>{ _evalCache=null; updateLogoLive(); },msTL+20); }
+            if(b._timerOff!==undefined){ out=Date.now()-b._timerOff<msTL; if(!out) b._timerOff=undefined; }
+            else { out=false; }
+          }
+          b._prevOut=out;
+          break;
+        }
+        case'ttonr': {
+          const en=iv[0]??false, rst=iv[1]??false, ms=timerMs(b);
+          const now=Date.now();
+          if(rst){ b._acc=0; b._lastT=null; out=false; break; }
+          if(en){
+            if(!b._lastT) b._lastT=now;
+            b._acc=Math.min((b._acc||0)+(now-b._lastT), ms+1);
+            b._lastT=now;
+            const rem=ms-(b._acc||0);
+            if(rem>0) setTimeout(()=>{ _evalCache=null; updateLogoLive(); },rem+20);
+          } else {
+            b._lastT=null;
+          }
+          out=(b._acc||0)>=ms;
+          break;
+        }
+        default: out=false;
+      }
+      if(vals[b.id]!==out){ vals[b.id]=out; changed=true; }
+    }
+    if(!changed) break;
+  }
+  // Propagate values into output blocks so blockSimVal works for them
+  for(const b of prog.blocks){
+    if(b.type==='output'){
+      for(const conn of prog.conns){
+        if(conn.toId===b.id){ vals[b.id]=vals[conn.fromId]??false; break; }
+      }
+    }
+  }
+  _evalCache=vals;
+  return vals;
+}
+
+function timerMs(b, second) {
+  const mult = u => ({s:1000,m:60000,h:3600000}[u]||1000);
+  if(second) return ((b.paramMin2||0)*60+(b.paramSec2||5))*mult(b.paramUnit2||'s');
+  // New format (paramMin/paramSec set)
+  if(b.paramMin!==undefined||b.paramSec!==undefined) return ((b.paramMin||0)*60+(b.paramSec||0))*mult(b.paramUnit||'s');
+  // Old format (b.param = total value in paramUnit)
+  const v=parseFloat(b.param)||5; return v*mult(b.paramUnit||'s');
+}
+
+function blockSimVal(b){ if(!_evalCache) evalFBD(); return _evalCache?(_evalCache[b.id]??null):null; }
+function connSimVal(c){
+  if(!_evalCache) evalFBD();
+  if(!_evalCache) return null;
+  return _evalCache[c.fromId]??null;
+}
+function updateLogoLive(){
+  _evalCache=null;
+  // Redraw connection colors
+  gConns.innerHTML='';
+  for(const c of prog.conns) drawConn(c);
+  // Redraw block sim overlay
+  renderSimOverlay();
+  // Update IO bar LEDs
+  for(let i=0;i<12;i++){
+    const d=document.getElementById('iled'+i);
+    const active=simLive?simI[i]:testInputs[i];
+    if(d) d.className='io-dot'+(active?' on-i':'');
+  }
+  for(let q=0;q<8;q++){
+    const d=document.getElementById('qled'+q);
+    if(!d) continue;
+    let active;
+    if(simLive){ active=simQ[q]; }
+    else {
+      // In test mode, find output block for Q(q+1) and get its FBD value
+      const ob=prog.blocks.find(b=>b.type==='output'&&b.port==='Q'+(q+1));
+      active=ob?!!(blockSimVal(ob)):false;
+    }
+    d.className='io-dot'+(active?' on-q':'');
+  }
+}
+
+// ── Drag from sidebar ─────────────────────────────────────────────────────────
+let sbDragData=null;
+document.querySelectorAll('.sb-item').forEach(el=>{
+  el.addEventListener('dragstart',e=>{
+    sbDragData={ type:el.dataset.type, port:el.dataset.port||null };
+    e.dataTransfer.effectAllowed='copy';
+    e.dataTransfer.setData('text/plain','block');
+  });
+  el.addEventListener('dragend',()=>{ sbDragData=null; });
+});
+cv.addEventListener('dragover',e=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
+cv.addEventListener('drop',e=>{
+  e.preventDefault();
+  if(!sbDragData) return;
+  const p=svgPt(e.clientX,e.clientY);
+  addBlock(sbDragData.type,p.x-bW({type:sbDragData.type})/2,p.y-15,sbDragData.port);
+  sbDragData=null;
+});
+
+function addBlock(type,x,y,port){
+  const d=BD[type]; if(!d) return;
+  const id = (type==='input'||type==='output') ? (type[0].toUpperCase()+'_'+(port||'')) : ('B'+String(++blkCtr).padStart(3,'0'));
+  // Prevent duplicate I/Q blocks
+  if((type==='input'||type==='output')&&prog.blocks.find(b=>b.id===id)){ alert(`${id} ist bereits vorhanden!`); return; }
+  const b={ id, type, x:Math.round(x), y:Math.round(y), inputCount:d.ins };
+  if(port) b.port=port;
+  if(type==='input'||type==='output') b.label=port;
+  else b.label=id;
+  if(['ton','tof','tonoff','ttonr'].includes(type)){ b.paramMin=0; b.paramSec=5; b.paramUnit='s'; }
+  if(type==='tonoff'){ b.paramMin2=0; b.paramSec2=5; b.paramUnit2='s'; }
+  prog.blocks.push(b);
+  selId=id; render(); broadcastProg();
+}
+
+// ── Block drag ────────────────────────────────────────────────────────────────
+function startBlkDrag(id,e){
+  const b=prog.blocks.find(x=>x.id===id); if(!b) return;
+  const p=svgPt(e.clientX,e.clientY);
+  selId=id;
+  dragBlk={ id, ox:p.x-b.x, oy:p.y-b.y };
+  cv.setPointerCapture(e.pointerId);
+  render();
+}
+
+// ── Connection drawing ────────────────────────────────────────────────────────
+cv.addEventListener('pointerdown',e=>{
+  if(e.button!==0) return;
+  hideCtx();
+  const tgt=e.target;
+
+  // Port click → start connection
+  if(tgt.dataset.portType){
+    e.stopPropagation();
+    const bid=tgt.dataset.blkId, pt=tgt.dataset.portType;
+    const b=prog.blocks.find(x=>x.id===bid);
+    if(!b) return;
+    if(pt==='out'){
+      const op=portAbs(b,true,0);
+      connDrag={ fromId:bid, x:op.x, y:op.y };
+      cv.setPointerCapture(e.pointerId);
+    } else {
+      // Drag from input: remove existing connection first
+      const ci=parseInt(tgt.dataset.portIdx||0);
+      prog.conns=prog.conns.filter(c=>!(c.toId===bid&&c.toPort===ci));
+      // Find what was connected to this input
+      const old=prog.conns.find(c=>c.toId===bid&&c.toPort===ci);
+      render(); broadcastProg();
+    }
+    return;
+  }
+
+  // Background click → deselect or pan
+  if(tgt.id==='cvbg'||tgt.tagName==='svg'){
+    selId=null; render();
+    const p=svgPt(e.clientX,e.clientY);
+    panDrag={ sx:e.clientX, sy:e.clientY, vx:vp.x, vy:vp.y };
+    cv.setPointerCapture(e.pointerId);
+    return;
+  }
+});
+
+cv.addEventListener('pointermove',e=>{
+  if(dragBlk){
+    const p=svgPt(e.clientX,e.clientY);
+    const b=prog.blocks.find(x=>x.id===dragBlk.id);
+    if(b){ b.x=Math.round(p.x-dragBlk.ox); b.y=Math.round(p.y-dragBlk.oy); }
+    render(); return;
+  }
+  if(connDrag){
+    const p=svgPt(e.clientX,e.clientY);
+    connDrag.x=p.x; connDrag.y=p.y;
+    // Draw preview wire
+    const fb=prog.blocks.find(x=>x.id===connDrag.fromId);
+    if(fb){
+      gPreview.innerHTML='';
+      const fp=portAbs(fb,true,0);
+      const dx=Math.max(30,(p.x-fp.x)*0.5);
+      mkEl('path',{d:`M${fp.x},${fp.y} C${fp.x+dx},${fp.y} ${p.x-dx},${p.y} ${p.x},${p.y}`,
+        fill:'none',stroke:'#1a66cc','stroke-width':1.5,'stroke-dasharray':'5 3','pointer-events':'none'},gPreview);
+    }
+    return;
+  }
+  if(panDrag){
+    vp.x=panDrag.vx+(e.clientX-panDrag.sx);
+    vp.y=panDrag.vy+(e.clientY-panDrag.sy);
+    applyVP(); return;
+  }
+});
+
+cv.addEventListener('pointerup',e=>{
+  if(dragBlk){ dragBlk=null; broadcastProg(); }
+  if(panDrag){ panDrag=null; }
+  if(connDrag){
+    // Check if released on an input port
+    const els=document.elementsFromPoint(e.clientX,e.clientY);
+    let connected=false;
+    for(const el of els){
+      if(el.dataset.portType==='in'){
+        const bid=el.dataset.blkId, pi=parseInt(el.dataset.portIdx||0);
+        const tb=prog.blocks.find(b=>b.id===bid);
+        if(tb && bid!==connDrag.fromId){
+          // Remove existing conn on this input port
+          prog.conns=prog.conns.filter(c=>!(c.toId===bid&&c.toPort===pi));
+          // Check for cycles (simple: can't connect output to its own ancestors)
+          prog.conns.push({ id:'C'+Date.now(), fromId:connDrag.fromId, fromPort:0, toId:bid, toPort:pi });
+          connected=true;
+        }
+        break;
+      }
+    }
+    connDrag=null;
+    gPreview.innerHTML='';
+    render(); if(connected) broadcastProg();
+  }
+});
+
+// Scroll to zoom
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const f=e.deltaY>0?0.85:1/0.85;
+  const nz=Math.max(0.2,Math.min(3,vp.z*f));
+  vp.x=mx-(mx-vp.x)*nz/vp.z;
+  vp.y=my-(my-vp.y)*nz/vp.z;
+  vp.z=nz; applyVP();
+},{passive:false});
+
+// ── Keyboard ──────────────────────────────────────────────────────────────────
+document.addEventListener('keydown',e=>{
+  if(e.key==='Delete'||e.key==='Backspace'){
+    if(document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='SELECT') return;
+    deleteSelected();
+  }
+  if(e.key==='Escape'){ selId=null; connDrag=null; gPreview.innerHTML=''; render(); }
+});
+
+function deleteSelected(){
+  if(!selId) return;
+  prog.blocks=prog.blocks.filter(b=>b.id!==selId);
+  prog.conns=prog.conns.filter(c=>c.fromId!==selId&&c.toId!==selId);
+  selId=null; render(); broadcastProg();
+}
+
+// ── Context menu ──────────────────────────────────────────────────────────────
+let ctxTargetType=null;
+function showCtx(x,y){
+  const m=document.getElementById('ctx');
+  document.getElementById('ctx-inp-add').style.display='none';
+  document.getElementById('ctx-inp-rm').style.display='none';
+  document.getElementById('ctx-param').style.display='none';
+  m.style.left=x+'px'; m.style.top=y+'px'; m.style.display='block';
+}
+function showCtxBlock(b,x,y){
+  ctxTargetId=b.id; ctxTargetType='block';
+  selId=b.id; render();
+  const d=BD[b.type];
+  document.getElementById('ctx-inp-add').style.display=(d?.resize&&b.inputCount<8)?'block':'none';
+  document.getElementById('ctx-inp-rm').style.display=(d?.resize&&b.inputCount>2)?'block':'none';
+  document.getElementById('ctx-param').style.display=(d?.hasParam)?'block':'none';
+  showCtx(x,y);
+}
+function hideCtx(){ document.getElementById('ctx').style.display='none'; }
+function ctxDelete(){
+  hideCtx();
+  if(ctxTargetType==='conn') prog.conns=prog.conns.filter(c=>c.id!==ctxTargetId);
+  else if(ctxTargetType==='block'){
+    prog.blocks=prog.blocks.filter(b=>b.id!==ctxTargetId);
+    prog.conns=prog.conns.filter(c=>c.fromId!==ctxTargetId&&c.toId!==ctxTargetId);
+    if(selId===ctxTargetId) selId=null;
+  }
+  render(); broadcastProg();
+}
+function ctxAddInput(){
+  hideCtx();
+  const b=prog.blocks.find(x=>x.id===ctxTargetId); if(!b) return;
+  b.inputCount=(b.inputCount||2)+1;
+  const h=bH(b); b.y-=9; // keep center
+  render(); broadcastProg();
+}
+function ctxRemoveInput(){
+  hideCtx();
+  const b=prog.blocks.find(x=>x.id===ctxTargetId); if(!b||b.inputCount<=2) return;
+  const old=b.inputCount-1;
+  prog.conns=prog.conns.filter(c=>!(c.toId===b.id&&c.toPort>=old));
+  b.inputCount=old;
+  render(); broadcastProg();
+}
+function ctxEditParam(){
+  hideCtx();
+  const b=prog.blocks.find(x=>x.id===ctxTargetId); if(!b) return;
+  openDlg(b);
+}
+function onBlockDblClick(b){
+  if(BD[b.type]?.hasParam) openDlg(b);
+}
+document.addEventListener('pointerdown',e=>{ if(!document.getElementById('ctx').contains(e.target)) hideCtx(); });
+
+// ── Timer dialog ──────────────────────────────────────────────────────────────
+const DLG_LABELS={ton:'Einschaltverzögerung',tof:'Ausschaltverzögerung',tonoff:'Ein-/Ausschaltverzögerung',ttonr:'Speichernde Einschaltverzögerung'};
+
+function dlgTab(t){
+  ['param','kommentar'].forEach(x=>{
+    document.getElementById('dlg-tab-'+x).style.display=x===t?'':'none';
+    document.getElementById('dlg-tab-btn-'+x).classList.toggle('active',x===t);
+  });
+}
+
+function openDlg(b){
+  dlgTargetId=b.id;
+  document.getElementById('dlg-title').textContent=`${b.label||b.id} [${DLG_LABELS[b.type]||b.type}]`;
+  document.getElementById('dlg-blockname').value=b.blockname||'';
+  // Time 1
+  const t1Label=b.type==='tof'?'Ausschaltverzögerung':b.type==='tonoff'?'Einschaltzeit (TH)':'Einschaltverzögerung';
+  document.getElementById('dlg-time1-label').textContent=t1Label;
+  const getMS=(b2,sec)=>{
+    if(sec) return {min:b2.paramMin2||0,s:b2.paramSec2||5,u:b2.paramUnit2||'s'};
+    if(b2.paramMin!==undefined||b2.paramSec!==undefined) return {min:b2.paramMin||0,s:b2.paramSec||0,u:b2.paramUnit||'s'};
+    const v=parseFloat(b2.param)||5, u=b2.paramUnit||'s';
+    return {min:u==='s'?Math.floor(v/60):0, s:u==='s'?Math.round(v%60):Math.round(v), u};
+  };
+  const t1=getMS(b,false);
+  document.getElementById('dlg-min1').value=t1.min;
+  document.getElementById('dlg-sec1').value=t1.s;
+  document.getElementById('dlg-unit1').value=t1.u;
+  // Time 2 (TONOFF)
+  const has2=b.type==='tonoff';
+  document.getElementById('dlg-time2-fs').style.display=has2?'':'none';
+  if(has2){ const t2=getMS(b,true); document.getElementById('dlg-min2').value=t2.min; document.getElementById('dlg-sec2').value=t2.s; document.getElementById('dlg-unit2').value=t2.u; }
+  // Andere
+  document.getElementById('dlg-remanenz').checked=!!b.remanenz;
+  document.getElementById('dlg-schutz').checked=!!b.schutz;
+  document.getElementById('dlg-comment').value=b.comment||'';
+  dlgTab('param');
+  document.getElementById('dlg').style.display='block';
+  document.getElementById('dlg-min1').focus();
+}
+
+function closeDlg(){ document.getElementById('dlg').style.display='none'; dlgTargetId=null; }
+
+function saveDlg(){
+  const b=prog.blocks.find(x=>x.id===dlgTargetId); if(!b) return closeDlg();
+  b.blockname=document.getElementById('dlg-blockname').value.trim();
+  b.paramMin=parseInt(document.getElementById('dlg-min1').value)||0;
+  b.paramSec=Math.min(59,parseInt(document.getElementById('dlg-sec1').value)||0);
+  b.paramUnit=document.getElementById('dlg-unit1').value;
+  delete b.param; // clear old format
+  if(b.type==='tonoff'){
+    b.paramMin2=parseInt(document.getElementById('dlg-min2').value)||0;
+    b.paramSec2=Math.min(59,parseInt(document.getElementById('dlg-sec2').value)||0);
+    b.paramUnit2=document.getElementById('dlg-unit2').value;
+  }
+  b.remanenz=document.getElementById('dlg-remanenz').checked;
+  b.schutz=document.getElementById('dlg-schutz').checked;
+  b.comment=document.getElementById('dlg-comment').value;
+  closeDlg(); render(); broadcastProg();
+}
+
+document.getElementById('dlg-sec1').addEventListener('keydown',e=>{ if(e.key==='Enter') saveDlg(); if(e.key==='Escape') closeDlg(); });
+document.getElementById('dlg-min1').addEventListener('keydown',e=>{ if(e.key==='Escape') closeDlg(); });
+
+// ── Toolbar actions ───────────────────────────────────────────────────────────
+function clearAll(){
+  if(!confirm('Programm wirklich löschen?')) return;
+  prog={ blocks:[], conns:[] }; selId=null; blkCtr=0; render(); broadcastProg();
+}
+function zoom(f){ vp.z=Math.max(0.2,Math.min(3,vp.z*f)); applyVP(); }
+function zoomFit(){
+  if(!prog.blocks.length){ vp={x:60,y:60,z:1}; applyVP(); return; }
+  const r=cv.getBoundingClientRect();
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  prog.blocks.forEach(b=>{ minX=Math.min(minX,b.x); minY=Math.min(minY,b.y); maxX=Math.max(maxX,b.x+bW(b)); maxY=Math.max(maxY,b.y+bH(b)); });
+  const pw=r.width-80, ph=r.height-80;
+  const bw=maxX-minX, bh=maxY-minY;
+  vp.z=bw&&bh?Math.min(pw/bw,ph/bh,2):1;
+  vp.x=40-minX*vp.z; vp.y=40-minY*vp.z;
+  applyVP();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+initSVG();
+
+// Read compId from URL
+const params=new URLSearchParams(location.search);
+const cid=params.get('id');
+if(cid){
+  initChannel(cid);
+  // Try to load from localStorage while waiting for main window
+  try {
+    const saved=localStorage.getItem('logo-prog-'+cid);
+    if(saved){ prog=JSON.parse(saved); let max=0; prog.blocks.forEach(b=>{const n=parseInt((b.label||'').replace(/\D/g,'')); if(n>max) max=n;}); blkCtr=max; render(); zoomFit(); }
+  } catch(e){}
+} else {
+  // Standalone test mode
+  document.getElementById('tb-comp-label').textContent='LOGO! FBD Editor (Test)';
+}
+
+render();
+</script>
+
+<!-- ── Server Save/Load Modal ──────────────────────────────────────── -->
+<div id="es-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;width:460px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+    <div style="display:flex;align-items:center;padding:18px 20px 14px;border-bottom:1px solid #e5e7eb">
+      <h3 id="es-modal-title" style="flex:1;font-size:16px;font-weight:700;color:#111">FBD-Programme</h3>
+      <button onclick="closeEsModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b7280;line-height:1">✕</button>
+    </div>
+    <div id="es-modal-content" style="overflow-y:auto;padding:16px 20px;flex:1"></div>
+  </div>
+</div>
+
+<script>
+function openEsModal(title,html){
+  document.getElementById('es-modal-title').textContent=title;
+  document.getElementById('es-modal-content').innerHTML=html;
+  document.getElementById('es-modal-bg').style.display='flex';
+}
+function closeEsModal(){ document.getElementById('es-modal-bg').style.display='none'; }
+document.getElementById('es-modal-bg').addEventListener('click',e=>{ if(e.target===e.currentTarget) closeEsModal(); });
+
+function escHtmlFbd(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtDateFbd(ts){ return new Date(ts*1000).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+
+function getProgData(){ return JSON.stringify({blocks:prog.blocks,conns:prog.conns}); }
+
+function setProgData(data){
+  const d=typeof data==='string'?JSON.parse(data):data;
+  prog.blocks=d.blocks||[]; prog.conns=d.conns||[];
+  render(); updateLogoLive();
+}
+
+async function serverSaveFbd(){
+  const curName=window._esFbdName||'';
+  openEsModal('FBD-Programm speichern',`
+    <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Name</label>
+    <input id="es-save-name" value="${escHtmlFbd(curName)}" placeholder="z.B. Treppenhaus-Steuerung"
+      style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:7px;font-size:14px;outline:none;margin-bottom:14px">
+    <button onclick="doFbdSave()" style="width:100%;padding:10px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer">☁ Auf Server speichern</button>
+    <div id="es-save-err" style="color:#dc2626;font-size:13px;margin-top:8px"></div>
+  `);
+  setTimeout(()=>{ const n=document.getElementById('es-save-name'); if(n){n.focus();n.select();} },50);
+}
+
+async function doFbdSave(){
+  const nameEl=document.getElementById('es-save-name');
+  const errEl=document.getElementById('es-save-err');
+  const name=(nameEl?.value||'').trim();
+  if(!name){ if(errEl) errEl.textContent='Bitte einen Namen eingeben'; return; }
+  const id=window._esFbdId||null;
+
+  // Check project limit (10 projects max) - only for new projects
+  if(!id){
+    try{
+      const listR=await fetch('/api/circuits.php?type=fbd',{credentials:'include'});
+      const list=await listR.json();
+      if(listR.ok && list.length>=10){
+        if(errEl) errEl.textContent='Limit erreicht: Maximal 10 Projekte erlaubt. Bitte zuerst ein Projekt löschen.';
+        return;
+      }
+    }catch(e){ /* ignore count errors, proceed with save */ }
+  }
+
+  const url='/api/circuits.php'+(id?'?id='+id:'');
+  try{
+    const r=await fetch(url,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,type:'fbd',data:getProgData()})});
+    const d=await r.json();
+    if(!r.ok){ if(errEl) errEl.textContent=d.error||'Fehler'; return; }
+    window._esFbdId=d.id; window._esFbdName=name;
+    closeEsModal();
+    const si=document.getElementById('sim-status');
+    const prev=si.textContent; si.textContent='✓ Gespeichert: '+name;
+    setTimeout(()=>si.textContent=prev,2500);
+  }catch(e){ if(errEl) errEl.textContent='Netzwerkfehler'; }
+}
+
+async function serverLoadFbd(){
+  openEsModal('FBD-Programm laden','<div style="color:#6b7280;text-align:center;padding:20px">Lade…</div>');
+  try{
+    const r=await fetch('/api/circuits.php?type=fbd',{credentials:'include'});
+    const list=await r.json();
+    if(!r.ok){ document.getElementById('es-modal-content').innerHTML='<div style="color:#dc2626">Fehler</div>'; return; }
+    if(!list.length){
+      document.getElementById('es-modal-content').innerHTML=`
+        <div style="text-align:center;padding:20px;color:#6b7280">
+          <div style="font-size:32px;margin-bottom:8px">📂</div>
+          <p>Noch keine Programme gespeichert</p>
+          <button onclick="closeEsModal();serverSaveFbd()" style="margin-top:12px;padding:8px 18px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer">Jetzt speichern</button>
+        </div>`;
+      return;
+    }
+
+    // Project count warning
+    const countWarning = list.length>=10 ? `<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400e">
+      <strong>⚠ Limit erreicht:</strong> ${list.length}/10 Projekte verwendet. Lösche ein Projekt, um ein neues zu erstellen.
+    </div>` : `<div style="background:#ecfdf5;border:1.5px solid #10b981;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#065f46">
+      📊 ${list.length}/10 Projekte verwendet
+    </div>`;
+
+    const rows=list.map(c=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #f3f4f6">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtmlFbd(c.name)}</div>
+          <div style="font-size:11px;color:#9ca3af">${fmtDateFbd(c.updated_at)}</div>
+        </div>
+        <button onclick="loadFbdCircuit(${c.id},'${escHtmlFbd(c.name)}')" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">Laden</button>
+        <button onclick="deleteFbdCircuit(${c.id},this.closest('div[style*=border-bottom]'))" style="padding:6px 10px;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:13px;cursor:pointer">✕</button>
+      </div>`).join('');
+    document.getElementById('es-modal-content').innerHTML=countWarning+rows;
+  }catch(e){ document.getElementById('es-modal-content').innerHTML='<div style="color:#dc2626">Netzwerkfehler</div>'; }
+}
+
+async function loadFbdCircuit(id,name){
+  try{
+    const r=await fetch('/api/circuits.php?id='+id,{credentials:'include'});
+    const d=await r.json();
+    if(!r.ok){ alert('Fehler: '+(d.error||'')); return; }
+    closeEsModal();
+    setProgData(d.data);
+    window._esFbdId=id; window._esFbdName=name;
+  }catch(e){ alert('Ladefehler'); }
+}
+
+async function deleteFbdCircuit(id,row){
+  if(!confirm('Programm löschen?')) return;
+  try{
+    const r=await fetch('/api/circuits.php?id='+id,{method:'DELETE',credentials:'include'});
+    if(r.ok) row.remove();
+    else alert('Fehler beim Löschen');
+  }catch(e){ alert('Netzwerkfehler'); }
+}
+
+async function doLogout(){
+  await fetch('/api/logout.php',{method:'POST',credentials:'include'});
+  location.href='/login.html';
+}
+</script>
+</body>
+</html>

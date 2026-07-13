@@ -18,5 +18,9 @@
       "binding": "DB",
       "database_id": "583e5ed6-208c-49b1-8c75-a573f888483b"
     }
-  ]
+  ],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  }
 }

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin-Panel</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f5f5;padding:20px}
+.container{max-width:1200px;margin:0 auto;background:white;padding:30px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
+h1{color:#333;margin-bottom:10px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;border-bottom:2px solid #eee;padding-bottom:20px}
+.header-info{color:#666;font-size:14px}
+.logout-btn{background:#dc3545;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-size:14px}
+.logout-btn:hover{background:#c82333}
+.tabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:2px solid #eee}
+.tab{padding:10px 20px;cursor:pointer;border:none;background:none;font-size:16px;color:#666;border-bottom:3px solid transparent}
+.tab.active{color:#007bff;border-bottom-color:#007bff;font-weight:600}
+.tab:hover{color:#0056b3}
+.section{display:none}
+.section.active{display:block}
+table{width:100%;border-collapse:collapse;margin-top:20px}
+th,td{text-align:left;padding:12px;border-bottom:1px solid #eee}
+th{background:#f8f9fa;font-weight:600;color:#333;position:sticky;top:0}
+tr:hover{background:#f8f9fa}
+.btn{padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:13px;margin-right:5px}
+.btn-danger{background:#dc3545;color:white}
+.btn-danger:hover{background:#c82333}
+.btn-success{background:#28a745;color:white}
+.btn-success:hover{background:#218838}
+.btn-warning{background:#ffc107;color:#000}
+.btn-warning:hover{background:#e0a800}
+.btn-primary{background:#007bff;color:white}
+.btn-primary:hover{background:#0056b3}
+.badge{display:inline-block;padding:3px 8px;border-radius:3px;font-size:11px;font-weight:600}
+.badge-admin{background:#28a745;color:white}
+.badge-user{background:#6c757d;color:white}
+.badge-schematic{background:#17a2b8;color:white}
+.badge-fbd{background:#6610f2;color:white}
+.empty{text-align:center;padding:40px;color:#999;font-style:italic}
+.error{background:#f8d7da;color:#721c24;padding:12px;border-radius:4px;margin-bottom:20px;border:1px solid #f5c6cb}
+.success{background:#d4edda;color:#155724;padding:12px;border-radius:4px;margin-bottom:20px;border:1px solid #c3e6cb}
+.loading{text-align:center;padding:40px;color:#666}
+.project-name{font-weight:600;color:#007bff;cursor:pointer}
+.project-name:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <div>
+      <h1>Admin-Panel</h1>
+      <div class="header-info">Angemeldet als: <strong id="adminName"></strong></div>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">Abmelden</button>
+  </div>
+
+  <div id="msgBox"></div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('users')">Benutzerverwaltung</button>
+    <button class="tab" onclick="switchTab('projects')">Alle Projekte</button>
+  </div>
+
+  <div id="usersSection" class="section active">
+    <div class="loading">Lade Benutzer...</div>
+  </div>
+
+  <div id="projectsSection" class="section">
+    <div class="loading">Lade Projekte...</div>
+  </div>
+</div>
+
+<script>
+let currentUser = null;
+
+async function init() {
+  try {
+    const r = await fetch('/api/me.php', {credentials: 'include'});
+    if (!r.ok) {
+      window.location.href = '/login.html';
+      return;
+    }
+    const data = await r.json();
+    currentUser = data.user;
+    if (!currentUser.is_admin) {
+      showMsg('Zugriff verweigert: Admin-Rechte erforderlich', 'error');
+      setTimeout(() => window.location.href = '/', 2000);
+      return;
+    }
+    document.getElementById('adminName').textContent = currentUser.username;
+    await loadUsers();
+    await loadProjects();
+  } catch(e) {
+    showMsg('Fehler beim Laden: ' + e.message, 'error');
+  }
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById(tab + 'Section').classList.add('active');
+}
+
+async function loadUsers() {
+  try {
+    const r = await fetch('/api/admin.php?action=users', {credentials: 'include'});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Fehler beim Laden');
+
+    const container = document.getElementById('usersSection');
+    if (data.users.length === 0) {
+      container.innerHTML = '<div class="empty">Keine Benutzer gefunden</div>';
+      return;
+    }
+
+    let html = '<table><thead><tr><th>ID</th><th>Benutzername</th><th>Rolle</th><th>Projekte</th><th>Erstellt am</th><th>Aktionen</th></tr></thead><tbody>';
+    data.users.forEach(u => {
+      const date = new Date(u.created_at * 1000).toLocaleDateString('de-DE');
+      const role = u.is_admin ? '<span class="badge badge-admin">Admin</span>' : '<span class="badge badge-user">Benutzer</span>';
+      const isSelf = u.id === currentUser.id;
+      html += `<tr>
+        <td>${u.id}</td>
+        <td><strong>${u.username}</strong></td>
+        <td>${role}</td>
+        <td>${u.project_count}</td>
+        <td>${date}</td>
+        <td>
+          ${!isSelf ? `<button class="btn btn-danger" onclick="deleteUser(${u.id}, '${u.username}')">Löschen</button>` : ''}
+          ${!u.is_admin && !isSelf ? `<button class="btn btn-success" onclick="promoteUser(${u.id}, '${u.username}')">Zum Admin</button>` : ''}
+          ${u.is_admin && !isSelf ? `<button class="btn btn-warning" onclick="demoteUser(${u.id}, '${u.username}')">Admin entfernen</button>` : ''}
+        </td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch(e) {
+    showMsg('Fehler beim Laden der Benutzer: ' + e.message, 'error');
+  }
+}
+
+async function loadProjects() {
+  try {
+    const r = await fetch('/api/admin.php?action=all_projects', {credentials: 'include'});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Fehler beim Laden');
+
+    const container = document.getElementById('projectsSection');
+    if (data.projects.length === 0) {
+      container.innerHTML = '<div class="empty">Keine Projekte gefunden</div>';
+      return;
+    }
+
+    let html = '<table><thead><tr><th>ID</th><th>Projektname</th><th>Typ</th><th>Benutzer</th><th>Aktualisiert am</th><th>Aktionen</th></tr></thead><tbody>';
+    data.projects.forEach(p => {
+      const date = new Date(p.updated_at * 1000).toLocaleString('de-DE');
+      const typeLabel = p.type === 'fbd' ? '<span class="badge badge-fbd">LOGO! FBD</span>' : '<span class="badge badge-schematic">Schaltplan</span>';
+      html += `<tr>
+        <td>${p.id}</td>
+        <td><span class="project-name" onclick="loadProject(${p.id}, '${p.type}')">${p.name}</span></td>
+        <td>${typeLabel}</td>
+        <td>${p.username}</td>
+        <td>${date}</td>
+        <td>
+          <button class="btn btn-primary" onclick="loadProject(${p.id}, '${p.type}')">Öffnen & Simulieren</button>
+        </td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch(e) {
+    showMsg('Fehler beim Laden der Projekte: ' + e.message, 'error');
+  }
+}
+
+async function deleteUser(id, username) {
+  if (!confirm(`Benutzer "${username}" wirklich löschen? Alle Projekte werden ebenfalls gelöscht!`)) return;
+  try {
+    const r = await fetch(`/api/admin.php?action=delete_user&id=${id}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Fehler beim Löschen');
+    showMsg(`Benutzer "${username}" erfolgreich gelöscht`, 'success');
+    await loadUsers();
+    await loadProjects();
+  } catch(e) {
+    showMsg('Fehler: ' + e.message, 'error');
+  }
+}
+
+async function promoteUser(id, username) {
+  if (!confirm(`"${username}" zum Admin machen?`)) return;
+  try {
+    const r = await fetch(`/api/admin.php?action=promote&id=${id}`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Fehler');
+    showMsg(`"${username}" ist jetzt Admin`, 'success');
+    await loadUsers();
+  } catch(e) {
+    showMsg('Fehler: ' + e.message, 'error');
+  }
+}
+
+async function demoteUser(id, username) {
+  if (!confirm(`Admin-Rechte von "${username}" entfernen?`)) return;
+  try {
+    const r = await fetch(`/api/admin.php?action=demote&id=${id}`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Fehler');
+    showMsg(`Admin-Rechte von "${username}" entfernt`, 'success');
+    await loadUsers();
+  } catch(e) {
+    showMsg('Fehler: ' + e.message, 'error');
+  }
+}
+
+async function loadProject(id, type) {
+  try {
+    const r = await fetch(`/api/admin.php?action=load_project&id=${id}`, {credentials: 'include'});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Fehler beim Laden');
+
+    // Open project in appropriate editor
+    if (type === 'fbd') {
+      // Open LOGO! editor and load project
+      const editor = window.open('/logo-editor.html', '_blank');
+      editor.addEventListener('load', () => {
+        editor.postMessage({action: 'loadAdminProject', data: data}, '*');
+      });
+    } else {
+      // Open main editor and load project
+      window.location.href = `/?admin_load=${id}`;
+    }
+  } catch(e) {
+    showMsg('Fehler beim Laden des Projekts: ' + e.message, 'error');
+  }
+}
+
+async function doLogout() {
+  try {
+    await fetch('/api/logout.php', {credentials: 'include'});
+    window.location.href = '/login.html';
+  } catch(e) {
+    showMsg('Fehler beim Abmelden: ' + e.message, 'error');
+  }
+}
+
+function showMsg(msg, type) {
+  const box = document.getElementById('msgBox');
+  box.className = type;
+  box.textContent = msg;
+  setTimeout(() => box.textContent = '', 5000);
+}
+
+init();
+</script>
+</body>
+</html>

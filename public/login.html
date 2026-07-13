@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ElektroSim — Anmelden</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#1a2332;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .card{background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.4);width:360px;overflow:hidden}
+  .card-header{background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:28px 32px;color:#fff}
+  .card-header h1{font-size:22px;font-weight:700;letter-spacing:.3px}
+  .card-header p{font-size:13px;opacity:.8;margin-top:4px}
+  .tabs{display:flex;border-bottom:1px solid #e5e7eb}
+  .tab{flex:1;padding:12px;text-align:center;font-size:14px;font-weight:600;cursor:pointer;color:#6b7280;border-bottom:2px solid transparent;transition:.15s}
+  .tab.active{color:#2563eb;border-bottom-color:#2563eb}
+  .card-body{padding:28px 32px}
+  .form-group{margin-bottom:18px}
+  label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+  input{width:100%;padding:10px 13px;border:1.5px solid #d1d5db;border-radius:7px;font-size:14px;outline:none;transition:.15s;color:#111}
+  input:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+  .btn{width:100%;padding:11px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:15px;font-weight:600;cursor:pointer;transition:.15s}
+  .btn:hover{background:#1d4ed8}
+  .btn:active{transform:scale(.98)}
+  .err{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626;border-radius:6px;padding:10px 13px;font-size:13px;margin-bottom:16px;display:none}
+  .err.show{display:block}
+  .panel{display:none}.panel.active{display:block}
+  .cf-turnstile{margin-bottom:18px}
+</style>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <h1>⚡ ElektroSim</h1>
+    <p>Schaltungen erstellen, simulieren und speichern</p>
+    <p style="margin-top:8px;opacity:.9">Demo-Zugang: <strong>demo</strong> / <strong>demo</strong> (Änderungen können nicht gespeichert werden)</p>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('login')">Anmelden</div>
+    <div class="tab" onclick="switchTab('register')">Registrieren</div>
+  </div>
+  <div class="card-body">
+    <div id="err" class="err"></div>
+
+    <div id="panel-login" class="panel active">
+      <div class="form-group">
+        <label>Benutzername</label>
+        <input id="l-user" type="text" autocomplete="username" placeholder="Benutzername">
+      </div>
+      <div class="form-group">
+        <label>Passwort</label>
+        <input id="l-pass" type="password" autocomplete="current-password" placeholder="••••••">
+      </div>
+      <button class="btn" onclick="doLogin()">Anmelden</button>
+    </div>
+
+    <div id="panel-register" class="panel">
+      <div class="form-group">
+        <label>Benutzername</label>
+        <input id="r-user" type="text" autocomplete="username" placeholder="3–32 Zeichen, Buchstaben und Ziffern">
+      </div>
+      <div class="form-group">
+        <label>Passwort</label>
+        <input id="r-pass" type="password" autocomplete="new-password" placeholder="Mindestens 6 Zeichen">
+      </div>
+      <div class="form-group">
+        <label>Passwort wiederholen</label>
+        <input id="r-pass2" type="password" autocomplete="new-password" placeholder="••••••">
+      </div>
+      <div class="cf-turnstile" data-sitekey="0x4AAAAAADwVaw2s1QC57YuW" data-theme="light"></div>
+      <button class="btn" onclick="doRegister()">Konto erstellen</button>
+    </div>
+  </div>
+</div>
+<div style="text-align:center;margin-top:16px"><a href="/impressum.html" style="color:#90cdf4;font-size:13px;text-decoration:none">Impressum</a></div>
+
+<script>
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['login','register'][i]===t));
+  document.querySelectorAll('.panel').forEach(el=>el.classList.remove('active'));
+  document.getElementById('panel-'+t).classList.add('active');
+  showErr('');
+}
+function showErr(msg){ const el=document.getElementById('err'); el.textContent=msg; el.classList.toggle('show',!!msg); }
+
+async function doLogin(){
+  const u=document.getElementById('l-user').value.trim();
+  const p=document.getElementById('l-pass').value;
+  if(!u||!p){ showErr('Bitte alle Felder ausfüllen'); return; }
+  try{
+    const r=await fetch('/api/login.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const d=await r.json();
+    if(!r.ok){ showErr(d.error||'Fehler beim Anmelden'); return; }
+    location.href='/';
+  }catch(e){ showErr('Netzwerkfehler'); }
+}
+
+async function doRegister(){
+  const u=document.getElementById('r-user').value.trim();
+  const p=document.getElementById('r-pass').value;
+  const p2=document.getElementById('r-pass2').value;
+  if(!u||!p||!p2){ showErr('Bitte alle Felder ausfüllen'); return; }
+  if(p!==p2){ showErr('Passwörter stimmen nicht überein'); return; }
+
+  // Get Turnstile token
+  const turnstileToken = document.querySelector('.cf-turnstile [name="cf-turnstile-response"]')?.value;
+  if(!turnstileToken){ showErr('Bitte bestätige, dass du ein Mensch bist'); return; }
+
+  try{
+    const r=await fetch('/api/register.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,turnstileToken})});
+    const d=await r.json();
+    if(!r.ok){ showErr(d.error||'Fehler bei der Registrierung'); return; }
+    location.href='/';
+  }catch(e){ showErr('Netzwerkfehler'); }
+}
+
+// Enter-Taste
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    if(document.getElementById('panel-login').classList.contains('active')) doLogin();
+    else doRegister();
+  }
+});
+
+// Schon angemeldet?
+fetch('/api/me.php').then(r=>r.json()).then(d=>{ if(d.user) location.href='/'; });
+</script>
+</body>
+</html>
