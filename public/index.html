@@ -1221,8 +1221,15 @@ function rotDir(dir, rot) {
 }
 
 // Axis-aligned bounding box of a (possibly rotated) component
+// Effektive Breite: Hutschienen sind pro Instanz verlängerbar (comp.teCount überschreibt def.teCount)
+function railTeCount(c) { return c.teCount!=null ? c.teCount : (c.def.teCount||12); }
+function effW(c) {
+  if (c.def.isDINRail) return railTeCount(c)*20 + (c.def.teOffset||0)*2;
+  return c.def.w;
+}
+
 function compBBox(c) {
-  const rot=(c.rot||0)%360, w=c.def.w, h=c.def.h;
+  const rot=(c.rot||0)%360, w=effW(c), h=c.def.h;
   const cx=c.x+w/2, cy=c.y+h/2;
   if (!rot||rot===180) return {x1:c.x,y1:c.y,x2:c.x+w,y2:c.y+h};
   // 90 or 270 → swap w and h
@@ -1523,7 +1530,7 @@ function snapToDINRail(comp) {
     if (dy >= bestDist) continue;
     const teOffset = rail.def.teOffset || 0;
     const occ = getRailOccupied(rail.id, comp.id);
-    const railPx = rail.def.teCount * 20;
+    const railPx = railTeCount(rail) * 20;
     const rawSlot = Math.round((comp.x - rail.x - teOffset) / tePx);
     const maxSlots = Math.ceil(railPx / tePx);
     let found = false;
@@ -1550,7 +1557,7 @@ function snapToDINRail(comp) {
 
 function snapRailToUV(rail) {
   if (!rail.def.isDINRail) return;
-  const cx = rail.x + rail.def.w / 2, cy = rail.y + rail.def.h / 2;
+  const cx = rail.x + effW(rail) / 2, cy = rail.y + rail.def.h / 2;
   for (const uv of comps) {
     if (!uv.def.uvRows) continue;
     const nRows = uv.def.uvRows;
@@ -1624,7 +1631,7 @@ function drawPEBlock(g) {
 }
 
 function drawHutschiene(g, comp) {
-  const W = comp.def.w, H = 16;
+  const W = effW(comp), H = 16;
   // Schiene: obere Flanke
   mk('rect',{x:0,y:0,width:W,height:H,fill:'#94a3b8'},g);
   mk('rect',{x:0,y:0,width:W,height:4,fill:'#e2e8f0'},g);   // oben hell
@@ -1637,7 +1644,7 @@ function drawHutschiene(g, comp) {
   mk('rect',{x:0,y:12,width:W,height:4,fill:'#e2e8f0'},g);
   mk('rect',{x:0,y:12,width:W,height:1,fill:'#cbd5e1'},g);
   if (comp.def.isDINRail) {
-    const to = comp.def.teOffset||0, tc = comp.def.teCount||12;
+    const to = comp.def.teOffset||0, tc = railTeCount(comp);
     for (let i=0; i<=tc; i++) {
       const tx = to+i*20;
       mk('line',{x1:tx,y1:0,x2:tx,y2:i%4===0?4:2,stroke:'rgba(255,255,255,0.45)','stroke-width':i%4===0?1:0.6},g);
@@ -2846,11 +2853,17 @@ function render() {
         mk('line',{x1:-16,y1:0,x2:ex+16,y2:ey,stroke:'#3b82f6','stroke-width':4,
           opacity:0.35,'stroke-dasharray':'6,4','pointer-events':'none'},g);
       } else {
-        mk('rect',{x:-6,y:-6,width:comp.def.w+12,height:comp.def.h+12,rx:8,
+        mk('rect',{x:-6,y:-6,width:effW(comp)+12,height:comp.def.h+12,rx:8,
           fill:'none',stroke:'#3b82f6','stroke-width':2,'stroke-dasharray':'5,4'},g);
       }
     }
     drawComp(g, comp);
+    // Hutschiene: Verlängerungs-Griff am rechten Ende (nur wenn ausgewählt)
+    if (comp.def.isDINRail && sel===comp.id) {
+      const rw = effW(comp);
+      mk('rect',{x:rw-3,y:-4,width:6,height:comp.def.h+8,rx:2,fill:'#3b82f6',opacity:0.85,
+        cursor:'ew-resize',class:'rail-end'},g);
+    }
     // Counter-rotate all text inside the component so they stay readable
     if ((comp.rot||0) && !comp.def.isCable && !comp.def.isKanal) {
       const w=comp.def.w, h=comp.def.h;
@@ -2934,6 +2947,7 @@ function render() {
       const isPort = e.target.classList.contains('port-c');
       const isCableMid = e.target.classList.contains('cable-mid');
       const isCableEnd = e.target.classList.contains('cable-end');
+      const isRailEnd = e.target.classList.contains('rail-end');
 
       // Long-press (touch/pen) → multi-select
       if (e.pointerType !== 'mouse' && !isPort && mode==='select') {
@@ -2982,7 +2996,9 @@ function render() {
       }
 
       selSet.clear(); sel = comp.id;
-      if ((comp.def.isCable||comp.def.isKanal) && isCableEnd) {
+      if (comp.def.isDINRail && isRailEnd) {
+        drag = {railResize:comp, startX:p.x, startTe:railTeCount(comp)};
+      } else if ((comp.def.isCable||comp.def.isKanal) && isCableEnd) {
         drag = {comp, ox:p.x-(comp.ex||comp.x), oy:p.y-(comp.ey||comp.y), endDrag:true};
       } else if (comp.def.isCable && isCableMid) {
         if (now - lastClickTime < 350) { delete comp.cx; delete comp.cy; render(); return; }
@@ -3485,6 +3501,11 @@ SVG.addEventListener('pointermove', e=>{
       const {w,vi} = drag.wireVtx;
       w.pts[vi]=[nx,ny]; w.manual=true; render(); return;
     }
+    if (drag.railResize) {
+      const deltaTe = Math.round((p.x-drag.startX)/20);
+      drag.railResize.teCount = Math.max(2, drag.startTe+deltaTe);
+      render(); return;
+    }
     if (drag.midDrag) {
       drag.comp.cx=nx; drag.comp.cy=ny;
     } else if (drag.endDrag) {
@@ -3909,12 +3930,14 @@ function buildSaveData() {
       if (c.tePos  != null) o.tePos  = c.tePos;
       if (c.uvId   != null) o.uvId   = c.uvId;
       if (c.uvRow  != null) o.uvRow  = c.uvRow;
+      if (c.teCount != null) o.teCount = c.teCount;
       return o;
     }),
     wires: wires.map(w => {
       const o = {id:w.id, fid:w.fid, fp:w.fp, tid:w.tid, tp:w.tp,
                  color:w.color, label:w.label, cable:w.cable||'single'};
       if (w.manual && w.pts) { o.pts=w.pts; o.manual=true; }
+      if (w.bridge) o.bridge = true;
       return o;
     }),
     frames: frames.map(f=>({...f})),
