@@ -136,7 +136,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <div class="t-sep"></div>
       <button class="t-btn active" id="btn-sel" onclick="setMode('select')">▶ Auswählen</button>
       <button class="t-btn" id="btn-wire" onclick="setMode('wire')">〰 Kabel</button>
-      <button class="t-btn" id="btn-bridge" onclick="setMode('bridge')" title="Zwei benachbarte Klemmen direkt verbinden">🌉 Brücke</button>
+      <button class="t-btn" id="btn-bridge" onclick="setMode('bridge')" title="Klemme anklicken, dann eine weitere (auch mehrere Klemmen dazwischen) auf derselben Seite anklicken">🌉 Brücke</button>
       <button class="t-btn" id="btn-frame" onclick="setMode('frame')">▭ Rahmen</button>
       <button class="t-btn" id="btn-text" onclick="setMode('text')">T Text</button>
       <div class="t-sep"></div>
@@ -280,6 +280,10 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <div class="s-item" ondragstart="sbDrag('klemme25')" draggable="true">
         <svg width="10" height="32"><rect x="0" y="0" width="10" height="32" fill="#9ca3af" stroke="rgba(0,0,0,0.3)" stroke-width="1" rx="1.5"/><rect x="1" y="8" width="8" height="16" fill="rgba(255,255,255,0.2)" rx="1"/><circle cx="5" cy="16" r="3" fill="rgba(0,0,0,0.25)"/><line x1="3" y1="16" x2="7" y2="16" stroke="rgba(255,255,255,0.5)" stroke-width="0.8"/></svg>
         <span class="s-label">Klemme 2.5mm²</span>
+      </div>
+      <div class="s-item" ondragstart="sbDrag('klemme25_twin')" draggable="true">
+        <svg width="14" height="32"><rect x="0" y="0" width="14" height="32" fill="#9ca3af" stroke="rgba(0,0,0,0.3)" stroke-width="1" rx="1.5"/><rect x="1" y="8" width="12" height="16" fill="rgba(255,255,255,0.2)" rx="1"/><circle cx="3.5" cy="5" r="2.2" fill="rgba(0,0,0,0.25)"/><circle cx="10.5" cy="5" r="2.2" fill="rgba(0,0,0,0.25)"/><circle cx="7" cy="27" r="2.6" fill="rgba(0,0,0,0.25)"/><rect x="0" y="14" width="14" height="4" fill="#f59e0b" opacity="0.75" rx="1"/></svg>
+        <span class="s-label">Klemme 2.5mm² Twin</span>
       </div>
 
       <div class="s-item" ondragstart="sbDrag('kabelkanal')" draggable="true">
@@ -812,7 +816,7 @@ const D = {
     label:'RCBO B16'
   },
   klemme: {
-    w:20, h:40, portR:4, colorable:true, showLabel:true, isDINDevice:true, te:1,
+    w:20, h:40, portR:4, colorable:true, showLabel:true, isDINDevice:true, te:1, bridgeable:true,
     ports:[
       {x:10,y:0,  dir:'n',color:'#6b7280',label:''},
       {x:10,y:40, dir:'s',color:'#6b7280',label:''},
@@ -820,12 +824,23 @@ const D = {
     label:'Klemme 16mm²'
   },
   klemme25: {
-    w:10, h:32, portR:3, colorable:true, showLabel:true, isDINDevice:true, te:1, tePx:10,
+    w:10, h:32, portR:3, colorable:true, showLabel:true, isDINDevice:true, te:1, tePx:10, bridgeable:true,
     ports:[
       {x:5,y:0,  dir:'n',color:'#6b7280',label:''},
       {x:5,y:32, dir:'s',color:'#6b7280',label:''},
     ],
     label:'Klemme 2.5mm²'
+  },
+  klemme25_twin: {
+    w:14, h:32, portR:3, colorable:true, showLabel:true, isDINDevice:true, te:1, tePx:14, bridgeable:true,
+    ports:[
+      {x:3, y:0,  dir:'n',color:'#6b7280',label:''}, // oben links
+      {x:11,y:0,  dir:'n',color:'#6b7280',label:''}, // oben rechts
+      {x:7, y:32, dir:'s',color:'#6b7280',label:''}, // unten
+      {x:14,y:16, dir:'e',color:'#f59e0b',label:''}, // Brücke rechts
+      {x:0, y:16, dir:'w',color:'#f59e0b',label:''}, // Brücke links
+    ],
+    label:'Klemme 2.5mm² Twin'
   },
   knotenpunkt: {
     w:12, h:12, portR:3, colorable:true,
@@ -1804,6 +1819,19 @@ function drawKlemme25(g, color) {
   mk('line',{x1:3,y1:16,x2:7,y2:16,stroke:'rgba(255,255,255,0.5)','stroke-width':0.8},g);
 }
 
+function drawKlemme25Twin(g, color) {
+  const c=color||'#9ca3af';
+  mk('rect',{x:0,y:0,width:14,height:32,fill:c,stroke:'rgba(0,0,0,0.3)','stroke-width':1,rx:1.5,filter:'url(#shadow)'},g);
+  mk('rect',{x:1,y:8,width:12,height:16,fill:'rgba(255,255,255,0.2)',rx:1},g);
+  // Zwei Löcher oben (Twin)
+  mk('circle',{cx:3.5,cy:5,r:2.2,fill:'rgba(0,0,0,0.25)'},g);
+  mk('circle',{cx:10.5,cy:5,r:2.2,fill:'rgba(0,0,0,0.25)'},g);
+  // Ein Loch unten
+  mk('circle',{cx:7,cy:27,r:2.6,fill:'rgba(0,0,0,0.25)'},g);
+  // Brücken-Hebel mittig (orange)
+  mk('rect',{x:0,y:14,width:14,height:4,fill:'#f59e0b',opacity:0.75,rx:1},g);
+}
+
 function drawLampe(g, lit) {
   if (lit) mk('circle',{cx:30,cy:30,r:26,fill:'#fde68a',opacity:0.4,filter:'url(#glow-y)'},g);
   mk('circle',{cx:30,cy:30,r:22,fill:lit?'#fef9c4':'#f3f4f6',stroke:'#ca8a04','stroke-width':2.5},g);
@@ -2468,6 +2496,7 @@ function drawComp(g, comp) {
     case 'rcd4':      drawRCD4(g, comp.state); break;
     case 'klemme':      drawKlemme(g, comp.state?.color); break;
     case 'klemme25':    drawKlemme25(g, comp.state?.color); break;
+    case 'klemme25_twin': drawKlemme25Twin(g, comp.state?.color); break;
     case 'knotenpunkt': drawKnotenpunkt(g, comp.state?.color); break;
     case 'wago2':       drawWago(g, 2, comp.state?.color); break;
     case 'wago3':       drawWago(g, 3, comp.state?.color); break;
@@ -2641,9 +2670,10 @@ function render() {
     if (w.bridge) {
       const OFF = 5;
       let ox=0, oy=0;
+      // Bei seitlichen Brücken-Ports (e/w) berühren sich die Punkte bereits — kein Versatz nötig
       if (fpDir==='n') oy=-OFF; else if (fpDir==='s') oy=OFF;
-      else if (fpDir==='w') ox=-OFF; else if (fpDir==='e') ox=OFF;
-      const pts = [[x1,y1],[x1+ox,y1+oy],[x2+ox,y2+oy],[x2,y2]];
+      const pts = (fpDir==='e'||fpDir==='w') ? [[x1,y1],[x2,y2]]
+        : [[x1,y1],[x1+ox,y1+oy],[x2+ox,y2+oy],[x2,y2]];
       w.pts = pts;
       const d = ptsToPath(pts);
       mk('path',{d,fill:'none',stroke:'#6b7280','stroke-width':6,'stroke-linecap':'round','stroke-linejoin':'round'},WG);
@@ -3212,29 +3242,57 @@ function cancelWire() {
   TWIRE.parentNode && TWIRE.parentNode.querySelectorAll('.wdot').forEach(d=>d.remove());
 }
 
-// ── Klemmenbrücke: zwei benachbarte Klemmen ohne Ader direkt verbinden ─────────
+// ── Klemmenbrücke: mehrere benachbarte Klemmen ohne Ader direkt verbinden ──────
+function dirsCompatible(d1, d2) {
+  return d1===d2 || (d1==='e'&&d2==='w') || (d1==='w'&&d2==='e');
+}
+// Für eine Klemme im Verbund: welcher Port zeigt zur linken bzw. rechten Nachbar-Klemme?
+function bridgeSidePort(comp, wantDir, towardRight) {
+  if (wantDir==='n' || wantDir==='s') {
+    return comp.def.ports.findIndex(p=>p.dir===wantDir);
+  }
+  const want = towardRight ? 'e' : 'w';
+  const idx = comp.def.ports.findIndex(p=>p.dir===want);
+  return idx>=0 ? idx : comp.def.ports.findIndex(p=>p.dir==='e'||p.dir==='w');
+}
 function onBridgePortDown(comp, pi, pd) {
-  const isTerminal = comp.type==='klemme' || comp.type==='klemme25';
-  if (!isTerminal) { bridgeFrom=null; return; }
+  if (!comp.def.bridgeable) { bridgeFrom=null; return; }
   if (!bridgeFrom) { bridgeFrom={id:comp.id, p:pi}; return; }
   if (bridgeFrom.id===comp.id && bridgeFrom.p===pi) { bridgeFrom=null; return; }
   const fc = comps.find(c=>c.id===bridgeFrom.id);
   if (!fc) { bridgeFrom=null; return; }
   const fpd = fc.def.ports[bridgeFrom.p];
-  const bbA = compBBox(fc), bbB = compBBox(comp);
-  const adjacent = fc.railId!=null && fc.railId===comp.railId &&
-    (Math.abs(bbA.x2-bbB.x1)<=2 || Math.abs(bbB.x2-bbA.x1)<=2);
-  if (fpd.dir!==pd.dir || !adjacent) {
-    alert('Brücken sind nur zwischen unmittelbar benachbarten Klemmen auf derselben Hutschiene möglich (gleiche Seite oben/unten).');
+  if (!dirsCompatible(fpd.dir, pd.dir) || fc.railId==null || fc.railId!==comp.railId) {
+    alert('Brücken sind nur zwischen Klemmen auf derselben Hutschiene und passender Seite möglich (oben/oben, unten/unten oder Brücken-Anschluss an Brücken-Anschluss).');
     bridgeFrom=null; return;
   }
-  const exists = wires.some(w=>
-    (w.fid===bridgeFrom.id&&w.fp===bridgeFrom.p&&w.tid===comp.id&&w.tp===pi)||
-    (w.tid===bridgeFrom.id&&w.tp===bridgeFrom.p&&w.fid===comp.id&&w.fp===pi));
-  if (!exists) {
-    pushHistory();
-    wires.push({id:++wid, fid:bridgeFrom.id, fp:bridgeFrom.p, tid:comp.id, tp:pi,
-      color:'#9ca3af', label:'', cable:'single', bridge:true});
+  // Kette aller brückbaren Klemmen auf der Schiene zwischen den beiden Klickpunkten (inkl.)
+  const railComps = comps.filter(c=>c.railId===fc.railId && c.def.bridgeable).sort((a,b)=>a.x-b.x);
+  const i1 = railComps.findIndex(c=>c.id===fc.id), i2 = railComps.findIndex(c=>c.id===comp.id);
+  if (i1<0 || i2<0) { bridgeFrom=null; return; }
+  const lo=Math.min(i1,i2), hi=Math.max(i1,i2);
+  const chain = railComps.slice(lo,hi+1);
+  for (let k=0;k<chain.length-1;k++) {
+    const bA=compBBox(chain[k]), bB=compBBox(chain[k+1]);
+    if (!(Math.abs(bA.x2-bB.x1)<=2 || Math.abs(bB.x2-bA.x1)<=2)) {
+      alert('Zwischen den Klemmen liegt eine Lücke oder ein anderes Bauteil — Brücke nicht möglich.');
+      bridgeFrom=null; return;
+    }
+  }
+  pushHistory();
+  const wantDir = fpd.dir;
+  for (let k=0;k<chain.length-1;k++) {
+    const a=chain[k], b=chain[k+1];
+    const api = (a.id===fc.id) ? bridgeFrom.p : bridgeSidePort(a, wantDir, true);
+    const bpi = (b.id===comp.id) ? pi : bridgeSidePort(b, wantDir, false);
+    if (api<0 || bpi<0) continue;
+    const exists = wires.some(w=>
+      (w.fid===a.id&&w.fp===api&&w.tid===b.id&&w.tp===bpi)||
+      (w.tid===a.id&&w.tp===api&&w.fid===b.id&&w.fp===bpi));
+    if (!exists) {
+      wires.push({id:++wid, fid:a.id, fp:api, tid:b.id, tp:bpi,
+        color:'#9ca3af', label:'', cable:'single', bridge:true});
+    }
   }
   bridgeFrom=null;
   render();
@@ -4487,7 +4545,7 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
         U(P(0),P(3)); U(P(1),P(4)); U(P(2),P(5)); break;
       case'cable5':
         for(let i=0;i<5;i++) U(P(i),P(i+5)); break;
-      case'knotenpunkt': case'klemme': case'klemme25':
+      case'knotenpunkt': case'klemme': case'klemme25': case'klemme25_twin':
       case'nblock': case'peblock':
       case'wago2': case'wago3': case'wago5':
         for(let i=1;i<c.def.ports.length;i++) U(P(0),P(i)); break;
@@ -4502,7 +4560,7 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
   // PE-Klemmen (grün-gelb) auf derselben Hutschiene → PE-Busschiene
   const railBus={};
   for(const c of comps){
-    if((c.type==='klemme'||c.type==='klemme25')&&c.railId!=null&&c.state&&c.state.color==='#16a34a'){
+    if((c.type==='klemme'||c.type==='klemme25'||c.type==='klemme25_twin')&&c.railId!=null&&c.state&&c.state.color==='#16a34a'){
       const k=c.railId+':'+c.state.color;
       (railBus[k]||(railBus[k]=[])).push(c);
     }
