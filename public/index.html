@@ -282,7 +282,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
         <span class="s-label">Klemme 2.5mm²</span>
       </div>
       <div class="s-item" ondragstart="sbDrag('klemme25_twin')" draggable="true">
-        <svg width="14" height="32"><rect x="0" y="0" width="14" height="32" fill="#9ca3af" stroke="rgba(0,0,0,0.3)" stroke-width="1" rx="1.5"/><rect x="1" y="8" width="12" height="16" fill="rgba(255,255,255,0.2)" rx="1"/><circle cx="3.5" cy="5" r="2.2" fill="rgba(0,0,0,0.25)"/><circle cx="10.5" cy="5" r="2.2" fill="rgba(0,0,0,0.25)"/><circle cx="7" cy="27" r="2.6" fill="rgba(0,0,0,0.25)"/><rect x="0" y="14" width="14" height="4" fill="#f59e0b" opacity="0.75" rx="1"/></svg>
+        <svg width="10" height="36"><rect x="0" y="0" width="10" height="36" fill="#9ca3af" stroke="rgba(0,0,0,0.3)" stroke-width="1" rx="1.5"/><rect x="1" y="8" width="8" height="20" fill="rgba(255,255,255,0.2)" rx="1"/><circle cx="5" cy="4" r="2" fill="rgba(0,0,0,0.25)"/><circle cx="5" cy="11" r="2" fill="rgba(0,0,0,0.25)"/><circle cx="5" cy="31" r="2.6" fill="rgba(0,0,0,0.25)"/><rect x="-1" y="20" width="2.5" height="6" fill="#f59e0b" opacity="0.75" rx="1"/><rect x="8.5" y="20" width="2.5" height="6" fill="#f59e0b" opacity="0.75" rx="1"/></svg>
         <span class="s-label">Klemme 2.5mm² Twin</span>
       </div>
 
@@ -820,6 +820,8 @@ const D = {
     ports:[
       {x:10,y:0,  dir:'n',color:'#6b7280',label:''},
       {x:10,y:40, dir:'s',color:'#6b7280',label:''},
+      {x:20,y:20, dir:'e',color:'#f59e0b',label:''}, // Brücke rechts
+      {x:0, y:20, dir:'w',color:'#f59e0b',label:''}, // Brücke links
     ],
     label:'Klemme 16mm²'
   },
@@ -828,17 +830,19 @@ const D = {
     ports:[
       {x:5,y:0,  dir:'n',color:'#6b7280',label:''},
       {x:5,y:32, dir:'s',color:'#6b7280',label:''},
+      {x:10,y:16, dir:'e',color:'#f59e0b',label:''}, // Brücke rechts
+      {x:0, y:16, dir:'w',color:'#f59e0b',label:''}, // Brücke links
     ],
     label:'Klemme 2.5mm²'
   },
   klemme25_twin: {
-    w:14, h:32, portR:3, colorable:true, showLabel:true, isDINDevice:true, te:1, tePx:14, bridgeable:true,
+    w:10, h:36, portR:3, colorable:true, showLabel:true, isDINDevice:true, te:1, tePx:10, bridgeable:true,
     ports:[
-      {x:3, y:0,  dir:'n',color:'#6b7280',label:''}, // oben links
-      {x:11,y:0,  dir:'n',color:'#6b7280',label:''}, // oben rechts
-      {x:7, y:32, dir:'s',color:'#6b7280',label:''}, // unten
-      {x:14,y:16, dir:'e',color:'#f59e0b',label:''}, // Brücke rechts
-      {x:0, y:16, dir:'w',color:'#f59e0b',label:''}, // Brücke links
+      {x:5,y:0,  dir:'n',color:'#6b7280',label:''}, // oben (1. Etage)
+      {x:5,y:10, dir:'n',color:'#6b7280',label:''}, // oben (2. Etage, darunter)
+      {x:5,y:36, dir:'s',color:'#6b7280',label:''}, // unten
+      {x:10,y:23,dir:'e',color:'#f59e0b',label:''}, // Brücke rechts
+      {x:0, y:23,dir:'w',color:'#f59e0b',label:''}, // Brücke links
     ],
     label:'Klemme 2.5mm² Twin'
   },
@@ -1809,27 +1813,34 @@ function drawKlemme(g, color) {
   mk('rect',{x:2,y:11,width:16,height:18,fill:'rgba(255,255,255,0.2)',rx:1.5},g);
   mk('circle',{cx:10,cy:20,r:4.5,fill:'rgba(0,0,0,0.25)'},g);
   mk('line',{x1:7,y1:20,x2:13,y2:20,stroke:'rgba(255,255,255,0.5)','stroke-width':1.2},g);
+  // Brücken-Hebel seitlich (orange)
+  mk('rect',{x:-1,y:17,width:3,height:6,fill:'#f59e0b',opacity:0.75,rx:1},g);
+  mk('rect',{x:18,y:17,width:3,height:6,fill:'#f59e0b',opacity:0.75,rx:1},g);
 }
 
 function drawKlemme25(g, color) {
   const c=color||'#9ca3af';
   mk('rect',{x:0,y:0,width:10,height:32,fill:c,stroke:'rgba(0,0,0,0.3)','stroke-width':1,rx:1.5,filter:'url(#shadow)'},g);
   mk('rect',{x:1,y:8,width:8,height:16,fill:'rgba(255,255,255,0.2)',rx:1},g);
+  // Brücken-Hebel seitlich (orange)
+  mk('rect',{x:-1,y:13,width:2.5,height:6,fill:'#f59e0b',opacity:0.75,rx:1},g);
+  mk('rect',{x:8.5,y:13,width:2.5,height:6,fill:'#f59e0b',opacity:0.75,rx:1},g);
   mk('circle',{cx:5,cy:16,r:3,fill:'rgba(0,0,0,0.25)'},g);
   mk('line',{x1:3,y1:16,x2:7,y2:16,stroke:'rgba(255,255,255,0.5)','stroke-width':0.8},g);
 }
 
 function drawKlemme25Twin(g, color) {
   const c=color||'#9ca3af';
-  mk('rect',{x:0,y:0,width:14,height:32,fill:c,stroke:'rgba(0,0,0,0.3)','stroke-width':1,rx:1.5,filter:'url(#shadow)'},g);
-  mk('rect',{x:1,y:8,width:12,height:16,fill:'rgba(255,255,255,0.2)',rx:1},g);
-  // Zwei Löcher oben (Twin)
-  mk('circle',{cx:3.5,cy:5,r:2.2,fill:'rgba(0,0,0,0.25)'},g);
-  mk('circle',{cx:10.5,cy:5,r:2.2,fill:'rgba(0,0,0,0.25)'},g);
+  mk('rect',{x:0,y:0,width:10,height:36,fill:c,stroke:'rgba(0,0,0,0.3)','stroke-width':1,rx:1.5,filter:'url(#shadow)'},g);
+  mk('rect',{x:1,y:8,width:8,height:20,fill:'rgba(255,255,255,0.2)',rx:1},g);
+  // Zwei Löcher oben, übereinander (Twin)
+  mk('circle',{cx:5,cy:4,r:2,fill:'rgba(0,0,0,0.25)'},g);
+  mk('circle',{cx:5,cy:11,r:2,fill:'rgba(0,0,0,0.25)'},g);
   // Ein Loch unten
-  mk('circle',{cx:7,cy:27,r:2.6,fill:'rgba(0,0,0,0.25)'},g);
-  // Brücken-Hebel mittig (orange)
-  mk('rect',{x:0,y:14,width:14,height:4,fill:'#f59e0b',opacity:0.75,rx:1},g);
+  mk('circle',{cx:5,cy:31,r:2.6,fill:'rgba(0,0,0,0.25)'},g);
+  // Brücken-Hebel seitlich (orange)
+  mk('rect',{x:-1,y:20,width:2.5,height:6,fill:'#f59e0b',opacity:0.75,rx:1},g);
+  mk('rect',{x:8.5,y:20,width:2.5,height:6,fill:'#f59e0b',opacity:0.75,rx:1},g);
 }
 
 function drawLampe(g, lit) {
