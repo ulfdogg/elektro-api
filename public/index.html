@@ -3062,6 +3062,14 @@ function render() {
           fill:'none',stroke:'#f59e0b','stroke-width':3,'pointer-events':'none',opacity:0.9},CG);
       }
 
+      // Warnung: Taster/Kontakt ist mit keinem Gehäuse verknüpft (falsch platziert)
+      if ((comp.def?.isActuator || comp.def?.isContact) && comp.housingId==null) {
+        mk('rect',{x:bb.x1-2,y:bb.y1-2,width:bb.x2-bb.x1+4,height:bb.y2-bb.y1+4,rx:4,
+          fill:'none',stroke:'#ef4444','stroke-width':2,'stroke-dasharray':'4,3','pointer-events':'none'},CG);
+        mk('text',{x:bb.x1+(bb.x2-bb.x1)/2,y:bb.y1-6,'text-anchor':'middle','font-size':8,
+          fill:'#ef4444','font-weight':'bold','pointer-events':'none'},CG).textContent='nicht verbunden';
+      }
+
       // NC/NO Kontakt: grüne Markierung wenn mindestens eine Seite unter Spannung
       if (comp.type==='kontakt_nc'||comp.type==='kontakt_no') {
         const pot0=portPotMap[comp.id+':0']||0, pot1=portPotMap[comp.id+':1']||0;
@@ -4442,16 +4450,16 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
       case'taster':
         if(s.pressed) U(P(0),P(1)); break;
       case'kontakt_no': {
-        // NO (Schließer): schließt wenn Betätiger im selben Gehäuse gedrückt
+        // NO (Schließer): schließt wenn Betätiger in derselben Gehäuse-Reihe gedrückt
         const hid=c.housingId;
-        const pressed=hid&&comps.some(a=>a.housingId===hid&&a.type==='drucktaster'&&!!(simSt[a.id]?.pressed));
+        const pressed=hid!=null&&comps.some(a=>a.housingId===hid&&a.rowIdx===c.rowIdx&&a.type==='drucktaster'&&!!(simSt[a.id]?.pressed));
         if(pressed) U(P(0),P(1));
         break;
       }
       case'kontakt_nc': {
-        // NC (Öffner): immer geschlossen außer wenn Betätiger gedrückt
+        // NC (Öffner): immer geschlossen außer wenn Betätiger in derselben Reihe gedrückt
         const hid=c.housingId;
-        const pressed=hid&&comps.some(a=>a.housingId===hid&&a.type==='drucktaster'&&!!(simSt[a.id]?.pressed));
+        const pressed=hid!=null&&comps.some(a=>a.housingId===hid&&a.rowIdx===c.rowIdx&&a.type==='drucktaster'&&!!(simSt[a.id]?.pressed));
         if(!pressed) U(P(0),P(1));
         break;
       }
