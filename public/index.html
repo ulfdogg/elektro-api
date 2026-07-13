@@ -1243,7 +1243,7 @@ function ortho(x1, y1, d1, x2, y2, d2) {
 
 // ── Obstacle-aware wire routing ───────────────────────────────────────────────
 function wireRoute(x1, y1, dir1, x2, y2, dir2, skipIds, softOccupied) {
-  const STEP = 15, OPAD = 5, M = 60;
+  const STEP = 10, OPAD = 5, M = 60;
 
   // Return ALL enclosing component ids (a port can be inside LS AND inside UV)
   function enclosers(x, y) {
@@ -2711,10 +2711,10 @@ function render() {
       const sw = cabType!=='single'?12:7;
       const onCurrentPath = activeWireIds.has(w.id);
       if (pot & ElektroSim.ANY_L) {
-        // L1/L2/L3 leicht unterschiedliche Gelb-/Orangetöne, damit die Phase erkennbar bleibt
-        const lStroke = (pot & ElektroSim.POT_L2) ? 'rgba(245,158,11,0.55)'
-          : (pot & ElektroSim.POT_L3) ? 'rgba(252,211,77,0.55)'
-          : 'rgba(251,191,36,0.55)'; // L1 / einphasig
+        // L1 braun, L2 schwarz, L3 grau — passend zur Adernfarben-Konvention
+        const lStroke = (pot & ElektroSim.POT_L2) ? 'rgba(17,17,17,0.55)'
+          : (pot & ElektroSim.POT_L3) ? 'rgba(107,114,128,0.55)'
+          : 'rgba(139,69,19,0.55)'; // L1 / einphasig
         mk('path',{d,fill:'none',stroke:lStroke,
           'stroke-width':sw,'stroke-linecap':'round','stroke-linejoin':'round','pointer-events':'none'},WG);
       }
