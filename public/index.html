@@ -2329,8 +2329,8 @@ function drawKanal(g, comp) {
   const len = Math.sqrt(dx*dx+dy*dy);
   const angle = Math.atan2(dy, dx) * 180 / Math.PI;
   const W = comp.kanalW || 40; // Kanalbreite in px
-  // Hauptkörper als rotiertes Rechteck
-  const mid = `translate(${comp.x},${comp.y}) rotate(${angle})`;
+  // Hauptkörper als rotiertes Rechteck (g ist bereits auf comp.x/comp.y verschoben)
+  const mid = `rotate(${angle})`;
   const gg = document.createElementNS('http://www.w3.org/2000/svg','g');
   gg.setAttribute('transform', mid);
   g.appendChild(gg);
