@@ -47,6 +47,7 @@ body { font-family:'Segoe UI',Arial,sans-serif; background:#e8edf2; overflow:hid
 }
 .tb-row:first-child { border-bottom:1px solid rgba(255,255,255,0.12); }
 .logo { color:#90cdf4; font-weight:700; font-size:14px; margin-right:4px; white-space:nowrap; }
+.beta-badge { background:#dd6b20; color:#fff; font-size:9px; font-weight:700; letter-spacing:.5px; padding:2px 5px; border-radius:4px; margin-right:8px; vertical-align:middle; white-space:nowrap; }
 .t-btn {
   background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff;
   padding:4px 9px; border-radius:5px; cursor:pointer; font-size:11px;
@@ -131,6 +132,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
     <div class="tb-row">
       <button class="t-btn" id="btn-hamburger" onclick="toggleSidebar()" title="Bauteile">☰</button>
       <span class="logo">⚡ Elektroplan</span>
+      <span class="beta-badge" title="Diese Anwendung befindet sich in der Beta-Phase">BETA</span>
       <div class="t-sep"></div>
       <button class="t-btn active" id="btn-sel" onclick="setMode('select')">▶ Auswählen</button>
       <button class="t-btn" id="btn-wire" onclick="setMode('wire')">〰 Kabel</button>
