@@ -2695,11 +2695,11 @@ function render() {
   const renderedLabels = []; // track placed labels for overlap avoidance
   sorted.forEach(comp => {
     const rot=comp.rot||0;
-    const rotT=rot&&!comp.def.isCable?` rotate(${rot},${comp.def.w/2},${comp.def.h/2})`:'';
+    const rotT=rot&&!comp.def.isCable&&!comp.def.isKanal?` rotate(${rot},${comp.def.w/2},${comp.def.h/2})`:'';
     const g = mk('g',{class:'comp-g',transform:`translate(${comp.x},${comp.y})${rotT}`,'data-id':comp.id},CG);
     // selection ring
     if (sel===comp.id) {
-      if (comp.def.isCable) {
+      if (comp.def.isCable||comp.def.isKanal) {
         const ex=(comp.ex||comp.x)-comp.x, ey=(comp.ey||comp.y)-comp.y;
         mk('line',{x1:-16,y1:0,x2:ex+16,y2:ey,stroke:'#3b82f6','stroke-width':4,
           opacity:0.35,'stroke-dasharray':'6,4','pointer-events':'none'},g);
@@ -2710,7 +2710,7 @@ function render() {
     }
     drawComp(g, comp);
     // Counter-rotate all text inside the component so they stay readable
-    if ((comp.rot||0) && !comp.def.isCable) {
+    if ((comp.rot||0) && !comp.def.isCable && !comp.def.isKanal) {
       const w=comp.def.w, h=comp.def.h;
       g.querySelectorAll('text').forEach(t=>{
         const cx=parseFloat(t.getAttribute('x')||0);
@@ -2724,7 +2724,7 @@ function render() {
     const hasCustomLabel = comp.label && comp.label !== comp.def.label;
     const isSel = sel===comp.id;
     const showLabel = isSel || hasCustomLabel || comp.def.w >= 30 || comp.def.showLabel;
-    if (!comp.def.isCable && showLabel) {
+    if (!comp.def.isCable && !comp.def.isKanal && showLabel) {
       const bb=compBBox(comp);
       const text = comp.label||comp.def.label;
       const estW = text.length * 6.5; // approx text width at font-size 11
@@ -3606,7 +3606,7 @@ function updateCompColorPanel() {
 function rotateSel() {
   if (!sel) return;
   const c=comps.find(c=>c.id===sel);
-  if (c&&!c.def.isCable) {
+  if (c&&!c.def.isCable&&!c.def.isKanal) {
     c.rot=((c.rot||0)+90)%360;
     wires.forEach(w=>{if(w.fid===sel||w.tid===sel){delete w.pts;delete w.manual;}});
     render();
@@ -3820,7 +3820,7 @@ document.addEventListener('keydown', e=>{
   }
   if ((e.key==='r'||e.key==='R') && sel) {
     const c=comps.find(c=>c.id===sel);
-    if (c&&!c.def.isCable) {
+    if (c&&!c.def.isCable&&!c.def.isKanal) {
       c.rot=((c.rot||0)+90)%360;
       // Clear manual paths for connected wires so they re-route
       wires.forEach(w=>{if(w.fid===sel||w.tid===sel){delete w.pts;delete w.manual;}});
