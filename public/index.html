@@ -45,7 +45,7 @@ body { font-family:'Segoe UI',Arial,sans-serif; background:#e8edf2; overflow:hid
   height:44px; display:flex; align-items:center;
   padding:0 12px; gap:6px; flex-shrink:0;
 }
-.tb-row:first-child { border-bottom:1px solid rgba(255,255,255,0.12); }
+.tb-row:not(:last-child) { border-bottom:1px solid rgba(255,255,255,0.12); }
 .logo { color:#90cdf4; font-weight:700; font-size:14px; margin-right:4px; white-space:nowrap; }
 .beta-badge { background:#dd6b20; color:#fff; font-size:9px; font-weight:700; letter-spacing:.5px; padding:2px 5px; border-radius:4px; margin-right:8px; vertical-align:middle; white-space:nowrap; }
 .t-btn {
@@ -144,23 +144,22 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <button class="t-btn" onclick="delSel()">✕ Löschen</button>
       <button class="t-btn" onclick="clearAll()">🗑 Neu</button>
       <select class="t-btn" id="tpl-select" onchange="loadTemplate(this.value,this)" title="Vorlage laden"><option value="">📋 Vorlage…</option></select>
-      <div class="t-sep"></div>
+      <span style="flex:1"></span>
+      <span id="es-username" style="font-size:11px;color:#9ca3af;padding:0 6px;white-space:nowrap"></span>
+      <a id="es-admin-link" href="/admin.html" class="t-btn" style="display:none;text-decoration:none;color:#93c5fd">🛠 Admin</a>
+      <button class="t-btn" onclick="doLogout()" style="color:#f87171;margin-left:4px">⏻ Abmelden</button>
+    </div>
+    <div class="tb-row">
       <button class="t-btn" onclick="savePlan()">💾 Datei</button>
       <button class="t-btn" onclick="loadPlan()">📂 Datei</button>
       <button class="t-btn" onclick="serverSave()">☁ Speichern</button>
       <button class="t-btn" onclick="serverLoad()">☁ Laden</button>
       <button class="t-btn" onclick="exportPNG()">🖼 PNG</button>
-      <a class="t-btn" href="/stromlaufplan.html" target="_blank" rel="noopener" style="text-decoration:none"
-        title="Öffnet eine schreibgeschützte Übersicht des aktuellen Aufbaus, nach Funktion sortiert">📐 Stromlaufplan</a>
       <div class="t-sep"></div>
       <button class="t-btn" id="btn-sim" onclick="toggleSim()">⚡ Simulation</button>
       <span class="t-hint" id="sim-hint" style="display:none;color:#fbbf24;font-size:10px;padding:0 8px;">SIM: Klick=schalten &nbsp;|&nbsp; CEE-Kupplung=Quelle &nbsp;|&nbsp; Leitungen gelb=unter Spannung</span>
       <span class="t-hint" id="normal-hint">Ziehen auf Hintergrund=Verschieben &nbsp;|&nbsp; <kbd>Shift</kbd>+Ziehen=Auswahlrahmen &nbsp;|&nbsp; <kbd>Entf</kbd>=Löschen &nbsp;|&nbsp; <kbd>Esc</kbd>=Abbruch &nbsp;|&nbsp; Doppelklick=Umbenennen &nbsp;|&nbsp; <kbd>Strg</kbd>+Klick=Mehrfachauswahl &nbsp;|&nbsp; Touch: Gedrückt halten=Mehrfachauswahl &nbsp;|&nbsp; 2 Finger=Zoom/Pan</span>
       <span id="place-hint" style="display:none;color:#34d399;font-size:12px;padding:0 8px;font-weight:600;"></span>
-      <span style="flex:1"></span>
-      <span id="es-username" style="font-size:11px;color:#9ca3af;padding:0 6px;white-space:nowrap"></span>
-      <a id="es-admin-link" href="/admin.html" class="t-btn" style="display:none;text-decoration:none;color:#93c5fd">🛠 Admin</a>
-      <button class="t-btn" onclick="doLogout()" style="color:#f87171;margin-left:4px">⏻ Abmelden</button>
     </div>
     <div class="tb-row">
       <span class="t-label">Ader:</span>
