@@ -3366,6 +3366,9 @@ SVG.addEventListener('pointerdown', e=>{
   }
 
   // Mittlere Taste ODER Space+Links ODER Links ohne Shift ODER Touch/Pen-Einzel-Finger auf Hintergrund → Pan
+  // Ausnahme: wartet gerade ein Bauteil aus der Sidebar auf's Platzieren (Touch-Tippen), dann NICHT
+  // pannen — sonst unterdrückt preventDefault()/setPointerCapture() das Klick-Event fürs Platzieren.
+  if (sbPending && sbType) return;
   const isTouch = e.pointerType==='touch'||e.pointerType==='pen';
   if (e.button===1 || (e.button===0 && (spaceDown || !e.shiftKey)) || (isTouch && activePointers.size===1)) {
     panDrag={sx:e.clientX,sy:e.clientY,vx:vpX,vy:vpY,pid:e.pointerId};
