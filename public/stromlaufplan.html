@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stromlaufplan (aufgelöst)</title>
+<script>
+(function(){
+  fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
+    if(!d.user){ location.href='/login.html'; }
+  }).catch(()=>{ location.href='/login.html'; });
+})();
+</script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#e8edf2;color:#1f2937}
+  #bar{background:#1a365d;color:#fff;padding:0 16px;height:48px;display:flex;align-items:center;gap:16px;
+    box-shadow:0 2px 8px #0005;position:sticky;top:0;z-index:10}
+  #bar a{color:#90cdf4;text-decoration:none;font-size:13px;white-space:nowrap}
+  #bar a:hover{text-decoration:underline}
+  #bar h1{font-size:14px;font-weight:600;white-space:nowrap}
+  #bar .hint{font-size:11px;color:rgba(255,255,255,0.55);margin-left:auto;white-space:nowrap}
+  #wrap{overflow:auto;width:100%;height:calc(100vh - 48px)}
+  #empty{padding:60px 20px;text-align:center;color:#64748b;font-size:14px}
+  .row-label{font-size:11px;fill:#64748b;font-weight:700;letter-spacing:.5px}
+</style>
+</head>
+<body>
+<div id="bar">
+  <a href="/">← Zurück zum Aufbauplan</a>
+  <h1>⚡ Stromlaufplan — aufgelöste Darstellung</h1>
+  <span class="hint">automatisch erzeugt · schreibgeschützt</span>
+</div>
+<div id="wrap"><div id="empty" style="display:none">Kein Aufbau gefunden. Öffne zuerst den Aufbauplan und baue eine Schaltung.</div><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+<script>
+const NS='http://www.w3.org/2000/svg';
+function mk(tag,attrs,parent){
+  const el=document.createElementNS(NS,tag);
+  for(const k in attrs) el.setAttribute(k,attrs[k]);
+  if(parent) parent.appendChild(el);
+  return el;
+}
+
+// Kategorien für die funktionale Anordnung (aufgelöste Darstellung)
+const ROWS = [
+  {key:'quelle',    label:'EINSPEISUNG',        types:['cee16_dose','cee16_kupplung']},
+  {key:'schutz',    label:'SCHUTZORGANE',       types:['ls1','ls3','rcd2','rcd4','rcbo']},
+  {key:'sammel',    label:'SAMMELSCHIENEN / KLEMMEN', types:['nblock','peblock','klemme','klemme25','klemme25_twin','knotenpunkt','wago2','wago3','wago5']},
+  {key:'steuer',    label:'STEUERSTROMKREIS',   types:['schalter','taster','wechsel','kreuzschalter','serienschalter','drucktaster','kontakt_no','kontakt_nc','kontakt_led','bewegungsmelder','stromstoss','schuetz','logo']},
+  {key:'verbrauch', label:'VERBRAUCHER',        types:['lampe','spot','motor','motorklemmbrett','dahlander','steckdose']},
+  {key:'kabel',     label:'KABEL / VERBINDUNGEN', types:['cable3','cable5']},
+];
+const TYPE_ROW = {};
+ROWS.forEach(r=>r.types.forEach(t=>TYPE_ROW[t]=r.key));
+
+let data = {comps:[], wires:[]};
+try {
+  const raw = localStorage.getItem('elektroplan_v1');
+  if (raw) data = JSON.parse(raw);
+} catch(e) {}
+
+const comps = (data.comps||[]).filter(c=>TYPE_ROW[c.type]);
+const wires = data.wires||[];
+
+if (!comps.length) {
+  document.getElementById('empty').style.display='';
+} else {
+  render();
+}
+
+function render(){
+  // Benutzte Ports pro Bauteil aus den Adern ermitteln
+  const usedPorts = {};
+  wires.forEach(w=>{
+    (usedPorts[w.fid]||(usedPorts[w.fid]=new Set())).add(w.fp);
+    (usedPorts[w.tid]||(usedPorts[w.tid]=new Set())).add(w.tp);
+  });
+
+  const BOXH=56, PORTGAP=26, BOXMINW=76, HGAP=36, ROWH=190, MARGIN=40;
+
+  // Layout: Boxen pro Reihe anordnen
+  const rowsData = ROWS.map(r=>({...r, items:[]}));
+  const rowByKey = {}; rowsData.forEach(r=>rowByKey[r.key]=r);
+  comps.forEach(c=>{
+    const rk = TYPE_ROW[c.type];
+    if (rk) rowByKey[rk].items.push(c);
+  });
+
+  const portPos = {}; // "compId:portIdx" -> {x,y}
+  const boxes = []; // {c, x, y, w, h, ports:[idx,...]}
+  let maxRowW = 0;
+
+  rowsData.forEach((row, ri) => {
+    let x = MARGIN;
+    const y = MARGIN + ri*ROWH + 20;
+    row.items.forEach(c=>{
+      const ports = [...(usedPorts[c.id]||[])].sort((a,b)=>a-b);
+      const w = Math.max(BOXMINW, ports.length*PORTGAP + 14);
+      const box = {c, x, y, w, h:BOXH, ports};
+      boxes.push(box);
+      ports.forEach((pi,i)=>{
+        const px = x + 10 + i*PORTGAP + PORTGAP/2 - 13;
+        portPos[c.id+':'+pi] = {x:px, y:y+BOXH};
+      });
+      x += w + HGAP;
+    });
+    if (x > maxRowW) maxRowW = x;
+  });
+
+  const totalW = Math.max(600, maxRowW + MARGIN);
+  const totalH = MARGIN + ROWS.length*ROWH + 40;
+
+  const svg = document.getElementById('svg');
+  svg.setAttribute('width', totalW);
+  svg.setAttribute('height', totalH);
+  svg.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+
+  // Reihen-Titel + Trennlinien
+  rowsData.forEach((row, ri) => {
+    const y = MARGIN + ri*ROWH;
+    if (row.items.length) {
+      mk('text',{x:MARGIN, y:y, class:'row-label'},svg).textContent = row.label;
+      mk('line',{x1:MARGIN,y1:y+6,x2:totalW-MARGIN,y2:y+6,stroke:'#cbd5e1','stroke-width':1},svg);
+    }
+  });
+
+  // Verbindungen zuerst zeichnen (liegen unter den Boxen)
+  wires.forEach(w=>{
+    const a = portPos[w.fid+':'+w.fp], b = portPos[w.tid+':'+w.tp];
+    if (!a || !b) return;
+    const midY = Math.max(a.y,b.y) + 40;
+    const d = `M${a.x},${a.y} C${a.x},${midY} ${b.x},${midY} ${b.x},${b.y}`;
+    mk('path',{d,fill:'none',stroke:w.color||'#6b7280','stroke-width':2,opacity:0.8},svg);
+    const mx=(a.x+b.x)/2, my=Math.min(midY, (a.y+b.y)/2+30);
+    if (w.label) {
+      mk('rect',{x:mx-14,y:my-8,width:28,height:11,fill:'#fff',opacity:0.85,rx:2},svg);
+      mk('text',{x:mx,y:my,'text-anchor':'middle','font-size':8,fill:'#374151','font-weight':'bold'},svg).textContent=w.label;
+    }
+  });
+
+  // Boxen zeichnen
+  boxes.forEach(({c,x,y,w,h,ports})=>{
+    const connected = ports.length>0;
+    mk('rect',{x,y,width:w,height:h,rx:4,fill:connected?'#fff':'#f1f5f9',
+      stroke:connected?'#334155':'#cbd5e1','stroke-width':1.5},svg);
+    mk('text',{x:x+w/2,y:y+16,'text-anchor':'middle','font-size':10,fill:'#1f2937','font-weight':'bold'},svg)
+      .textContent = c.label || c.type;
+    mk('text',{x:x+w/2,y:y+28,'text-anchor':'middle','font-size':8,fill:'#94a3b8'},svg)
+      .textContent = '#'+c.id;
+    ports.forEach((pi,i)=>{
+      const px = x+10+i*PORTGAP+PORTGAP/2-13, py=y+h;
+      mk('circle',{cx:px,cy:py,r:3.5,fill:'#fff',stroke:'#374151','stroke-width':1.5},svg);
+      mk('text',{x:px,y:py+12,'text-anchor':'middle','font-size':7,fill:'#64748b'},svg).textContent=pi;
+    });
+    if (!connected) {
+      mk('text',{x:x+w/2,y:y+44,'text-anchor':'middle','font-size':7,fill:'#94a3b8'},svg).textContent='(nicht verdrahtet)';
+    }
+  });
+}
+</script>
+</body>
+</html>
