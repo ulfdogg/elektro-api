@@ -60,6 +60,72 @@ const RAIL_BY_COLOR = {
 const TOP_RAILS = ['L1','L2','L3'];
 const BOT_RAILS = ['N','PE'];
 
+// Bauteiltyp → vereinfachtes Schaltzeichen (statt generischer Box)
+function symbolFor(type) {
+  if (['schalter','taster','wechsel','kreuzschalter','kontakt_no','kontakt_led','drucktaster'].includes(type)) return 'contact_no';
+  if (type==='kontakt_nc') return 'contact_nc';
+  if (type==='ls1') return 'breaker';
+  if (type==='lampe' || type==='spot') return 'lamp';
+  if (type==='motor' || type==='dahlander') return 'motor';
+  if (type==='steckdose') return 'socket';
+  if (['nblock','peblock','klemme','klemme25','klemme25_twin','knotenpunkt','wago2','wago3','wago5'].includes(type)) return 'terminal';
+  return null;
+}
+function drawSymbol(svg, sym, x, y, w, h, label) {
+  const cx=x+w/2, cy=y+h/2;
+  mk('text',{x:cx, y:y-8, 'text-anchor':'middle', 'font-size':9, fill:'#1f2937', 'font-weight':'bold'},svg).textContent=label;
+  const stroke = '#1f2937';
+  switch(sym){
+    case 'contact_no':
+    case 'contact_nc': {
+      const p1x=x+13, p2x=x+w-13;
+      mk('line',{x1:p1x,y1:y,x2:p1x,y2:cy,stroke,'stroke-width':1.5},svg);
+      mk('line',{x1:p2x,y1:cy,x2:p2x,y2:y+h,stroke,'stroke-width':1.5},svg);
+      mk('line',{x1:p1x,y1:cy,x2:p2x-4,y2:cy-14,stroke,'stroke-width':1.8,'stroke-linecap':'round'},svg);
+      mk('circle',{cx:p1x,cy,r:1.8,fill:stroke},svg);
+      mk('circle',{cx:p2x,cy,r:1.8,fill:stroke},svg);
+      if (sym==='contact_nc') {
+        mk('line',{x1:p2x-9,y1:cy-19,x2:p2x-1,y2:cy-9,stroke,'stroke-width':1.5},svg);
+      }
+      break;
+    }
+    case 'breaker': {
+      const px=cx;
+      mk('line',{x1:px,y1:y,x2:px,y2:cy-4,stroke,'stroke-width':1.5},svg);
+      mk('line',{x1:px,y1:cy+12,x2:px,y2:y+h,stroke,'stroke-width':1.5},svg);
+      mk('line',{x1:px,y1:cy-4,x2:px+12,y2:cy+8,stroke,'stroke-width':1.8,'stroke-linecap':'round'},svg);
+      mk('rect',{x:px+7,y:cy-3,width:9,height:9,fill:'#fff',stroke,'stroke-width':1.3},svg);
+      break;
+    }
+    case 'lamp': {
+      mk('circle',{cx,cy,r:13,fill:'#fff',stroke,'stroke-width':1.5},svg);
+      mk('line',{x1:cx-8,y1:cy-8,x2:cx+8,y2:cy+8,stroke,'stroke-width':1.2},svg);
+      mk('line',{x1:cx-8,y1:cy+8,x2:cx+8,y2:cy-8,stroke,'stroke-width':1.2},svg);
+      mk('line',{x1:cx,y1:y,x2:cx,y2:cy-13,stroke,'stroke-width':1.5},svg);
+      mk('line',{x1:cx,y1:cy+13,x2:cx,y2:y+h,stroke,'stroke-width':1.5},svg);
+      break;
+    }
+    case 'motor': {
+      mk('circle',{cx,cy,r:15,fill:'#fff',stroke,'stroke-width':1.5},svg);
+      mk('text',{x:cx,y:cy+4,'text-anchor':'middle','font-size':11,fill:stroke,'font-weight':'bold'},svg).textContent='M';
+      mk('line',{x1:cx,y1:y,x2:cx,y2:cy-15,stroke,'stroke-width':1.5},svg);
+      break;
+    }
+    case 'socket': {
+      mk('circle',{cx,cy,r:13,fill:'#fff',stroke,'stroke-width':1.5},svg);
+      mk('circle',{cx:cx-4,cy,r:1.6,fill:stroke},svg);
+      mk('circle',{cx:cx+4,cy,r:1.6,fill:stroke},svg);
+      mk('line',{x1:cx,y1:y,x2:cx,y2:cy-13,stroke,'stroke-width':1.5},svg);
+      break;
+    }
+    case 'terminal': {
+      mk('circle',{cx,cy,r:4,fill:stroke},svg);
+      mk('line',{x1:cx,y1:y,x2:cx,y2:cy,stroke,'stroke-width':1.5},svg);
+      break;
+    }
+  }
+}
+
 let comps = [], wires = [];
 
 function loadAndRender(){
@@ -179,14 +245,19 @@ function render(){
     }
   });
 
-  // Boxen zeichnen
+  // Boxen / Schaltzeichen zeichnen
   boxes.forEach(({c,x,y,w,h,ports})=>{
     const connected = ports.length>0;
-    mk('rect',{x,y,width:w,height:h,rx:4,fill:connected?'#fff':'#f1f5f9',
-      stroke:connected?'#334155':'#cbd5e1','stroke-width':1.5},svg);
-    mk('text',{x:x+w/2,y:y+16,'text-anchor':'middle','font-size':10,fill:'#1f2937','font-weight':'bold'},svg)
-      .textContent = c.label || c.type;
-    mk('text',{x:x+w/2,y:y+28,'text-anchor':'middle','font-size':8,fill:'#94a3b8'},svg)
+    const sym = symbolFor(c.type);
+    if (sym) {
+      drawSymbol(svg, sym, x, y, w, h, c.label || c.type);
+    } else {
+      mk('rect',{x,y,width:w,height:h,rx:4,fill:connected?'#fff':'#f1f5f9',
+        stroke:connected?'#334155':'#cbd5e1','stroke-width':1.5},svg);
+      mk('text',{x:x+w/2,y:y+16,'text-anchor':'middle','font-size':10,fill:'#1f2937','font-weight':'bold'},svg)
+        .textContent = c.label || c.type;
+    }
+    mk('text',{x:x+w/2,y:y+h+14,'text-anchor':'middle','font-size':8,fill:'#94a3b8'},svg)
       .textContent = '#'+c.id;
     ports.forEach((pi,i)=>{
       const px = x+10+i*PORTGAP+PORTGAP/2-13, py=y;
@@ -194,7 +265,7 @@ function render(){
       mk('text',{x:px,y:py-6,'text-anchor':'middle','font-size':7,fill:'#64748b'},svg).textContent=pi;
     });
     if (!connected) {
-      mk('text',{x:x+w/2,y:y+42,'text-anchor':'middle','font-size':7,fill:'#94a3b8'},svg).textContent='(nicht verdrahtet)';
+      mk('text',{x:x+w/2,y:y+h/2+4,'text-anchor':'middle','font-size':7,fill:'#94a3b8'},svg).textContent='(nicht verdrahtet)';
     }
   });
 }
