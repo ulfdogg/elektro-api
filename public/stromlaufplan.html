@@ -54,20 +54,38 @@ const ROWS = [
 const TYPE_ROW = {};
 ROWS.forEach(r=>r.types.forEach(t=>TYPE_ROW[t]=r.key));
 
-let data = {comps:[], wires:[]};
-try {
-  const raw = localStorage.getItem('elektroplan_v1');
-  if (raw) data = JSON.parse(raw);
-} catch(e) {}
+let comps = [], wires = [];
 
-const comps = (data.comps||[]).filter(c=>TYPE_ROW[c.type]);
-const wires = data.wires||[];
+function loadAndRender(){
+  let data = {comps:[], wires:[]};
+  try {
+    const raw = localStorage.getItem('elektroplan_v1');
+    if (raw) data = JSON.parse(raw);
+  } catch(e) {}
+  comps = (data.comps||[]).filter(c=>TYPE_ROW[c.type]);
+  wires = data.wires||[];
 
-if (!comps.length) {
-  document.getElementById('empty').style.display='';
-} else {
-  render();
+  const svgEl = document.getElementById('svg');
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+
+  if (!comps.length) {
+    document.getElementById('empty').style.display='';
+  } else {
+    document.getElementById('empty').style.display='none';
+    render();
+  }
 }
+loadAndRender();
+// Live-Update: aktualisiert sich automatisch, wenn im Aufbauplan (anderer Tab) etwas geändert wird
+window.addEventListener('storage', e=>{
+  if (e.key==='elektroplan_v1') loadAndRender();
+});
+// Fallback-Polling, falls das storage-Event (z.B. gleicher Tab) nicht feuert
+let _lastRaw = localStorage.getItem('elektroplan_v1');
+setInterval(()=>{
+  const cur = localStorage.getItem('elektroplan_v1');
+  if (cur !== _lastRaw) { _lastRaw = cur; loadAndRender(); }
+}, 1500);
 
 function render(){
   // Benutzte Ports pro Bauteil aus den Adern ermitteln
