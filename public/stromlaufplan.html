@@ -211,6 +211,24 @@ function nodeIdForPort(compById, cid, pi){
   return el ? cid+':'+el.suffix : cid+':main';
 }
 
+// Für die TIEFE brauchen wir feinere Granularität als nodeIdForPort: bei einem normalen
+// Mehrport-Bauteil (Motor, mehrpolige Sicherung, ...) ist der PE/N-Anschluss oft kurz zur
+// Quelle verdrahtet, während die Leistungs-Adern einen langen Weg über Schütze gehen —
+// wenn alle Ports EIN Knoten wären, würde das kürzeste Signal das ganze Bauteil nach oben
+// ziehen. Also: jeder Port sein eigener Tiefen-Knoten, außer bei echten Durchgangs-Bauteilen
+// (Klemmen) und bei den definierten Kontakt-Paaren (Schütz-Polen).
+function depthNodeId(compById, cid, pi){
+  const c = compById[cid];
+  if (!c) return cid+':'+pi;
+  if (PASSTHROUGH_TYPES.has(c.type)) return cid+':bus';
+  const split = SPLIT_ELEMENTS[c.type];
+  if (split) {
+    const el = split.find(e=>e.ports.includes(pi));
+    return el ? cid+':'+el.suffix : cid+':'+pi;
+  }
+  return cid+':'+pi;
+}
+
 function isPassthrough(compById, cid){
   const c = compById[cid];
   return !!(c && PASSTHROUGH_TYPES.has(c.type));
@@ -232,9 +250,9 @@ function railNodeId(compById, cid, pi){
 //    normalen Verbindungslinie. Sobald ein "echtes" Bauteil (Sicherung, Schütz, ...) dazwischen
 //    liegt, endet die Schienen-Zugehörigkeit dort (genau wie in einem echten Stromlaufplan).
 function computeTopology(compById){
-  const adj = {};
-  const addEdge = (a,b)=>{ (adj[a]||(adj[a]=[])).push(b); (adj[b]||(adj[b]=[])).push(a); };
-  wires.forEach(w=> addEdge(nodeIdForPort(compById,w.fid,w.fp), nodeIdForPort(compById,w.tid,w.tp)));
+  const depthAdj = {};
+  const addDepthEdge = (a,b)=>{ (depthAdj[a]||(depthAdj[a]=[])).push(b); (depthAdj[b]||(depthAdj[b]=[])).push(a); };
+  wires.forEach(w=> addDepthEdge(depthNodeId(compById,w.fid,w.fp), depthNodeId(compById,w.tid,w.tp)));
 
   const railAdj = {};
   const addRailEdge = (a,b)=>{ (railAdj[a]||(railAdj[a]=[])).push(b); (railAdj[b]||(railAdj[b]=[])).push(a); };
@@ -249,8 +267,8 @@ function computeTopology(compById){
   if (cee) {
     wires.forEach(w=>{
       let otherD=null, otherR=null, ceePort=null;
-      if (w.fid===cee.id) { otherD=nodeIdForPort(compById,w.tid,w.tp); otherR=railNodeId(compById,w.tid,w.tp); ceePort=w.fp; }
-      else if (w.tid===cee.id) { otherD=nodeIdForPort(compById,w.fid,w.fp); otherR=railNodeId(compById,w.fid,w.fp); ceePort=w.tp; }
+      if (w.fid===cee.id) { otherD=depthNodeId(compById,w.tid,w.tp); otherR=railNodeId(compById,w.tid,w.tp); ceePort=w.fp; }
+      else if (w.tid===cee.id) { otherD=depthNodeId(compById,w.fid,w.fp); otherR=railNodeId(compById,w.fid,w.fp); ceePort=w.tp; }
       if (otherD==null) return;
       if (depth[otherD]===undefined) { depth[otherD]=0; dq.push(otherD); }
       const rail = CEE_PORT_RAIL[ceePort];
@@ -260,7 +278,7 @@ function computeTopology(compById){
   let dqi=0;
   while (dqi<dq.length) {
     const cur=dq[dqi++];
-    (adj[cur]||[]).forEach(to=>{
+    (depthAdj[cur]||[]).forEach(to=>{
       if (depth[to]===undefined) { depth[to]=depth[cur]+1; dq.push(to); }
     });
   }
@@ -326,21 +344,33 @@ function render(){
   const {depth, railOf} = computeTopology(compById);
   const elements = buildElements(usedPorts);
 
-  const maxKnownDepth = Math.max(0, ...elements.map(e=>depth[e.nodeId]).filter(d=>d!==undefined));
+  // Tiefe pro Element = MAXIMUM über seine eigenen Ports (nicht Minimum!) — ein Bauteil muss
+  // unter ALLEM stehen, was es speist, nicht nur hinter seiner kürzesten (z.B. PE-)Verbindung.
+  elements.forEach(e=>{
+    const [compId] = e.nodeId.split(':');
+    let d;
+    e.ports.forEach(pi=>{
+      const pd = depth[depthNodeId(compById, compId, pi)];
+      if (pd!==undefined && (d===undefined || pd>d)) d = pd;
+    });
+    e.elDepth = d;
+  });
+
+  const maxKnownDepth = Math.max(0, ...elements.map(e=>e.elDepth).filter(d=>d!==undefined));
   const fallbackDepth = maxKnownDepth + 1;
 
   const BOXH=52, PORTGAP=26, BOXMINW=68, HGAP=30, MARGIN=50;
   const TOPRAIL_GAP=20, BANDH=100, RAILSPACE=90;
 
   const items = elements.slice().sort((a,b)=>{
-    const da = depth[a.nodeId]!==undefined?depth[a.nodeId]:fallbackDepth;
-    const db = depth[b.nodeId]!==undefined?depth[b.nodeId]:fallbackDepth;
+    const da = a.elDepth!==undefined?a.elDepth:fallbackDepth;
+    const db = b.elDepth!==undefined?b.elDepth:fallbackDepth;
     return da-db || a.x-b.x;
   });
   const nBands = fallbackDepth+1;
   const bandItems = Array.from({length:nBands},()=>[]);
   items.forEach(e=>{
-    const d = depth[e.nodeId]!==undefined?depth[e.nodeId]:fallbackDepth;
+    const d = e.elDepth!==undefined?e.elDepth:fallbackDepth;
     bandItems[d].push(e);
   });
 
