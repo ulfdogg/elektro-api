@@ -55,13 +55,17 @@ const TOP_RAILS = ['L1','L2','L3'];
 const BOT_RAILS = ['N','PE'];
 
 function railForWire(w){
+  // Farbe zuerst: bleibt im Aufbauplan meist der Sammelschiene treu, auch wenn das Label
+  // (z.B. generisches "L") nach einem Schalter für abgeleitete Signale wiederverwendet wird.
+  const byColor = RAIL_BY_COLOR[w.color];
+  if (byColor) return byColor;
   const l = (w.label||'').trim().toUpperCase();
-  if (l==='L1' || l==='L') return 'L1';
+  if (l==='L1') return 'L1';
   if (l==='L2') return 'L2';
   if (l==='L3') return 'L3';
   if (l==='N') return 'N';
   if (l==='PE') return 'PE';
-  return RAIL_BY_COLOR[w.color] || null;
+  return null;
 }
 
 // Polpaare (Eingang→Ausgang) für mehrpolige Schutzorgane — aus der Simulationslogik der Haupt-App übernommen
@@ -267,6 +271,7 @@ function buildElements(usedPorts){
     if (split) {
       split.forEach(el=>{
         const ports = allPorts.filter(pi=>el.ports.includes(pi)).sort((a,b)=>a-b);
+        if (!ports.length) return; // unbenutzte Kontakte/Spule des Bauteils ausblenden, kein Ballast
         elements.push({
           nodeId: c.id+':'+el.suffix,
           label: labelFor(c) + (el.tag ? (' '+el.tag) : ''),
