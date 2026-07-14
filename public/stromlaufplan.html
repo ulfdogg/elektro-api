@@ -46,6 +46,7 @@ const SKIP_TYPES = new Set([
   'uv','uv2','uv3','hutschiene','aufputzgehaeuse1','aufputzgehaeuse2','aufputzgehaeuse3','kabelkanal',
   'cee16_kupplung',
   'nblock','peblock','klemme','klemme25','klemme25_twin','knotenpunkt','wago2','wago3','wago5',
+  'drucktaster', // hat selbst keine Anschlüsse — wirkt nur über NC/NO/LED-Kontakte im selben Gehäuse
 ]);
 
 // Aderfarbe → Sammelschiene (Fallback, falls kein eindeutiges Label)
@@ -78,7 +79,7 @@ const SCHUETZ_COIL = [14,15];
 const BM_CONTACT = [0,2];
 
 function symbolFor(type) {
-  if (['schalter','taster','wechsel','kreuzschalter','kontakt_no','kontakt_led','drucktaster'].includes(type)) return 'contact_no';
+  if (['schalter','taster','wechsel','kreuzschalter','kontakt_no','kontakt_led'].includes(type)) return 'contact_no';
   if (type==='kontakt_nc') return 'contact_nc';
   if (POLE_PAIRS[type]) return 'breaker';
   if (type==='schuetz') return 'contactor';
@@ -323,13 +324,14 @@ function render(){
 
   boxes.forEach(({c,x,y,w,h,ports})=>{
     const connected = ports.length>0;
+    const hasSymbol = !!symbolFor(c.type);
     drawSymbol(svg, c, x, y, w, h);
     mk('text',{x:x+w/2,y:y+h+14,'text-anchor':'middle','font-size':8,fill:'#94a3b8'},svg)
       .textContent = '#'+c.id;
     ports.forEach((pi,i)=>{
       const px = x+10+i*PORTGAP+PORTGAP/2-13, py=y;
       mk('circle',{cx:px,cy:py,r:3.5,fill:'#fff',stroke:'#374151','stroke-width':1.5},svg);
-      mk('text',{x:px,y:py-6,'text-anchor':'middle','font-size':7,fill:'#64748b'},svg).textContent=pi;
+      if (!hasSymbol) mk('text',{x:px,y:py-6,'text-anchor':'middle','font-size':7,fill:'#64748b'},svg).textContent=pi;
     });
     if (!connected) {
       mk('text',{x:x+w/2,y:y+h/2+4,'text-anchor':'middle','font-size':7,fill:'#94a3b8'},svg).textContent='(nicht verdrahtet)';
