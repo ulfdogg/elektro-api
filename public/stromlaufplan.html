@@ -49,24 +49,12 @@ const SKIP_TYPES = new Set([
   'drucktaster', // hat selbst keine Anschlüsse — wirkt nur über NC/NO/LED-Kontakte im selben Gehäuse
 ]);
 
-// Aderfarbe → Sammelschiene (Fallback, falls kein eindeutiges Label)
-const RAIL_BY_COLOR = { '#8B4513':'L1', '#222':'L2', '#111':'L2', '#6b7280':'L3', '#1a56db':'N', '#16a34a':'PE' };
 const TOP_RAILS = ['L1','L2','L3'];
 const BOT_RAILS = ['N','PE'];
-
-function railForWire(w){
-  // Farbe zuerst: bleibt im Aufbauplan meist der Sammelschiene treu, auch wenn das Label
-  // (z.B. generisches "L") nach einem Schalter für abgeleitete Signale wiederverwendet wird.
-  const byColor = RAIL_BY_COLOR[w.color];
-  if (byColor) return byColor;
-  const l = (w.label||'').trim().toUpperCase();
-  if (l==='L1') return 'L1';
-  if (l==='L2') return 'L2';
-  if (l==='L3') return 'L3';
-  if (l==='N') return 'N';
-  if (l==='PE') return 'PE';
-  return null;
-}
+// CEE-Kupplung Portindex → Sammelschiene (fest, siehe Bauteil-Definition in der Haupt-App)
+const CEE_PORT_RAIL = ['L1','L2','L3','N','PE'];
+// Reine Durchgangs-/Sammel-Bauteile: Schienen-Zugehörigkeit wird durch sie hindurch weitergereicht
+const PASSTHROUGH_TYPES = new Set(['nblock','peblock','klemme','klemme25','klemme25_twin','knotenpunkt','wago2','wago3','wago5']);
 
 // Polpaare (Eingang→Ausgang) für mehrpolige Schutzorgane — aus der Simulationslogik der Haupt-App übernommen
 const POLE_PAIRS = {
@@ -221,33 +209,68 @@ function nodeIdForPort(compById, cid, pi){
   return el ? cid+':'+el.suffix : cid+':main';
 }
 
-// Tiefe (Hops) jedes Graph-Knotens ab den L1/L2/L3-Sammelschienen, über ALLE Bauteile
-// (auch Klemmen, die als reine Durchgangspunkte mitgezählt, aber nicht gezeichnet werden)
-function computeDepths(compById){
+function isPassthrough(compById, cid){
+  const c = compById[cid];
+  return !!(c && PASSTHROUGH_TYPES.has(c.type));
+}
+
+// Für die Schienen-Zugehörigkeit brauchen wir FEINERE Granularität als für die Tiefe:
+// bei einem Durchgangs-Bauteil (Klemme etc.) sind alle Ports EIN Knoten (wirklich intern
+// verbunden), bei jedem anderen Bauteil (auch mehrpolige Sicherungen etc.) bleibt jeder
+// Port sein eigener Knoten — sonst würde z.B. der Ausgang einer Sicherung fälschlich auch
+// als "direkt an der Schiene" gelten, nur weil ihr Eingang es ist.
+function railNodeId(compById, cid, pi){
+  return isPassthrough(compById, cid) ? cid+':bus' : cid+':'+pi;
+}
+
+// Berechnet aus der ECHTEN Verdrahtung (nicht aus Aderfarbe geraten):
+//  - depth: Hop-Abstand jedes (Element-)Knotens von der CEE-Kupplung (für die Zeilen-Reihenfolge)
+//  - railOf: nur für PORTS, die AUSSCHLIESSLICH über Durchgangs-Bauteile (Klemmen, Sammelschienen)
+//    mit einem CEE-Pol verbunden sind — die bekommen einen direkten Schienen-Stub statt einer
+//    normalen Verbindungslinie. Sobald ein "echtes" Bauteil (Sicherung, Schütz, ...) dazwischen
+//    liegt, endet die Schienen-Zugehörigkeit dort (genau wie in einem echten Stromlaufplan).
+function computeTopology(compById){
   const adj = {};
-  const addEdge = (a,b,rail)=>{ (adj[a]||(adj[a]=[])).push({to:b,rail}); (adj[b]||(adj[b]=[])).push({to:a,rail}); };
-  wires.forEach(w=>{
-    const na = nodeIdForPort(compById, w.fid, w.fp);
-    const nb = nodeIdForPort(compById, w.tid, w.tp);
-    addEdge(na, nb, railForWire(w));
-  });
+  const addEdge = (a,b)=>{ (adj[a]||(adj[a]=[])).push(b); (adj[b]||(adj[b]=[])).push(a); };
+  wires.forEach(w=> addEdge(nodeIdForPort(compById,w.fid,w.fp), nodeIdForPort(compById,w.tid,w.tp)));
+
+  const railAdj = {};
+  const addRailEdge = (a,b)=>{ (railAdj[a]||(railAdj[a]=[])).push(b); (railAdj[b]||(railAdj[b]=[])).push(a); };
+  wires.forEach(w=> addRailEdge(railNodeId(compById,w.fid,w.fp), railNodeId(compById,w.tid,w.tp)));
+
+  const cee = Object.values(compById).find(c=>c.type==='cee16_kupplung');
 
   const depth = {};
-  const queue = [];
-  Object.keys(adj).forEach(nid=>{
-    if (adj[nid].some(e=>e.rail==='L1'||e.rail==='L2'||e.rail==='L3')) {
-      depth[nid]=0; queue.push(nid);
-    }
-  });
-  let qi=0;
-  while (qi<queue.length) {
-    const cur=queue[qi++];
-    (adj[cur]||[]).forEach(e=>{
-      const nd = depth[cur]+1;
-      if (depth[e.to]===undefined || nd<depth[e.to]) { depth[e.to]=nd; queue.push(e.to); }
+  const dq = [];
+  const railOf = {};
+  const rq = [];
+  if (cee) {
+    wires.forEach(w=>{
+      let otherD=null, otherR=null, ceePort=null;
+      if (w.fid===cee.id) { otherD=nodeIdForPort(compById,w.tid,w.tp); otherR=railNodeId(compById,w.tid,w.tp); ceePort=w.fp; }
+      else if (w.tid===cee.id) { otherD=nodeIdForPort(compById,w.fid,w.fp); otherR=railNodeId(compById,w.fid,w.fp); ceePort=w.tp; }
+      if (otherD==null) return;
+      if (depth[otherD]===undefined) { depth[otherD]=0; dq.push(otherD); }
+      const rail = CEE_PORT_RAIL[ceePort];
+      if (rail && railOf[otherR]===undefined) { railOf[otherR]=rail; rq.push(otherR); }
     });
   }
-  return depth;
+  let dqi=0;
+  while (dqi<dq.length) {
+    const cur=dq[dqi++];
+    (adj[cur]||[]).forEach(to=>{
+      if (depth[to]===undefined) { depth[to]=depth[cur]+1; dq.push(to); }
+    });
+  }
+  let rqi=0;
+  while (rqi<rq.length) {
+    const cur=rq[rqi++];
+    if (!isPassthrough(compById, cur.split(':')[0])) continue; // nur durch Durchgangs-Bauteile weiterreichen
+    (railAdj[cur]||[]).forEach(to=>{
+      if (railOf[to]===undefined) { railOf[to]=railOf[cur]; rq.push(to); }
+    });
+  }
+  return {depth, railOf};
 }
 
 // NC/NO/LED-Kontakte, die im selben Gehäuse wie ein (nicht gezeichneter) Drucktaster sitzen,
@@ -298,7 +321,7 @@ function render(){
   });
 
   const compById = {}; allComps.forEach(c=>compById[c.id]=c);
-  const depth = computeDepths(compById);
+  const {depth, railOf} = computeTopology(compById);
   const elements = buildElements(usedPorts);
 
   const maxKnownDepth = Math.max(0, ...elements.map(e=>depth[e.nodeId]).filter(d=>d!==undefined));
@@ -363,18 +386,21 @@ function render(){
   const usedRailStub = key=>{ if(stubbed.has(key)) return true; stubbed.add(key); return false; };
 
   wires.forEach(w=>{
-    const rail = railForWire(w);
-    if (rail) {
-      [[w.fid,w.fp],[w.tid,w.tp]].forEach(([cid,pi])=>{
-        const p = portPos[cid+':'+pi];
-        if (!p) return;
-        const key = cid+':'+pi+':'+rail;
-        if (usedRailStub(key)) return;
-        mk('line',{x1:p.x,y1:p.y,x2:p.x,y2:railY[rail],stroke:w.color||'#6b7280','stroke-width':1.8,opacity:0.85},svg);
-        mk('circle',{cx:p.x,cy:railY[rail],r:2.5,fill:w.color||'#6b7280'},svg);
-      });
-      return;
-    }
+    // Pro Ader beide Enden UNABHÄNGIG prüfen: nur wer wirklich (über Klemmen) an einem
+    // CEE-Pol hängt, bekommt einen Schienen-Stub — nicht die ganze Ader automatisch.
+    let stubbedAny = false;
+    [[w.fid,w.fp],[w.tid,w.tp]].forEach(([cid,pi])=>{
+      const rail = railOf[railNodeId(compById,cid,pi)];
+      if (!rail) return;
+      const p = portPos[cid+':'+pi];
+      if (!p) return;
+      stubbedAny = true;
+      const key = cid+':'+pi+':'+rail;
+      if (usedRailStub(key)) return;
+      mk('line',{x1:p.x,y1:p.y,x2:p.x,y2:railY[rail],stroke:w.color||'#6b7280','stroke-width':1.8,opacity:0.85},svg);
+      mk('circle',{cx:p.x,cy:railY[rail],r:2.5,fill:w.color||'#6b7280'},svg);
+    });
+    if (stubbedAny) return;
     const a = portPos[w.fid+':'+w.fp], b = portPos[w.tid+':'+w.tp];
     if (!a || !b) return;
     const midY = (a.y+b.y)/2;
