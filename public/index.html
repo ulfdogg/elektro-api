@@ -2782,22 +2782,22 @@ function render() {
       const pa = portPotMap[w.fid+':'+w.fp] || 0;
       const pb = portPotMap[w.tid+':'+w.tp] || 0;
       const pot = pa | pb;
-      const sw = cabType!=='single'?12:7;
+      const sw = (cabType!=='single'?12:7) - 3;
       const onCurrentPath = activeWireIds.has(w.id);
       if (pot & ElektroSim.ANY_L) {
         // L1 braun, L2 schwarz, L3 grau — passend zur Adernfarben-Konvention
-        const lStroke = (pot & ElektroSim.POT_L2) ? 'rgba(17,17,17,0.55)'
-          : (pot & ElektroSim.POT_L3) ? 'rgba(107,114,128,0.55)'
-          : 'rgba(139,69,19,0.55)'; // L1 / einphasig
+        const lStroke = (pot & ElektroSim.POT_L2) ? 'rgba(17,17,17,0.3)'
+          : (pot & ElektroSim.POT_L3) ? 'rgba(107,114,128,0.3)'
+          : 'rgba(139,69,19,0.3)'; // L1 / einphasig
         mk('path',{d,fill:'none',stroke:lStroke,
           'stroke-width':sw,'stroke-linecap':'round','stroke-linejoin':'round','pointer-events':'none'},WG);
       }
       if (onCurrentPath && (pot & ElektroSim.POT_N)) {
-        mk('path',{d,fill:'none',stroke:'rgba(59,130,246,0.45)',
+        mk('path',{d,fill:'none',stroke:'rgba(59,130,246,0.25)',
           'stroke-width':sw,'stroke-linecap':'round','stroke-linejoin':'round','pointer-events':'none'},WG);
       }
       if (pot & ElektroSim.POT_PE) {
-        mk('path',{d,fill:'none',stroke:'rgba(22,163,74,0.4)',
+        mk('path',{d,fill:'none',stroke:'rgba(22,163,74,0.2)',
           'stroke-width':sw,'stroke-linecap':'round','stroke-linejoin':'round','pointer-events':'none'},WG);
       }
     }
