@@ -23,7 +23,7 @@
   #bar .hint{font-size:11px;color:rgba(255,255,255,0.55);margin-left:auto;white-space:nowrap}
   #wrap{overflow:auto;width:100%;height:calc(100vh - 48px)}
   #empty{padding:60px 20px;text-align:center;color:#64748b;font-size:14px}
-  .row-label{font-size:11px;fill:#64748b;font-weight:700;letter-spacing:.5px}
+  .rail-label{font-size:11px;fill:#374151;font-weight:700}
 </style>
 </head>
 <body>
@@ -42,17 +42,23 @@ function mk(tag,attrs,parent){
   return el;
 }
 
-// Kategorien für die funktionale Anordnung (aufgelöste Darstellung)
-const ROWS = [
-  {key:'quelle',    label:'EINSPEISUNG',        types:['cee16_dose','cee16_kupplung']},
-  {key:'schutz',    label:'SCHUTZORGANE',       types:['ls1','ls3','rcd2','rcd4','rcbo']},
-  {key:'sammel',    label:'SAMMELSCHIENEN / KLEMMEN', types:['nblock','peblock','klemme','klemme25','klemme25_twin','knotenpunkt','wago2','wago3','wago5']},
-  {key:'steuer',    label:'STEUERSTROMKREIS',   types:['schalter','taster','wechsel','kreuzschalter','serienschalter','drucktaster','kontakt_no','kontakt_nc','kontakt_led','bewegungsmelder','stromstoss','schuetz','logo']},
-  {key:'verbrauch', label:'VERBRAUCHER',        types:['lampe','spot','motor','motorklemmbrett','dahlander','steckdose']},
-  {key:'kabel',     label:'KABEL / VERBINDUNGEN', types:['cable3','cable5']},
-];
-const TYPE_ROW = {};
-ROWS.forEach(r=>r.types.forEach(t=>TYPE_ROW[t]=r.key));
+// Nicht-elektrische/strukturelle Bauteile (haben keine Ports) werden ausgeblendet
+const SKIP_TYPES = new Set(['uv','uv2','uv3','hutschiene','aufputzgehaeuse1','aufputzgehaeuse2','aufputzgehaeuse3','kabelkanal','cee16_kupplung']);
+
+// Grobe Bänder, nur um Kreuzungen zu reduzieren — kein separates Diagramm
+const BAND = {
+  cee16_dose:0, cee16_kupplung:0, ls1:0, ls3:0, rcd2:0, rcd4:0, rcbo:0,
+  lampe:2, spot:2, motor:2, motorklemmbrett:2, dahlander:2, steckdose:2,
+};
+function bandOf(type){ return BAND[type]!=null ? BAND[type] : 1; }
+
+// Aderfarbe → Sammelschiene
+const RAIL_BY_COLOR = {
+  '#8B4513':'L1', '#222':'L2', '#111':'L2', '#6b7280':'L3',
+  '#1a56db':'N', '#16a34a':'PE',
+};
+const TOP_RAILS = ['L1','L2','L3'];
+const BOT_RAILS = ['N','PE'];
 
 let comps = [], wires = [];
 
@@ -62,7 +68,7 @@ function loadAndRender(){
     const raw = localStorage.getItem('elektroplan_v1');
     if (raw) data = JSON.parse(raw);
   } catch(e) {}
-  comps = (data.comps||[]).filter(c=>TYPE_ROW[c.type]);
+  comps = (data.comps||[]).filter(c=>!SKIP_TYPES.has(c.type));
   wires = data.wires||[];
 
   const svgEl = document.getElementById('svg');
@@ -76,11 +82,7 @@ function loadAndRender(){
   }
 }
 loadAndRender();
-// Live-Update: aktualisiert sich automatisch, wenn im Aufbauplan (anderer Tab) etwas geändert wird
-window.addEventListener('storage', e=>{
-  if (e.key==='elektroplan_v1') loadAndRender();
-});
-// Fallback-Polling, falls das storage-Event (z.B. gleicher Tab) nicht feuert
+window.addEventListener('storage', e=>{ if (e.key==='elektroplan_v1') loadAndRender(); });
 let _lastRaw = localStorage.getItem('elektroplan_v1');
 setInterval(()=>{
   const cur = localStorage.getItem('elektroplan_v1');
@@ -95,65 +97,85 @@ function render(){
     (usedPorts[w.tid]||(usedPorts[w.tid]=new Set())).add(w.tp);
   });
 
-  const BOXH=56, PORTGAP=26, BOXMINW=76, HGAP=36, ROWH=190, MARGIN=40;
+  const BOXH=52, PORTGAP=26, BOXMINW=76, HGAP=34, MARGIN=50;
+  const TOPRAIL_GAP=20, BANDH=110, RAILSPACE=90;
 
-  // Layout: Boxen pro Reihe anordnen
-  const rowsData = ROWS.map(r=>({...r, items:[]}));
-  const rowByKey = {}; rowsData.forEach(r=>rowByKey[r.key]=r);
-  comps.forEach(c=>{
-    const rk = TYPE_ROW[c.type];
-    if (rk) rowByKey[rk].items.push(c);
-  });
+  // Bauteile links→rechts wie im Aufbauplan (Original-x), in Bänder gestaffelt
+  const items = comps.slice().sort((a,b)=>a.x-b.x);
+  const bandItems = [[],[],[]];
+  items.forEach(c=>bandItems[bandOf(c.type)].push(c));
 
+  const boxes = []; // {c,x,y,w,h,ports}
   const portPos = {}; // "compId:portIdx" -> {x,y}
-  const boxes = []; // {c, x, y, w, h, ports:[idx,...]}
   let maxRowW = 0;
 
-  rowsData.forEach((row, ri) => {
+  const topRailsH = MARGIN + (TOP_RAILS.length-1)*TOPRAIL_GAP + 10;
+  bandItems.forEach((list, bi) => {
     let x = MARGIN;
-    const y = MARGIN + ri*ROWH + 20;
-    row.items.forEach(c=>{
+    const y = topRailsH + RAILSPACE + bi*BANDH;
+    list.forEach(c=>{
       const ports = [...(usedPorts[c.id]||[])].sort((a,b)=>a-b);
       const w = Math.max(BOXMINW, ports.length*PORTGAP + 14);
-      const box = {c, x, y, w, h:BOXH, ports};
-      boxes.push(box);
+      boxes.push({c,x,y,w,h:BOXH,ports});
       ports.forEach((pi,i)=>{
         const px = x + 10 + i*PORTGAP + PORTGAP/2 - 13;
-        portPos[c.id+':'+pi] = {x:px, y:y+BOXH};
+        portPos[c.id+':'+pi] = {x:px, y, band:bi};
       });
       x += w + HGAP;
     });
     if (x > maxRowW) maxRowW = x;
   });
 
-  const totalW = Math.max(600, maxRowW + MARGIN);
-  const totalH = MARGIN + ROWS.length*ROWH + 40;
+  const totalW = Math.max(700, maxRowW + MARGIN);
+  const botRailsY = topRailsH + RAILSPACE + 3*BANDH + 20;
+  const totalH = botRailsY + (BOT_RAILS.length-1)*TOPRAIL_GAP + 40;
 
   const svg = document.getElementById('svg');
   svg.setAttribute('width', totalW);
   svg.setAttribute('height', totalH);
   svg.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
 
-  // Reihen-Titel + Trennlinien
-  rowsData.forEach((row, ri) => {
-    const y = MARGIN + ri*ROWH;
-    if (row.items.length) {
-      mk('text',{x:MARGIN, y:y, class:'row-label'},svg).textContent = row.label;
-      mk('line',{x1:MARGIN,y1:y+6,x2:totalW-MARGIN,y2:y+6,stroke:'#cbd5e1','stroke-width':1},svg);
-    }
+  // Sammelschienen zeichnen
+  const railY = {};
+  TOP_RAILS.forEach((r,i)=>{ railY[r] = MARGIN + i*TOPRAIL_GAP; });
+  BOT_RAILS.forEach((r,i)=>{ railY[r] = botRailsY + i*TOPRAIL_GAP; });
+  [...TOP_RAILS, ...BOT_RAILS].forEach(r=>{
+    const y = railY[r];
+    const col = r==='L1'?'#8B4513':r==='L2'?'#222':r==='L3'?'#6b7280':r==='N'?'#1a56db':'#16a34a';
+    mk('line',{x1:MARGIN-10,y1:y,x2:totalW-MARGIN+10,y2:y,stroke:col,'stroke-width':2.5},svg);
+    mk('text',{x:14,y:y+4,class:'rail-label',fill:col},svg).textContent=r;
   });
 
-  // Verbindungen zuerst zeichnen (liegen unter den Boxen)
+  // Ports, die bereits an eine Sammelschiene gestubbt wurden (keine Duplikate)
+  const stubbed = new Set();
+  const usedRailStub = key=>{ if(stubbed.has(key)) return true; stubbed.add(key); return false; };
+
+  // Verbindungen zeichnen: Aderfarbe passend zu einer Schiene → Stub zur Schiene; sonst Punkt-zu-Punkt
   wires.forEach(w=>{
+    const rail = RAIL_BY_COLOR[w.color];
+    if (rail) {
+      // Beide Enden unabhängig behandeln — eines kann z.B. die (nicht gezeichnete) CEE-Kupplung sein
+      [[w.fid,w.fp],[w.tid,w.tp]].forEach(([cid,pi])=>{
+        const p = portPos[cid+':'+pi];
+        if (!p) return;
+        const key = cid+':'+pi+':'+rail;
+        if (usedRailStub(key)) return;
+        mk('line',{x1:p.x,y1:p.y,x2:p.x,y2:railY[rail],stroke:w.color,'stroke-width':1.8,opacity:0.85},svg);
+        mk('circle',{cx:p.x,cy:railY[rail],r:2.5,fill:w.color},svg);
+      });
+      return;
+    }
     const a = portPos[w.fid+':'+w.fp], b = portPos[w.tid+':'+w.tp];
     if (!a || !b) return;
-    const midY = Math.max(a.y,b.y) + 40;
-    const d = `M${a.x},${a.y} C${a.x},${midY} ${b.x},${midY} ${b.x},${b.y}`;
-    mk('path',{d,fill:'none',stroke:w.color||'#6b7280','stroke-width':2,opacity:0.8},svg);
-    const mx=(a.x+b.x)/2, my=Math.min(midY, (a.y+b.y)/2+30);
-    if (w.label) {
-      mk('rect',{x:mx-14,y:my-8,width:28,height:11,fill:'#fff',opacity:0.85,rx:2},svg);
-      mk('text',{x:mx,y:my,'text-anchor':'middle','font-size':8,fill:'#374151','font-weight':'bold'},svg).textContent=w.label;
+    {
+      const midY = (a.y+b.y)/2;
+      const d = `M${a.x},${a.y} L${a.x},${midY} L${b.x},${midY} L${b.x},${b.y}`;
+      mk('path',{d,fill:'none',stroke:w.color||'#6b7280','stroke-width':1.8,opacity:0.85},svg);
+      if (w.label) {
+        const mx=(a.x+b.x)/2;
+        mk('rect',{x:mx-14,y:midY-8,width:28,height:11,fill:'#fff',opacity:0.85,rx:2},svg);
+        mk('text',{x:mx,y:midY+1,'text-anchor':'middle','font-size':8,fill:'#374151','font-weight':'bold'},svg).textContent=w.label;
+      }
     }
   });
 
@@ -167,12 +189,12 @@ function render(){
     mk('text',{x:x+w/2,y:y+28,'text-anchor':'middle','font-size':8,fill:'#94a3b8'},svg)
       .textContent = '#'+c.id;
     ports.forEach((pi,i)=>{
-      const px = x+10+i*PORTGAP+PORTGAP/2-13, py=y+h;
+      const px = x+10+i*PORTGAP+PORTGAP/2-13, py=y;
       mk('circle',{cx:px,cy:py,r:3.5,fill:'#fff',stroke:'#374151','stroke-width':1.5},svg);
-      mk('text',{x:px,y:py+12,'text-anchor':'middle','font-size':7,fill:'#64748b'},svg).textContent=pi;
+      mk('text',{x:px,y:py-6,'text-anchor':'middle','font-size':7,fill:'#64748b'},svg).textContent=pi;
     });
     if (!connected) {
-      mk('text',{x:x+w/2,y:y+44,'text-anchor':'middle','font-size':7,fill:'#94a3b8'},svg).textContent='(nicht verdrahtet)';
+      mk('text',{x:x+w/2,y:y+42,'text-anchor':'middle','font-size':7,fill:'#94a3b8'},svg).textContent='(nicht verdrahtet)';
     }
   });
 }
