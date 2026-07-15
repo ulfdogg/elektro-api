@@ -739,9 +739,9 @@ const NS    = 'http://www.w3.org/2000/svg';
 // ── Component definitions ─────────────────────────────────────────────────
 // port: {x,y,dir:'n'|'s'|'e'|'w', color, label}
 const D = {
-  uv:  { w:270, h:500, uvRows:4, ports:[], label:'UV 4-reihig' },
-  uv2: { w:270, h:284, uvRows:2, ports:[], label:'UV 2-reihig' },
-  uv3: { w:270, h:392, uvRows:3, ports:[], label:'UV 3-reihig' },
+  uv:  { w:270, h:513, uvRows:4, ports:[], label:'UV 4-reihig' },
+  uv2: { w:270, h:297, uvRows:2, ports:[], label:'UV 2-reihig' },
+  uv3: { w:270, h:405, uvRows:3, ports:[], label:'UV 3-reihig' },
   nblock: {
     w:130, h:32,
     ports:[
@@ -1588,11 +1588,11 @@ function snapRailToUV(rail) {
     const nRows = uv.def.uvRows;
     const ub = compBBox(uv);
     if (cx < ub.x1 || cx > ub.x2 || cy < ub.y1 || cy > ub.y2) continue;
-    const rowH = 108;
-    const row = Math.max(0, Math.min(nRows-1, Math.round((cy - uv.y - 43) / rowH)));
+    const rowH = 108, rowTop = 65;
+    const row = Math.max(0, Math.min(nRows-1, Math.round((cy - uv.y - rowTop) / rowH)));
     const occupied = comps.some(c => c.id !== rail.id && c.uvId === uv.id && c.uvRow === row);
     if (!occupied) {
-      const tx = uv.x + 12, ty = uv.y + 38 + row * rowH;
+      const tx = uv.x + 12, ty = uv.y + rowTop + row * rowH;
       const ddx = tx - rail.x, ddy = ty - rail.y;
       rail.x = tx; rail.y = ty;
       rail.uvId = uv.id; rail.uvRow = row;
@@ -1606,11 +1606,12 @@ function snapRailToUV(rail) {
 // ── Draw functions ────────────────────────────────────────────────────────────
 function drawUV(g, comp) {
   const nRows = (comp && comp.def.uvRows) || 4;
-  const W=270, H=38+nRows*108+30, M=12;
+  const TOP=65, BOTTOM=16;
+  const W=270, H=TOP+nRows*108+BOTTOM, M=12;
   mk('rect',{x:0,y:0,width:W,height:H,fill:'#f1f5f9',stroke:'#475569','stroke-width':3,rx:4},g);
   mk('rect',{x:5,y:5,width:W-10,height:H-10,fill:'#fff',stroke:'#94a3b8','stroke-width':1,rx:2},g);
   for (let row=0; row<nRows; row++) {
-    const ry = 38 + row*108;
+    const ry = TOP + row*108;
     mk('rect',{x:M,y:ry,width:W-2*M,height:10,fill:'#9ca3af',rx:1},g);
     mk('rect',{x:M,y:ry+1,width:W-2*M,height:2,fill:'#d1d5db'},g);
     mk('rect',{x:M,y:ry+7,width:W-2*M,height:2,fill:'#6b7280'},g);
