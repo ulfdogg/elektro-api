@@ -38,9 +38,11 @@ self.addEventListener('fetch', event => {
 
   // Stale-while-revalidate: sofort aus dem Cache antworten (auch offline),
   // im Hintergrund aktualisieren, sobald Netzwerk verfügbar ist.
+  // ignoreSearch, weil z.B. der SPS-Editor mit wechselnden ?id=… geöffnet wird,
+  // aber im Cache nur die Seite selbst (ohne Query) hinterlegt ist.
   event.respondWith(
     caches.open(CACHE).then(async cache => {
-      const cached = await cache.match(req);
+      const cached = await cache.match(req, { ignoreSearch: true });
       const network = fetch(req).then(res => {
         if (res && res.ok) cache.put(req, res.clone());
         return res;
