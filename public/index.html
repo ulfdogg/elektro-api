@@ -3538,7 +3538,8 @@ SVG.addEventListener('pointermove', e=>{
       if (!c.state) c.state = {};
       const df = p.x - drag.startX;
       c.state.freq = Math.max(0, Math.min(100, Math.round(drag.startFreq + df*(100/60))));
-      render(); return;
+      if (simMode) runSim(); else render();
+      return;
     }
     if (drag.midDrag) {
       drag.comp.cx=nx; drag.comp.cy=ny;
