@@ -529,6 +529,21 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
         </svg>
         <span class="s-label">Stromstoßschalter</span>
       </div>
+      <div class="s-item" ondragstart="sbDrag('zeitrelais')" draggable="true">
+        <svg width="30" height="44">
+          <rect x="1" y="1" width="28" height="42" fill="#e5e7eb" stroke="#475569" stroke-width="1.2" rx="2"/>
+          <rect x="4" y="4" width="22" height="9" fill="#374151" rx="1"/>
+          <circle cx="9" cy="8.5" r="2.2" fill="#8B4513"/><circle cx="15" cy="8.5" r="2.2" fill="#1a56db"/><circle cx="21" cy="8.5" r="2.2" fill="#1a56db"/>
+          <rect x="4" y="15" width="22" height="20" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.7" rx="1"/>
+          <rect x="7" y="18" width="16" height="7" fill="#1e293b" rx="1"/>
+          <text x="15" y="23.5" text-anchor="middle" font-size="5" fill="#7dd3fc" font-weight="bold" font-family="monospace">AV</text>
+          <circle cx="10" cy="30" r="2.5" fill="#1d4ed8"/>
+          <line x1="10" y1="30" x2="20" y2="30" stroke="#94a3b8" stroke-width="1.5"/>
+          <rect x="4" y="36" width="22" height="7" fill="#374151" rx="1"/>
+          <circle cx="11" cy="39.5" r="2.2" fill="#9ca3af"/><circle cx="19" cy="39.5" r="2.2" fill="#9ca3af"/>
+        </svg>
+        <span class="s-label">Zeitrelais (Multifunktion)</span>
+      </div>
       <div class="s-item" ondragstart="sbDrag('bewegungsmelder')" draggable="true">
         <svg width="36" height="36">
           <rect x="0" y="0" width="36" height="36" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" rx="5"/>
@@ -784,7 +799,7 @@ const D = {
     ],
     label:'PE-Block'
   },
-  hutschiene: { w:246, h:16, ports:[], label:'Hutschiene', isDINRail:true, teCount:12, teOffset:3 },
+  hutschiene: { w:246, h:22, ports:[], label:'Hutschiene', isDINRail:true, teCount:12, teOffset:3 },
   ls1: { // 1 DIN-Einheit = 20px
     w:20, h:72, isDINDevice:true, te:1,
     ports:[
@@ -1042,6 +1057,17 @@ const D = {
       {x:85, y:130,dir:'s',color:'#3b82f6',label:'A2'},
     ],
     label:'Schütz'
+  },
+  zeitrelais: { // Multifunktions-Zeitrelais, 3 DIN-Einheiten = 60px
+    w:60, h:140, isDINDevice:true, te:3,
+    ports:[
+      {x:12,y:0,  dir:'n',color:'#8B4513',label:'L'},
+      {x:30,y:0,  dir:'n',color:'#1a56db',label:'A1'},
+      {x:48,y:0,  dir:'n',color:'#1a56db',label:'N'},
+      {x:20,y:140,dir:'s',color:'#9ca3af',label:'1'},
+      {x:40,y:140,dir:'s',color:'#9ca3af',label:'2'},
+    ],
+    label:'Multifunktions-Zeitrelais'
   },
   stromstoss: { // 2 DIN-Einheiten = 40px
     w:40, h:72, isDINDevice:true, te:2,
@@ -1657,34 +1683,34 @@ function drawPEBlock(g) {
 }
 
 function drawHutschiene(g, comp) {
-  const W = effW(comp), H = 16;
+  const W = effW(comp), H = 22, midY = H/2;
   // Schiene: obere Flanke
   mk('rect',{x:0,y:0,width:W,height:H,fill:'#94a3b8'},g);
-  mk('rect',{x:0,y:0,width:W,height:4,fill:'#e2e8f0'},g);   // oben hell
-  mk('rect',{x:0,y:3,width:W,height:1,fill:'#cbd5e1'},g);   // Kante
+  mk('rect',{x:0,y:0,width:W,height:5,fill:'#e2e8f0'},g);   // oben hell
+  mk('rect',{x:0,y:4,width:W,height:1,fill:'#cbd5e1'},g);   // Kante
   // Kanal (Nut)
-  mk('rect',{x:0,y:4,width:W,height:8,fill:'#475569'},g);
-  mk('rect',{x:0,y:4,width:W,height:1,fill:'#334155'},g);   // Schattenkante oben
-  mk('rect',{x:0,y:11,width:W,height:1,fill:'#64748b'},g);  // Lichtkante unten
+  mk('rect',{x:0,y:5,width:W,height:12,fill:'#475569'},g);
+  mk('rect',{x:0,y:5,width:W,height:1,fill:'#334155'},g);   // Schattenkante oben
+  mk('rect',{x:0,y:16,width:W,height:1,fill:'#64748b'},g);  // Lichtkante unten
   // untere Flanke
-  mk('rect',{x:0,y:12,width:W,height:4,fill:'#e2e8f0'},g);
-  mk('rect',{x:0,y:12,width:W,height:1,fill:'#cbd5e1'},g);
+  mk('rect',{x:0,y:17,width:W,height:5,fill:'#e2e8f0'},g);
+  mk('rect',{x:0,y:17,width:W,height:1,fill:'#cbd5e1'},g);
   if (comp.def.isDINRail) {
     const to = comp.def.teOffset||0, tc = railTeCount(comp);
     for (let i=0; i<=tc; i++) {
       const tx = to+i*20;
-      mk('line',{x1:tx,y1:0,x2:tx,y2:i%4===0?4:2,stroke:'rgba(255,255,255,0.45)','stroke-width':i%4===0?1:0.6},g);
+      mk('line',{x1:tx,y1:0,x2:tx,y2:i%4===0?5:3,stroke:'rgba(255,255,255,0.45)','stroke-width':i%4===0?1.2:0.7},g);
     }
     for (let i=2; i<tc; i+=4) {
       const hx = to+i*20;
-      mk('circle',{cx:hx,cy:8,r:3.5,fill:'#334155'},g);
-      mk('circle',{cx:hx,cy:8,r:2,fill:'#1e293b'},g);
-      mk('circle',{cx:hx-0.8,cy:7.2,r:0.8,fill:'rgba(255,255,255,0.3)'},g);
+      mk('circle',{cx:hx,cy:midY,r:4.5,fill:'#334155'},g);
+      mk('circle',{cx:hx,cy:midY,r:2.6,fill:'#1e293b'},g);
+      mk('circle',{cx:hx-1,cy:midY-1,r:1,fill:'rgba(255,255,255,0.3)'},g);
     }
   } else {
     for (let x=20; x<W; x+=30) {
-      mk('circle',{cx:x,cy:8,r:3.5,fill:'#334155'},g);
-      mk('circle',{cx:x,cy:8,r:2,fill:'#1e293b'},g);
+      mk('circle',{cx:x,cy:midY,r:4.5,fill:'#334155'},g);
+      mk('circle',{cx:x,cy:midY,r:2.6,fill:'#1e293b'},g);
     }
   }
 }
@@ -2237,6 +2263,94 @@ function drawRCBO(g) {
   }
 }
 
+const ZR_FUNCS=['AV','RV','ARV','EW','AW','TI','TP','IA','ON','OFF'];
+const ZR_FUNC_NAMES={
+  AV:'Ansprechverzögerung (Einschaltverzögerung)',
+  RV:'Rückfallverzögerung (Ausschaltverzögerung)',
+  ARV:'Ansprech- und Rückfallverzögerung',
+  EW:'Einschaltwischer (Impuls bei Start)',
+  AW:'Ausschaltwischer (Impuls beim Loslassen)',
+  TI:'Taktgeber, mit Impuls beginnend',
+  TP:'Taktgeber, mit Pause beginnend',
+  IA:'Impulsgesteuerte Ansprechverzögerung',
+  ON:'Dauer EIN',
+  OFF:'Dauer AUS',
+};
+
+function drawZeitrelais(g, comp) {
+  const state = comp.state || (comp.state = {});
+  const W=60, H=140;
+  const func = state.zrFunc || (state.zrFunc = 'AV');
+  const delay = state.zrDelay!=null ? state.zrDelay : (state.zrDelay = 3);
+  const on = !!state._zrOn;
+  const waiting = !!state._zrWaiting;
+
+  mk('rect',{x:0,y:0,width:W,height:H,fill:'#e5e7eb',stroke:'#475569','stroke-width':1.5,rx:3,filter:'url(#shadow)'},g);
+
+  // ── obere Klemmen: L, A1, N ──────────────────────────────────────────
+  const topCols=[['L','#8B4513'],['A1','#1a56db'],['N','#1a56db']], topX=[12,30,48];
+  for(let i=0;i<3;i++){
+    const cx=topX[i];
+    mk('rect',{x:cx-7,y:2,width:14,height:13,fill:'#374151',stroke:'#4b5563','stroke-width':0.7,rx:1.5},g);
+    mk('circle',{cx,cy:8.5,r:4,fill:'#1f2937'},g);
+    mk('circle',{cx,cy:8.5,r:2.5,fill:topCols[i][1],stroke:'rgba(255,255,255,0.35)','stroke-width':0.5},g);
+    mk('text',{x:cx,y:19,'text-anchor':'middle','font-size':4.5,fill:'#64748b'},g).textContent=topCols[i][0];
+  }
+
+  // ── Gehäusekörper ──────────────────────────────────────────────────────
+  mk('rect',{x:2,y:22,width:W-4,height:96,fill:'#f8fafc',stroke:'#cbd5e1','stroke-width':0.8,rx:2},g);
+  mk('text',{x:W/2,y:30,'text-anchor':'middle','font-size':5,fill:'#475569','font-weight':'bold'},g).textContent='ZEITRELAIS';
+
+  // LED: blinkt während der Zeitablauf läuft (Kontakt offen), leuchtet dauerhaft wenn Kontakt zu
+  if(on) mk('circle',{cx:W-9,cy:29,r:4,fill:'#22c55e',opacity:0.5,filter:'url(#glow-y)','pointer-events':'none'},g);
+  const led=mk('circle',{cx:W-9,cy:29,r:2.8,fill:on?'#22c55e':(waiting?'#fbbf24':'#9ca3af'),stroke:'#1f2937','stroke-width':0.6,'pointer-events':'none'},g);
+  if(waiting && !on){
+    const an=document.createElementNS('http://www.w3.org/2000/svg','animate');
+    an.setAttribute('attributeName','opacity'); an.setAttribute('values','1;0.25;1');
+    an.setAttribute('dur','1s'); an.setAttribute('repeatCount','indefinite');
+    led.appendChild(an);
+  }
+
+  // ── Funktions-Umschalter (antippen = nächste Funktion) ──────────────────
+  const fb=mk('rect',{x:6,y:38,width:W-12,height:16,rx:2,fill:'#1e293b',stroke:'#0f172a','stroke-width':1,cursor:'pointer'},g);
+  mk('text',{x:W/2,y:49,'text-anchor':'middle','font-size':9,fill:'#7dd3fc','font-weight':'bold','pointer-events':'none','font-family':'monospace'},g).textContent=func;
+  fb.addEventListener('pointerdown', e=>{
+    e.stopPropagation();
+    const idx=ZR_FUNCS.indexOf(func);
+    state.zrFunc=ZR_FUNCS[(idx+1)%ZR_FUNCS.length];
+    render();
+  });
+  fb.addEventListener('pointerenter', ()=>tip(ZR_FUNC_NAMES[func]));
+  fb.addEventListener('pointerleave', hideTip);
+  mk('text',{x:W/2,y:60,'text-anchor':'middle','font-size':3.5,fill:'#94a3b8'},g).textContent='antippen = Funktion';
+
+  // ── Zeit-Schieberegler (0,5–30 s) ────────────────────────────────────────
+  const tx1=8, tx2=W-8, ty=80;
+  mk('line',{x1:tx1,y1:ty,x2:tx2,y2:ty,stroke:'#94a3b8','stroke-width':3,'stroke-linecap':'round','pointer-events':'none'},g);
+  const frac=Math.max(0,Math.min(1,(delay-0.5)/(30-0.5)));
+  const knobX=tx1+(tx2-tx1)*frac;
+  const knob=mk('circle',{cx:knobX,cy:ty,r:6.5,fill:'#1d4ed8',stroke:'#1e3a8a','stroke-width':1.3,cursor:'pointer'},g);
+  mk('text',{x:W/2,y:97,'text-anchor':'middle','font-size':7,fill:'#1e293b','font-weight':'bold'},g).textContent=(delay<10?delay.toFixed(1):Math.round(delay))+' s';
+  knob.addEventListener('pointerdown', e=>{
+    e.stopPropagation();
+    if (e.pointerType!=='mouse') SVG.setPointerCapture(e.pointerId);
+    const p=svgPt(e);
+    drag={zrComp:comp, startX:p.x, startDelay:delay};
+  });
+
+  // ── untere Klemmen: potenzialfreier Wechsel-/Schließkontakt 1/2 ─────────
+  mk('rect',{x:2,y:H-24,width:W-4,height:14,fill:'#f1f5f9',stroke:'#cbd5e1','stroke-width':0.8,rx:2},g);
+  mk('text',{x:W/2,y:H-25,'text-anchor':'middle','font-size':3.5,fill:'#94a3b8'},g).textContent=on?'Kontakt: ZU':'Kontakt: OFFEN';
+  const cCols=['#9ca3af','#9ca3af'], cX=[20,40], cLbl=['1','2'];
+  for(let i=0;i<2;i++){
+    const cx=cX[i];
+    mk('rect',{x:cx-7,y:H-13,width:14,height:13,fill:'#374151',stroke:'#4b5563','stroke-width':0.7,rx:1.5},g);
+    mk('circle',{cx,cy:H-6.5,r:4,fill:'#1f2937'},g);
+    mk('circle',{cx,cy:H-6.5,r:2.5,fill:on?'#22c55e':cCols[i],stroke:'rgba(255,255,255,0.35)','stroke-width':0.5},g);
+    mk('text',{x:cx,y:H-15,'text-anchor':'middle','font-size':4.5,fill:'#64748b'},g).textContent=cLbl[i];
+  }
+}
+
 function drawStromstoss(g, state) {
   // Eltako-Style FSS12: A1/13/21 oben, A2/14/22 unten
   const W=40, H=72;
@@ -2252,9 +2366,9 @@ function drawStromstoss(g, state) {
     mk('circle',{cx,cy:7.5,r:2.5,fill:tCols[i],stroke:'rgba(255,255,255,0.35)','stroke-width':0.5},g);
     mk('rect',{x:cx-1,y:3.5,width:2,height:8,fill:'#9ca3af',rx:0.3},g);
   }
-  // Eltako-Streifen
+  // Typenstreifen
   mk('rect',{x:0,y:15,width:W,height:5,fill:'#166534'},g);
-  mk('text',{x:W/2,y:19,'text-anchor':'middle','font-size':4,fill:'#bbf7d0','letter-spacing':1,'font-weight':'bold'},g).textContent='ELTAKO';
+  mk('text',{x:W/2,y:19,'text-anchor':'middle','font-size':4,fill:'#bbf7d0','letter-spacing':1,'font-weight':'bold'},g).textContent='IMPULS';
   // Gehäusekörper
   mk('rect',{x:2,y:21,width:W-4,height:33,fill:'#ede9e0',stroke:'#c4b89a','stroke-width':0.7,rx:1},g);
   // LED + Status
@@ -2274,7 +2388,7 @@ function drawStromstoss(g, state) {
     mk('circle',{cx,cy:H-7.5,r:2.5,fill:bCols[i],stroke:'rgba(255,255,255,0.35)','stroke-width':0.5},g);
     mk('rect',{x:cx-1,y:H-12,width:2,height:8,fill:'#9ca3af',rx:0.3},g);
   }
-  mk('text',{x:W/2,y:H-1,'text-anchor':'middle','font-size':3.5,fill:'#78716c'},g).textContent='FSS 12';
+  mk('text',{x:W/2,y:H-1,'text-anchor':'middle','font-size':3.5,fill:'#78716c'},g).textContent='16A 250V~';
 }
 
 function drawBewegungsmelder(g) {
@@ -2590,6 +2704,7 @@ function drawComp(g, comp) {
     case 'frequenzumrichter': drawFrequenzumrichter(g, comp.state); break;
     case 'schuetz':         drawSchuetz(g, comp); break;
     case 'stromstoss':      drawStromstoss(g, comp.state); break;
+    case 'zeitrelais':      drawZeitrelais(g, comp); break;
     case 'bewegungsmelder': drawBewegungsmelder(g); break;
     case 'logo':             drawLogo(g); break;
     case 'aufputzgehaeuse1':
@@ -3607,6 +3722,15 @@ SVG.addEventListener('pointermove', e=>{
       if (simMode) runSim(); else render();
       return;
     }
+    if (drag.zrComp) {
+      const c = drag.zrComp;
+      if (!c.state) c.state = {};
+      const df = p.x - drag.startX;
+      const raw = drag.startDelay + df*((30-0.5)/44);
+      c.state.zrDelay = Math.max(0.5, Math.min(30, Math.round(raw*10)/10));
+      if (simMode) runSim(); else render();
+      return;
+    }
     if (drag.midDrag) {
       drag.comp.cx=nx; drag.comp.cy=ny;
     } else if (drag.endDrag) {
@@ -4312,6 +4436,7 @@ function runSim() {
       c.state._tripped = !!ss.tripped;
     }
     if (c.type === 'stromstoss') c.state._on = !!ss.on;
+    if (c.type === 'zeitrelais') { c.state._zrOn = !!ss.on; c.state._zrWaiting = !!ss.waiting; }
     if (c.type === 'serienschalter') { c.state._on1 = ss.on1 !== false; c.state._on2 = ss.on2 !== false; }
     if (c.type === 'logo') {
       for (let qi = 1; qi <= 8; qi++) c.state['q'+qi] = !!ss['q'+qi];
@@ -4671,6 +4796,9 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
         if(s.on) U(P(1),P(4));   // NO 13-14 geschlossen
         else     U(P(2),P(5));   // NC 21-22 geschlossen
         break;
+      case'zeitrelais':
+        if(s.on) U(P(3),P(4));   // potenzialfreier Kontakt 1-2 geschlossen
+        break;
       case'schuetz': {
         if(s.coilOn){ U(P(0),P(3)); U(P(1),P(4)); U(P(2),P(5)); }
         // Hilfskontakte: pro Position frei wählbar NO (schließt bei coilOn) oder NC (offen bei coilOn)
@@ -4740,6 +4868,97 @@ function motorConn(rootU1,rootV1,rootW1,rootU2,rootV2,rootW2){
   return null; // falsch verdrahtet/offen — Motor darf nicht laufen
 }
 
+// Multifunktions-Zeitrelais: Zustandsmaschine für die 10 Funktionen. Zustand lebt in
+// c._zr (nur zur Laufzeit, wird NICHT gespeichert) — { ts, phase, prevTrig, on }.
+// Löst bei laufender Verzögerung per setTimeout einen neuen runSim() aus, damit die
+// Anzeige automatisch aktualisiert wird, sobald die Zeit abgelaufen ist.
+function zrCompute(c, triggered, delayMs, func){
+  const now = Date.now();
+  const zr = c._zr || (c._zr = {ts:null, phase:null, prevTrig:false, on:false});
+  const risingEdge = triggered && !zr.prevTrig;
+  const fallingEdge = !triggered && zr.prevTrig;
+  zr.prevTrig = triggered;
+  let out = zr.on, waiting = false;
+  const wake = ms => setTimeout(()=>{ if(window.runSim) window.runSim(); }, Math.max(16,ms)+20);
+
+  switch(func){
+    case 'ON': out=true; break;
+    case 'OFF': out=false; break;
+    case 'AV': // Ansprechverzögerung: schließt erst nach Ablauf der Verzögerung
+      if(!triggered){ out=false; zr.ts=null; }
+      else {
+        if(zr.ts==null) zr.ts=now;
+        const el=now-zr.ts;
+        if(el>=delayMs) out=true;
+        else { out=false; waiting=true; wake(delayMs-el); }
+      }
+      break;
+    case 'RV': // Rückfallverzögerung: öffnet erst verzögert nach dem Loslassen
+      if(triggered){ out=true; zr.ts=null; }
+      else if(zr.on){
+        if(zr.ts==null) zr.ts=now;
+        const el=now-zr.ts;
+        if(el>=delayMs){ out=false; zr.ts=null; }
+        else { out=true; waiting=true; wake(delayMs-el); }
+      } else out=false;
+      break;
+    case 'ARV': // Ansprech- UND Rückfallverzögerung
+      if(triggered){
+        if(zr.phase!=='on'){ zr.phase='on'; zr.ts=now; }
+        const el=now-zr.ts;
+        if(el>=delayMs) out=true;
+        else { out=false; waiting=true; wake(delayMs-el); }
+      } else if(zr.on){
+        if(zr.phase!=='off'){ zr.phase='off'; zr.ts=now; }
+        const el=now-zr.ts;
+        if(el>=delayMs){ out=false; zr.phase=null; zr.ts=null; }
+        else { out=true; waiting=true; wake(delayMs-el); }
+      } else { out=false; zr.phase=null; zr.ts=null; }
+      break;
+    case 'EW': // Einschaltwischer: kurzer Impuls bei Start-Flanke
+      if(risingEdge){ zr.ts=now; out=true; waiting=true; wake(delayMs); }
+      else if(zr.on && zr.ts!=null){
+        const el=now-zr.ts;
+        if(el>=delayMs){ out=false; zr.ts=null; }
+        else { out=true; waiting=true; wake(delayMs-el); }
+      } else if(!zr.on) out=false;
+      break;
+    case 'AW': // Ausschaltwischer: kurzer Impuls beim Loslassen
+      if(fallingEdge){ zr.ts=now; out=true; waiting=true; wake(delayMs); }
+      else if(zr.on && zr.ts!=null){
+        const el=now-zr.ts;
+        if(el>=delayMs){ out=false; zr.ts=null; }
+        else { out=true; waiting=true; wake(delayMs-el); }
+      } else if(!zr.on) out=false;
+      break;
+    case 'IA': // Impulsgesteuerte Ansprechverzögerung: Flanke → warten → kurz schließen
+      if(risingEdge && zr.phase==null){ zr.phase='wait'; zr.ts=now; }
+      if(zr.phase==='wait'){
+        out=false;
+        const el=now-zr.ts;
+        if(el>=delayMs){ zr.phase='active'; zr.ts=now; }
+        else { waiting=true; wake(delayMs-el); }
+      } else if(zr.phase==='active'){
+        const el=now-zr.ts;
+        if(el>=delayMs){ zr.phase=null; zr.ts=null; out=false; }
+        else { out=true; waiting=true; wake(delayMs-el); }
+      } else if(!risingEdge){ out=false; }
+      break;
+    case 'TI': case 'TP': // Taktgeber: oszilliert solange getriggert
+      if(!triggered){ out=false; zr.ts=null; }
+      else {
+        if(zr.ts==null) zr.ts=now;
+        const half=delayMs/2, el=(now-zr.ts)%delayMs;
+        const phaseOn = func==='TI' ? el<half : el>=half;
+        out=phaseOn; waiting=true;
+        wake(phaseOn ? half-el : delayMs-el);
+      }
+      break;
+  }
+  zr.on = out;
+  return {on:out, waiting};
+}
+
 // --- Hauptfunktion ---
 function simulate(comps, wires, simSt, _depth){
   const depth=_depth||0;
@@ -4800,6 +5019,15 @@ function simulate(comps, wires, simSt, _depth){
       let on=!!s.on;
       if(now&&!was) on=!on;
       if(on!==!!s.on || now!==was) delta[c.id]={...s,on,a1Was:now};
+    }
+    if(c.type==='zeitrelais'){
+      const pL=gp(c.id,0), pA1=gp(c.id,1), pN=gp(c.id,2);
+      const powered=!!((pL&ANY_L)&&(pN&N));
+      const triggered=powered && !!(pA1&ANY_L);
+      const delayMs=((c.state&&c.state.zrDelay!=null)?c.state.zrDelay:3)*1000;
+      const func=(c.state&&c.state.zrFunc)||'AV';
+      const r=zrCompute(c, triggered, delayMs, func);
+      if(r.on!==!!s.on || r.waiting!==!!s.waiting) delta[c.id]={...s,on:r.on,waiting:r.waiting};
     }
     // LOGO! FBD-Programm: Eingänge lesen → FBD auswerten → Ausgänge
     if(c.type==='logo' && c.program && c.program.blocks && c.program.blocks.length){
