@@ -533,18 +533,17 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
           <rect x="0" y="0" width="96" height="6" fill="#d1d5db" rx="1"/>
           <rect x="0" y="30" width="96" height="6" fill="#fca5a5" rx="1"/>
           <!-- 12 input screws -->
-          <rect x="8" y="7" width="46" height="22" fill="#0f2b0f" rx="1"/>
-          <text x="31" y="20" text-anchor="middle" font-size="7" fill="#4ade80" font-weight="bold" font-family="monospace">LOGO!</text>
-          <text x="31" y="27" text-anchor="middle" font-size="3.5" fill="#22c55e" font-family="monospace">12/8 230RCE</text>
+          <rect x="8" y="7" width="46" height="22" fill="#0f1f3d" rx="1"/>
+          <text x="31" y="20" text-anchor="middle" font-size="7" fill="#60a5fa" font-weight="bold" font-family="monospace">SPS</text>
+          <text x="31" y="27" text-anchor="middle" font-size="3.5" fill="#93c5fd" font-family="monospace">12/8 230RCE</text>
           <rect x="58" y="7" width="14" height="22" fill="#374151" rx="1"/>
           <text x="65" y="19" text-anchor="middle" font-size="4.5" fill="#9ca3af" font-weight="bold">12IN</text>
           <text x="65" y="26" text-anchor="middle" font-size="4.5" fill="#f87171" font-weight="bold">8OUT</text>
           <rect x="76" y="7" width="18" height="22" fill="#1e3a8a" rx="1"/>
-          <text x="85" y="21" text-anchor="middle" font-size="4" fill="#fff" font-weight="bold">SIE</text>
           <circle cx="4" cy="13" r="2" fill="#7c2d12"/>
           <circle cx="4" cy="22" r="2" fill="#1e3a8a"/>
         </svg>
-        <span class="s-label">LOGO! 230RC</span>
+        <span class="s-label">SPS 12/8</span>
       </div>
 
       <div class="s-head">Aufputzgehäuse</div>
@@ -1069,7 +1068,7 @@ const D = {
       {x:0,  y:24, dir:'w',color:'#8B4513',label:'L'},
       {x:0,  y:48, dir:'w',color:'#1a56db',label:'N'},
     ],
-    label:'LOGO! 12/8 230RCE'
+    label:'SPS 12/8 230RCE'
   },
   // rows = [{actuator:{x,y}, contacts:[{x,y},{x,y},{x,y}]}]
   // actuator center at x=35; contact centers at x=115 (right edge = housing.x+130)
@@ -2270,10 +2269,10 @@ function drawLogo(g) {
   mk('text',{x:11,y:22,'font-size':4.5,fill:'#374151'},g).textContent='L';
   mk('text',{x:11,y:32,'font-size':4.5,fill:'#374151'},g).textContent='N';
   // LCD
-  mk('rect',{x:14,y:13,width:102,height:46,fill:'#0f2b0f',stroke:'#374151','stroke-width':1,rx:2},g);
-  mk('rect',{x:16,y:15,width:98,height:42,fill:'#1a3a1a',rx:1},g);
-  mk('text',{x:65,y:32,'text-anchor':'middle','font-size':13,fill:'#4ade80','font-weight':'bold','font-family':'monospace'},g).textContent='LOGO!';
-  mk('text',{x:65,y:44,'text-anchor':'middle','font-size':6,fill:'#22c55e','font-family':'monospace'},g).textContent='12/8 230RCE';
+  mk('rect',{x:14,y:13,width:102,height:46,fill:'#0f1f3d',stroke:'#374151','stroke-width':1,rx:2},g);
+  mk('rect',{x:16,y:15,width:98,height:42,fill:'#152b52',rx:1},g);
+  mk('text',{x:65,y:32,'text-anchor':'middle','font-size':13,fill:'#60a5fa','font-weight':'bold','font-family':'monospace'},g).textContent='SPS';
+  mk('text',{x:65,y:44,'text-anchor':'middle','font-size':6,fill:'#93c5fd','font-family':'monospace'},g).textContent='12/8 230RCE';
   // Navigation wheel
   mk('rect',{x:121,y:14,width:30,height:44,fill:'#d1d5db',stroke:'#9ca3af','stroke-width':0.5,rx:2},g);
   mk('circle',{cx:136,cy:36,r:10,fill:'#9ca3af',stroke:'#6b7280','stroke-width':1},g);
@@ -2879,7 +2878,7 @@ function render() {
     // Label — draggable + dblclick-editable with overlap avoidance
     const hasCustomLabel = comp.label && comp.label !== comp.def.label;
     const isSel = sel===comp.id;
-    const showLabel = isSel || hasCustomLabel || comp.def.w >= 30 || comp.def.showLabel;
+    const showLabel = isSel || hasCustomLabel;
     if (!comp.def.isCable && !comp.def.isKanal && showLabel) {
       const bb=compBBox(comp);
       const text = comp.label||comp.def.label;

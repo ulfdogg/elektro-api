@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>LOGO! FBD Programmiereditor</title>
+<title>SPS FBD Programmiereditor</title>
 <script>
 (function(){
   document.documentElement.style.visibility='hidden';
@@ -45,9 +45,9 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;fo
 .sb-item{padding:4px 8px 4px 24px;cursor:grab;font-size:11px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #e4e0d8}
 .sb-item:hover{background:#dce8f8}
 .sb-item:active{cursor:grabbing}
-.sb-icon{width:28px;height:18px;background:#fde68a;border:1.5px solid #b45309;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#1c1c1c;flex-shrink:0;font-family:monospace;position:relative}
-.sb-icon.inv::after{content:'○';position:absolute;right:-6px;top:50%;transform:translateY(-50%);font-size:8px;color:#b45309}
-.sb-icon.edge::before{content:'↑';position:absolute;bottom:0;right:1px;font-size:7px;color:#b45309;line-height:1}
+.sb-icon{width:28px;height:18px;background:#bfdbfe;border:1.5px solid #1d4ed8;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#1c1c1c;flex-shrink:0;font-family:monospace;position:relative}
+.sb-icon.inv::after{content:'○';position:absolute;right:-6px;top:50%;transform:translateY(-50%);font-size:8px;color:#1d4ed8}
+.sb-icon.edge::before{content:'↑';position:absolute;bottom:0;right:1px;font-size:7px;color:#1d4ed8;line-height:1}
 
 /* ── Canvas area ── */
 #canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#e0dcd4}
@@ -120,7 +120,7 @@ svg#cv{width:100%;height:100%;display:block}
     <button class="tb-btn" onclick="deleteSelected()" title="Ausgewähltes löschen (Del)">✕ Löschen</button>
   </div>
   <div class="tb-group">
-    <span class="tb-info" id="tb-comp-label">LOGO! FBD Editor</span>
+    <span class="tb-info" id="tb-comp-label">SPS FBD Editor</span>
   </div>
   <div class="tb-group">
     <button class="tb-btn" onclick="serverSaveFbd()">☁ Speichern</button>
@@ -359,7 +359,7 @@ function initChannel(cid) {
   };
   // Request current state
   channel.postMessage({ type:'editor-ready', compId:cid });
-  document.getElementById('tb-comp-label').textContent = 'LOGO! 230RCE — Komponente #'+cid;
+  document.getElementById('tb-comp-label').textContent = 'SPS 12/8 230RCE — Komponente #'+cid;
 }
 
 function broadcastProg() {
@@ -534,7 +534,7 @@ function drawBlock(b){
   }
 
   // Shadow + main rect
-  const rect=mkEl('rect',{x:b.x,y:b.y,width:w,height:h,fill:'#fde68a',stroke:'#b45309',
+  const rect=mkEl('rect',{x:b.x,y:b.y,width:w,height:h,fill:'#bfdbfe',stroke:'#1d4ed8',
     'stroke-width':1.5,rx:2,filter:'url(#bshadow)',cursor:'grab'},g);
 
   // Function symbol (not for input/output — those render their own port labels)
@@ -551,11 +551,11 @@ function drawBlock(b){
     // Port name left-aligned, arrow pointing right
     mkEl('text',{x:b.x+4,y:b.y+h/2+4,'font-size':10,'font-family':'monospace',
       'font-weight':'800',fill:'#1c1c1c','pointer-events':'none'},g).textContent=b.port||'I';
-    mkEl('text',{x:b.x+w-4,y:b.y+h/2+4,'text-anchor':'end','font-size':9,fill:'#92400e',
+    mkEl('text',{x:b.x+w-4,y:b.y+h/2+4,'text-anchor':'end','font-size':9,fill:'#1e40af',
       'pointer-events':'none'},g).textContent='→';
   } else if(b.type==='output'){
     // Arrow on left, port name right-aligned
-    mkEl('text',{x:b.x+4,y:b.y+h/2+4,'font-size':9,fill:'#92400e',
+    mkEl('text',{x:b.x+4,y:b.y+h/2+4,'font-size':9,fill:'#1e40af',
       'pointer-events':'none'},g).textContent='→';
     mkEl('text',{x:b.x+w-4,y:b.y+h/2+4,'text-anchor':'end','font-size':10,'font-family':'monospace',
       'font-weight':'800',fill:'#1c1c1c','pointer-events':'none'},g).textContent=b.port||'Q';
@@ -568,17 +568,17 @@ function drawBlock(b){
   if(['ton','tof','tonoff','ttonr'].includes(b.type)){
     const fmt=(min,sec,unit)=>`${min||0}:${String(sec||0).padStart(2,'0')} ${unit||'s'}`;
     if(b.type==='tonoff'){
-      const box1=mkEl('rect',{x:b.x+4,y:b.y+h-37,width:w-8,height:15,rx:2,fill:'#fef3c7',stroke:'#d97706','stroke-width':1,cursor:'pointer'},g);
-      mkEl('text',{x:b.x+w/2,y:b.y+h-26,'text-anchor':'middle','font-size':7.5,fill:'#92400e','font-weight':'700','pointer-events':'none'},g).textContent='TH='+fmt(b.paramMin,b.paramSec,b.paramUnit);
+      const box1=mkEl('rect',{x:b.x+4,y:b.y+h-37,width:w-8,height:15,rx:2,fill:'#dbeafe',stroke:'#2563eb','stroke-width':1,cursor:'pointer'},g);
+      mkEl('text',{x:b.x+w/2,y:b.y+h-26,'text-anchor':'middle','font-size':7.5,fill:'#1e40af','font-weight':'700','pointer-events':'none'},g).textContent='TH='+fmt(b.paramMin,b.paramSec,b.paramUnit);
       box1.addEventListener('click',e=>{ e.stopPropagation(); openDlg(b); });
       box1.addEventListener('pointerdown',e=>e.stopPropagation());
-      const box2=mkEl('rect',{x:b.x+4,y:b.y+h-19,width:w-8,height:15,rx:2,fill:'#fef3c7',stroke:'#d97706','stroke-width':1,cursor:'pointer'},g);
-      mkEl('text',{x:b.x+w/2,y:b.y+h-8,'text-anchor':'middle','font-size':7.5,fill:'#92400e','font-weight':'700','pointer-events':'none'},g).textContent='TL='+fmt(b.paramMin2,b.paramSec2,b.paramUnit2);
+      const box2=mkEl('rect',{x:b.x+4,y:b.y+h-19,width:w-8,height:15,rx:2,fill:'#dbeafe',stroke:'#2563eb','stroke-width':1,cursor:'pointer'},g);
+      mkEl('text',{x:b.x+w/2,y:b.y+h-8,'text-anchor':'middle','font-size':7.5,fill:'#1e40af','font-weight':'700','pointer-events':'none'},g).textContent='TL='+fmt(b.paramMin2,b.paramSec2,b.paramUnit2);
       box2.addEventListener('click',e=>{ e.stopPropagation(); openDlg(b); });
       box2.addEventListener('pointerdown',e=>e.stopPropagation());
     } else {
-      const tpBox=mkEl('rect',{x:b.x+4,y:b.y+h-20,width:w-8,height:14,rx:2,fill:'#fef3c7',stroke:'#d97706','stroke-width':1,cursor:'pointer'},g);
-      mkEl('text',{x:b.x+w/2,y:b.y+h-10,'text-anchor':'middle','font-size':7.5,fill:'#92400e','font-weight':'700','pointer-events':'none'},g).textContent='T='+fmt(b.paramMin,b.paramSec,b.paramUnit);
+      const tpBox=mkEl('rect',{x:b.x+4,y:b.y+h-20,width:w-8,height:14,rx:2,fill:'#dbeafe',stroke:'#2563eb','stroke-width':1,cursor:'pointer'},g);
+      mkEl('text',{x:b.x+w/2,y:b.y+h-10,'text-anchor':'middle','font-size':7.5,fill:'#1e40af','font-weight':'700','pointer-events':'none'},g).textContent='T='+fmt(b.paramMin,b.paramSec,b.paramUnit);
       tpBox.addEventListener('click',e=>{ e.stopPropagation(); openDlg(b); });
       tpBox.addEventListener('pointerdown',e=>e.stopPropagation());
     }
@@ -586,12 +586,12 @@ function drawBlock(b){
 
   // Inverted output circle
   if(d.invOut){
-    mkEl('circle',{cx:b.x+w+5,cy:b.y+outPortY(b),r:4,fill:'#fde68a',stroke:'#b45309','stroke-width':1.5,'pointer-events':'none'},g);
+    mkEl('circle',{cx:b.x+w+5,cy:b.y+outPortY(b),r:4,fill:'#bfdbfe',stroke:'#1d4ed8','stroke-width':1.5,'pointer-events':'none'},g);
   }
 
   // Edge indicator
   if(d.edge){
-    mkEl('text',{x:b.x+w-4,y:b.y+4,'text-anchor':'end','dominant-baseline':'hanging','font-size':7,fill:'#b45309','pointer-events':'none'},g).textContent='↑';
+    mkEl('text',{x:b.x+w-4,y:b.y+4,'text-anchor':'end','dominant-baseline':'hanging','font-size':7,fill:'#1d4ed8','pointer-events':'none'},g).textContent='↑';
   }
 
   // Input labels (RS: S, R)
@@ -614,23 +614,23 @@ function drawBlock(b){
   const numIns = b.inputCount||d.ins;
   for(let i=0;i<numIns;i++){
     const py=b.y+inPortY(b,i);
-    const pc=mkEl('circle',{cx:b.x,cy:py,r:5,fill:'#fef9e7',stroke:'#b45309',
+    const pc=mkEl('circle',{cx:b.x,cy:py,r:5,fill:'#eff6ff',stroke:'#1d4ed8',
       'stroke-width':1.5,cursor:'crosshair','pointer-events':'all'},g);
     pc.dataset.portType='in'; pc.dataset.portIdx=i; pc.dataset.blkId=b.id;
     // Dot if connected
     if(prog.conns.some(c=>c.toId===b.id&&c.toPort===i)){
-      mkEl('circle',{cx:b.x,cy:py,r:2.5,fill:'#b45309','pointer-events':'none'},g);
+      mkEl('circle',{cx:b.x,cy:py,r:2.5,fill:'#1d4ed8','pointer-events':'none'},g);
     }
   }
 
   // Output port (right side)
   if(d.outs>0){
     const outX = d.invOut ? b.x+w+10 : b.x+w;
-    const pc=mkEl('circle',{cx:outX,cy:b.y+outPortY(b),r:5,fill:'#fef9e7',stroke:'#b45309',
+    const pc=mkEl('circle',{cx:outX,cy:b.y+outPortY(b),r:5,fill:'#eff6ff',stroke:'#1d4ed8',
       'stroke-width':1.5,cursor:'crosshair','pointer-events':'all'},g);
     pc.dataset.portType='out'; pc.dataset.blkId=b.id;
     if(prog.conns.some(c=>c.fromId===b.id)){
-      mkEl('circle',{cx:outX,cy:b.y+outPortY(b),r:2.5,fill:'#b45309','pointer-events':'none'},g);
+      mkEl('circle',{cx:outX,cy:b.y+outPortY(b),r:2.5,fill:'#1d4ed8','pointer-events':'none'},g);
     }
   }
 
@@ -1146,7 +1146,7 @@ if(cid){
   } catch(e){}
 } else {
   // Standalone test mode
-  document.getElementById('tb-comp-label').textContent='LOGO! FBD Editor (Test)';
+  document.getElementById('tb-comp-label').textContent='SPS FBD Editor (Test)';
 }
 
 render();
