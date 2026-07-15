@@ -470,17 +470,6 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
         <svg width="36" height="36"><circle cx="18" cy="18" r="14" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/><text x="18" y="21" text-anchor="middle" font-size="11" fill="#0284c7" font-weight="bold">M</text><text x="18" y="30" text-anchor="middle" font-size="7" fill="#0284c7">3~</text></svg>
         <span class="s-label">Motor M 3~</span>
       </div>
-      <div class="s-item" ondragstart="sbDrag('motorklemmbrett')" draggable="true">
-        <svg width="46" height="28">
-          <rect x="0" y="2" width="46" height="24" fill="#f8fafc" stroke="#475569" stroke-width="1.2" rx="2"/>
-          <line x1="2" y1="14" x2="44" y2="14" stroke="#94a3b8" stroke-width="0.8"/>
-          <rect x="3" y="4" width="8" height="9" fill="#111" rx="1"/><rect x="14" y="4" width="8" height="9" fill="#222" rx="1"/>
-          <rect x="25" y="4" width="8" height="9" fill="#6b7280" rx="1"/><rect x="36" y="4" width="8" height="9" fill="#16a34a" rx="1"/>
-          <rect x="3" y="16" width="8" height="9" fill="#111" rx="1"/><rect x="14" y="16" width="8" height="9" fill="#222" rx="1"/>
-          <rect x="25" y="16" width="8" height="9" fill="#6b7280" rx="1"/>
-        </svg>
-        <span class="s-label">Motorklemmbrett</span>
-      </div>
       <div class="s-item" ondragstart="sbDrag('dahlander')" draggable="true">
         <svg width="36" height="36"><circle cx="18" cy="18" r="14" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/><text x="18" y="20" text-anchor="middle" font-size="10" fill="#0284c7" font-weight="bold">M</text><text x="18" y="29" text-anchor="middle" font-size="5.5" fill="#0369a1">2/4p 3~</text><circle cx="12" cy="10" r="3" fill="none" stroke="#0284c7" stroke-width="1.2"/><circle cx="24" cy="10" r="3" fill="none" stroke="#0284c7" stroke-width="1.2"/><line x1="15" y1="10" x2="21" y2="10" stroke="#0284c7" stroke-width="0.8"/></svg>
         <span class="s-label">Dahlandermotor</span>
@@ -969,19 +958,6 @@ const D = {
       {x:58,y:80, dir:'s',color:'#6b7280',label:'W2'},
     ],
     label:'Motor M 3~'
-  },
-  motorklemmbrett: {
-    w:90, h:65,
-    ports:[
-      {x:12,y:0,  dir:'n',color:'#111',   label:'U1'},
-      {x:34,y:0,  dir:'n',color:'#222',label:'V1'},
-      {x:56,y:0,  dir:'n',color:'#6b7280',label:'W1'},
-      {x:78,y:0,  dir:'n',color:'#16a34a',label:'PE'},
-      {x:12,y:65, dir:'s',color:'#111',   label:'U2'},
-      {x:34,y:65, dir:'s',color:'#222',label:'V2'},
-      {x:56,y:65, dir:'s',color:'#6b7280',label:'W2'},
-    ],
-    label:'Motorklemmbrett'
   },
   dahlander: {
     w:80, h:80,
@@ -2030,32 +2006,6 @@ function drawMotor(g, state) {
   mk('line',{x1:63,y1:40,x2:70,y2:40,stroke:'#16a34a','stroke-width':2},g);
 }
 
-function drawMotorklemmbrett(g) {
-  const W=90, H=65;
-  mk('rect',{x:0,y:0,width:W,height:H,fill:'#f8fafc',stroke:'#475569','stroke-width':1.5,rx:3,filter:'url(#shadow)'},g);
-  mk('line',{x1:4,y1:H/2,x2:W-4,y2:H/2,stroke:'#94a3b8','stroke-width':1},g);
-  mk('text',{x:W/2,y:H/2-2,'text-anchor':'middle','font-size':5,fill:'#64748b'},g).textContent='Klemmbrett';
-  const rows=[
-    [{x:12,c:'#111',l:'U1'},{x:34,c:'#222',l:'V1'},{x:56,c:'#6b7280',l:'W1'},{x:78,c:'#16a34a',l:'PE'}],
-    [{x:12,c:'#111',l:'U2'},{x:34,c:'#222',l:'V2'},{x:56,c:'#6b7280',l:'W2'}],
-  ];
-  for (const t of rows[0]) {
-    mk('rect',{x:t.x-6,y:5,width:12,height:15,fill:t.c,rx:2},g);
-    mk('circle',{cx:t.x,cy:12,r:3,fill:'rgba(255,255,255,0.3)'},g);
-    mk('line',{x1:t.x-2,y1:12,x2:t.x+2,y2:12,stroke:'#fff','stroke-width':1.2},g);
-    mk('text',{x:t.x,y:26,'text-anchor':'middle','font-size':5,fill:'#1f2937'},g).textContent=t.l;
-  }
-  // Y-connection bridge bar
-  mk('line',{x1:12,y1:20,x2:56,y2:20,stroke:'#94a3b8','stroke-width':1.5,'stroke-dasharray':'3,2'},g);
-  for (const b of rows[1]) {
-    mk('rect',{x:b.x-6,y:H-20,width:12,height:15,fill:b.c,rx:2},g);
-    mk('circle',{cx:b.x,cy:H-12,r:3,fill:'rgba(255,255,255,0.3)'},g);
-    mk('line',{x1:b.x-2,y1:H-12,x2:b.x+2,y2:H-12,stroke:'#fff','stroke-width':1.2},g);
-    mk('text',{x:b.x,y:H-23,'text-anchor':'middle','font-size':5,fill:'#1f2937'},g).textContent=b.l;
-  }
-  mk('text',{x:W-6,y:H-4,'text-anchor':'middle','font-size':8,fill:'#16a34a','font-weight':'bold'},g).textContent='Y';
-}
-
 function drawDahlander(g, state) {
   const W=80, H=80, cx=W/2, cy=H/2;
   const running = state && state.running, dir = state && state.direction;
@@ -2533,7 +2483,6 @@ function drawComp(g, comp) {
     case 'cee16_kupplung': drawCEE16(g, true);  break;
     case 'rcbo':            drawRCBO(g); break;
     case 'motor':           drawMotor(g, comp.state); break;
-    case 'motorklemmbrett': drawMotorklemmbrett(g); break;
     case 'dahlander':       drawDahlander(g, comp.state); break;
     case 'schuetz':         drawSchuetz(g, comp.state); break;
     case 'stromstoss':      drawStromstoss(g, comp.state); break;
