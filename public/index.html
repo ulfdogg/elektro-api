@@ -1998,7 +1998,7 @@ function drawCEE16(g, isKupplung) {
   }
 }
 
-function motorSpinGroup(g, cx, cy, r, col, cw) {
+function motorSpinGroup(g, cx, cy, r, col, cw, speed) {
   const sg = mk('g',{},g);
   for (let i=0;i<3;i++){
     const a=(i*120)*Math.PI/180;
@@ -2007,12 +2007,14 @@ function motorSpinGroup(g, cx, cy, r, col, cw) {
     mk('circle',{cx:cx+ex,cy:cy+ey,r:3,fill:col,'fill-opacity':0.8},sg);
   }
   // Native SVG rotation – works everywhere incl. iOS Safari; no transform-origin issues
+  // Drehzahl-abhängige Dauer: Stufe 2 (hohe Drehzahl) spürbar schneller als Stufe 1
+  const dur = speed===2 ? '0.32s' : speed===1 ? '1.15s' : '0.7s';
   const at = document.createElementNS('http://www.w3.org/2000/svg','animateTransform');
   at.setAttribute('attributeName','transform');
   at.setAttribute('type','rotate');
   at.setAttribute('from', `0 ${cx} ${cy}`);
   at.setAttribute('to',   `${cw?360:-360} ${cx} ${cy}`);
-  at.setAttribute('dur','0.7s');
+  at.setAttribute('dur',dur);
   at.setAttribute('repeatCount','indefinite');
   sg.appendChild(at);
 }
@@ -2060,7 +2062,7 @@ function drawDahlander(g, state) {
   const bodyFill = running ? (dir==='cw'?'#dcfce7':'#fff7ed') : '#e0f2fe';
   const bodyStroke = running ? (dir==='cw'?'#16a34a':'#f97316') : '#0284c7';
   mk('circle',{cx,cy,r:34,fill:bodyFill,stroke:bodyStroke,'stroke-width':2.5,filter:'url(#shadow)'},g);
-  if (running) motorSpinGroup(g, cx, cy, 24, dir==='cw'?'#22c55e':'#f97316', dir==='cw');
+  if (running) motorSpinGroup(g, cx, cy, 24, dir==='cw'?'#22c55e':'#f97316', dir==='cw', state.speed);
   mk('text',{x:cx,y:cy+5,'text-anchor':'middle','font-size':16,fill:'#0284c7','font-weight':'bold','pointer-events':'none'},g).textContent='M';
   mk('text',{x:cx,y:cy+17,'text-anchor':'middle','font-size':7,fill:'#0369a1','pointer-events':'none'},g).textContent='2/4p 3~';
   mk('circle',{cx:cx-9,cy:cy-15,r:5,fill:'none',stroke:'#0284c7','stroke-width':1.5,'pointer-events':'none'},g);
@@ -3099,12 +3101,13 @@ function render() {
           fill:col,'font-weight':'bold','pointer-events':'none'},CG).textContent=`${arrow} ${rl}`;
         // Zeile 2: Schaltungsart / Stufe
         let connLabel='';
-        if(conn==='Y')      connLabel='Stern (Y)';
-        else if(conn==='Δ') connLabel='Dreieck (Δ)';
-        else if(conn==='Y↑')connLabel='Stern umgek. (Y↑)';
-        else if(conn==='YY')connLabel='YY (Stufe 2)';
-        else if(conn==='Δ-2')connLabel='Δ (Stufe 2)';
-        else if(speed===1)  connLabel='Stufe 1 (Δ)';
+        if (comp.type==='dahlander') {
+          if(conn==='Δ')      connLabel='Kleine Drehzahl (Δ)';
+          else if(conn==='YY')connLabel='Große Drehzahl (YY)';
+        } else {
+          if(conn==='Y')      connLabel='Stern (Y)';
+          else if(conn==='Δ') connLabel='Dreieck (Δ)';
+        }
         if(connLabel) mk('text',{x:cx,y:bb.y1-5,'text-anchor':'middle','font-size':8,
           fill:'#94a3b8','pointer-events':'none'},CG).textContent=connLabel;
       }
@@ -4820,16 +4823,25 @@ function simulate(comps, wires, simSt, _depth){
       if(running) for(const pi of [0,1,2,4,5,6]) activeLoadPorts.push(idx[c.id+':'+pi]);
     }
     if(c.type==='dahlander'){
-      let dir=motorDir(gp(c.id,0),gp(c.id,1),gp(c.id,2));
-      let speed=null,conn=null;
-      if(dir){
-        speed=2;
-        const b3=gp(c.id,3)&ANY_L,b4=gp(c.id,4)&ANY_L,b5=gp(c.id,5)&ANY_L;
-        conn=(!b3&&!b4&&!b5)?'YY':'Δ-2';
-      } else {
-        dir=motorDir(gp(c.id,3),gp(c.id,4),gp(c.id,5));
-        if(dir){speed=1;conn='Δ';}
+      const root=pi=>{ const p=idx[c.id+':'+pi]; return p!=null?uf.find(p):null; };
+      const rootU1=root(0),rootV1=root(1),rootW1=root(2);
+      const rootU2=root(3),rootV2=root(4),rootW2=root(5);
+      let dir=null, speed=null, conn=null;
+
+      // Kleine Drehzahl (Dreieck): 1U/1V/1W am Netz, 2U/2V/2W offen
+      const dirLow = motorDir(gp(c.id,0),gp(c.id,1),gp(c.id,2));
+      const twoOpen = !(gp(c.id,3)&ANY_L) && !(gp(c.id,4)&ANY_L) && !(gp(c.id,5)&ANY_L);
+      if(dirLow && twoOpen){ dir=dirLow; speed=1; conn='Δ'; }
+
+      // Große Drehzahl (Doppelstern): 2U/2V/2W am Netz, 1U/1V/1W ECHT verbrückt (nicht nur offen)
+      if(!dir){
+        const dirHigh = motorDir(gp(c.id,3),gp(c.id,4),gp(c.id,5));
+        const oneBridged = rootU1!=null&&rootV1!=null&&rootW1!=null &&
+          rootU1===rootV1 && rootV1===rootW1 &&
+          rootU1!==rootU2 && rootU1!==rootV2 && rootU1!==rootW2;
+        if(dirHigh && oneBridged){ dir=dirHigh; speed=2; conn='YY'; }
       }
+
       result[c.id]={...s,running:!!dir,direction:dir||null,connection:conn,speed};
       if(dir) for(const pi of [0,1,2,3,4,5]) activeLoadPorts.push(idx[c.id+':'+pi]);
     }
