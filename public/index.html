@@ -819,8 +819,8 @@ const D = {
     ports:[
       {x:10,y:0,  dir:'n',color:'#6b7280',label:''},
       {x:10,y:40, dir:'s',color:'#6b7280',label:''},
-      {x:20,y:17, dir:'e',color:'#f59e0b',label:'',r:2}, // Brücke rechts (oben versetzt)
-      {x:0, y:23, dir:'w',color:'#f59e0b',label:'',r:2}, // Brücke links (unten versetzt)
+      {x:20,y:20, dir:'e',color:'#f59e0b',label:'',r:2}, // Brücke rechts
+      {x:0, y:20, dir:'w',color:'#f59e0b',label:'',r:2}, // Brücke links
     ],
     label:'Klemme 16mm²'
   },
@@ -829,8 +829,8 @@ const D = {
     ports:[
       {x:5,y:0,  dir:'n',color:'#6b7280',label:''},
       {x:5,y:32, dir:'s',color:'#6b7280',label:''},
-      {x:10,y:13, dir:'e',color:'#f59e0b',label:'',r:2}, // Brücke rechts (oben versetzt)
-      {x:0, y:19, dir:'w',color:'#f59e0b',label:'',r:2}, // Brücke links (unten versetzt)
+      {x:10,y:16, dir:'e',color:'#f59e0b',label:'',r:2}, // Brücke rechts
+      {x:0, y:16, dir:'w',color:'#f59e0b',label:'',r:2}, // Brücke links
     ],
     label:'Klemme 2.5mm²'
   },
@@ -840,8 +840,8 @@ const D = {
       {x:5,y:0,  dir:'n',color:'#6b7280',label:''}, // oben (1. Etage)
       {x:5,y:10, dir:'n',color:'#6b7280',label:''}, // oben (2. Etage, darunter)
       {x:5,y:36, dir:'s',color:'#6b7280',label:''}, // unten
-      {x:10,y:20,dir:'e',color:'#f59e0b',label:'',r:2}, // Brücke rechts (oben versetzt)
-      {x:0, y:26,dir:'w',color:'#f59e0b',label:'',r:2}, // Brücke links (unten versetzt)
+      {x:10,y:23,dir:'e',color:'#f59e0b',label:'',r:2}, // Brücke rechts
+      {x:0, y:23,dir:'w',color:'#f59e0b',label:'',r:2}, // Brücke links
     ],
     label:'Klemme 2.5mm² Twin'
   },
@@ -2553,6 +2553,9 @@ function drawComp(g, comp) {
 function drawPorts(g, comp) {
   const dx=(comp.ex||comp.x)-comp.x, dy=(comp.ey||comp.y)-comp.y;
   comp.def.ports.forEach((pd, i) => {
+    // Brücken-Modus: die individuellen e/w-Brückenpunkte werden durch die
+    // gemeinsamen Übergangs-Marker (siehe renderBridgeBoundaries) ersetzt.
+    if (mode==='bridge' && comp.def.bridgeable && (pd.dir==='e'||pd.dir==='w')) return;
     const lx = pd.er ? dx+(pd.x||0) : (pd.x||0);
     const ly = pd.er ? dy+(pd.y||0) : (pd.y||0);
     const used = wires.some(w=>!w.bridge&&((w.fid===comp.id&&w.fp===i)||(w.tid===comp.id&&w.tp===i)));
@@ -2587,7 +2590,7 @@ function drawPorts(g, comp) {
       .textContent = portLabel;
     c.addEventListener('pointerdown', e => {
       if (mode==='wire') e.stopPropagation();
-      if (mode==='bridge') { e.stopPropagation(); onBridgePortDown(comp, i, pd); render(); return; }
+      if (mode==='bridge') { e.stopPropagation(); return; }
       onPortDown(comp, i, pd);
     });
     c.addEventListener('dblclick', e => {
@@ -2610,28 +2613,6 @@ function drawPorts(g, comp) {
     });
     c.addEventListener('pointerleave', hideTip);
   });
-
-  // Brücken-Modus: bei aneinandergrenzenden Klemmen liegen die winzigen e/w-Brücken-
-  // punkte exakt aufeinander (nicht klickbar unterscheidbar). Stattdessen je Hälfte
-  // der Klemme eine große, eindeutige Klickzone anbieten (bleibt innerhalb der
-  // eigenen Bauteil-Breite, überschneidet sich also nie mit der Nachbarklemme).
-  if (comp.def.bridgeable && mode==='bridge') {
-    const W=comp.def.w, H=comp.def.h;
-    const wPort=comp.def.ports.find(p=>p.dir==='w'), ePort=comp.def.ports.find(p=>p.dir==='e');
-    const y1=H*0.28, y2=H*0.72;
-    const zone = (port, x, w) => {
-      if (!port) return;
-      const pi = comp.def.ports.indexOf(port);
-      const isSel = !!(bridgeFrom && bridgeFrom.id===comp.id && bridgeFrom.p===pi);
-      const r = mk('rect',{x,y:y1,width:w,height:y2-y1,
-        fill:isSel?'rgba(245,158,11,0.4)':'rgba(99,102,241,0.16)',
-        stroke:isSel?'#f59e0b':'#818cf8','stroke-width':isSel?1.5:0.7,
-        cursor:'pointer','pointer-events':'all'},g);
-      r.addEventListener('pointerdown', e => { e.stopPropagation(); onBridgePortDown(comp, pi, port); render(); });
-    };
-    zone(wPort, 0, W/2);
-    zone(ePort, W/2, W-W/2);
-  }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -3047,6 +3028,27 @@ function render() {
       render();
     });
   });
+  // Brücken-Modus: ein gemeinsamer Übergangs-Punkt pro Klemmen-Grenze (statt je
+  // zwei einzelner, bei aneinanderstoßenden Klemmen exakt überlappender Punkte).
+  // Eine Kette aus N Klemmen hat N+1 Punkte; die beiden Klicks wählen den Bereich.
+  if (mode==='bridge') {
+    const railIds = [...new Set(comps.filter(c=>c.def.bridgeable && c.railId!=null).map(c=>c.railId))];
+    railIds.forEach(railId => {
+      bridgeChains(railId).forEach(chain => {
+        for (let b=0; b<=chain.length; b++) {
+          const [x,y] = bridgeBoundaryPoint(chain, b);
+          const isSel = !!(bridgeFrom && bridgeFrom.bIdx===b && bridgeFrom.chain.length===chain.length
+            && bridgeFrom.chain.every((k,i)=>k.id===chain[i].id));
+          const attrs = {cx:x,cy:y,r:isSel?6:5,
+            fill:isSel?'#f59e0b':'#fbbf24', stroke:isSel?'#92400e':'#b45309','stroke-width':1.5,
+            cursor:'pointer','pointer-events':'all'};
+          if (isSel) attrs.filter='url(#glow-y)';
+          const dot = mk('circle', attrs, CG);
+          dot.addEventListener('pointerdown', e => { e.stopPropagation(); onBridgeBoundaryDown(chain, b); render(); });
+        }
+      });
+    });
+  }
   // Simulation: Zustandsanzeigen über Bauteile legen
   if (simMode) {
     sorted.forEach(comp => {
@@ -3316,9 +3318,6 @@ function cancelWire() {
 }
 
 // ── Klemmenbrücke: mehrere benachbarte Klemmen ohne Ader direkt verbinden ──────
-function dirsCompatible(d1, d2) {
-  return d1===d2 || (d1==='e'&&d2==='w') || (d1==='w'&&d2==='e');
-}
 // Für eine Klemme im Verbund: welcher Port zeigt zur linken bzw. rechten Nachbar-Klemme?
 function bridgeSidePort(comp, wantDir, towardRight) {
   if (wantDir==='n' || wantDir==='s') {
@@ -3328,36 +3327,43 @@ function bridgeSidePort(comp, wantDir, towardRight) {
   const idx = comp.def.ports.findIndex(p=>p.dir===want);
   return idx>=0 ? idx : comp.def.ports.findIndex(p=>p.dir==='e'||p.dir==='w');
 }
-function onBridgePortDown(comp, pi, pd) {
-  if (!comp.def.bridgeable) { bridgeFrom=null; return; }
-  if (!bridgeFrom) { bridgeFrom={id:comp.id, p:pi}; return; }
-  if (bridgeFrom.id===comp.id && bridgeFrom.p===pi) { bridgeFrom=null; return; }
-  const fc = comps.find(c=>c.id===bridgeFrom.id);
-  if (!fc) { bridgeFrom=null; return; }
-  const fpd = fc.def.ports[bridgeFrom.p];
-  if (!dirsCompatible(fpd.dir, pd.dir) || fc.railId==null || fc.railId!==comp.railId) {
-    alert('Brücken sind nur zwischen Klemmen auf derselben Hutschiene und passender Seite möglich (oben/oben, unten/unten oder Brücken-Anschluss an Brücken-Anschluss).');
-    bridgeFrom=null; return;
-  }
-  // Kette aller brückbaren Klemmen auf der Schiene zwischen den beiden Klickpunkten (inkl.)
-  const railComps = comps.filter(c=>c.railId===fc.railId && c.def.bridgeable).sort((a,b)=>a.x-b.x);
-  const i1 = railComps.findIndex(c=>c.id===fc.id), i2 = railComps.findIndex(c=>c.id===comp.id);
-  if (i1<0 || i2<0) { bridgeFrom=null; return; }
-  const lo=Math.min(i1,i2), hi=Math.max(i1,i2);
-  const chain = railComps.slice(lo,hi+1);
-  for (let k=0;k<chain.length-1;k++) {
-    const bA=compBBox(chain[k]), bB=compBBox(chain[k+1]);
-    if (!(Math.abs(bA.x2-bB.x1)<=2 || Math.abs(bB.x2-bA.x1)<=2)) {
-      alert('Zwischen den Klemmen liegt eine Lücke oder ein anderes Bauteil — Brücke nicht möglich.');
-      bridgeFrom=null; return;
+// Zusammenhängende Ketten brückbarer Klemmen auf einer Hutschiene — nur direkt
+// aneinanderstoßende Klemmen zählen als eine Kette; Lücken/andere Bauteile trennen sie.
+function bridgeChains(railId) {
+  const list = comps.filter(c=>c.railId===railId && c.def.bridgeable).sort((a,b)=>a.x-b.x);
+  const chains=[]; let cur=[];
+  for (const c of list) {
+    if (cur.length) {
+      const bA=compBBox(cur[cur.length-1]), bB=compBBox(c);
+      if (Math.abs(bA.x2-bB.x1) > 2) { chains.push(cur); cur=[]; }
     }
+    cur.push(c);
   }
+  if (cur.length) chains.push(cur);
+  return chains;
+}
+// Weltkoordinate des Übergangs-Punkts b (0..chain.length) einer Klemmenkette.
+// b=0/N = äußerer Rand; dazwischen = gemeinsamer Berührpunkt zweier Klemmen.
+function bridgeBoundaryPoint(chain, b) {
+  const N=chain.length;
+  if (b<=0) return portWorld(chain[0], bridgeSidePort(chain[0],'w',false));
+  if (b>=N) return portWorld(chain[N-1], bridgeSidePort(chain[N-1],'e',true));
+  return portWorld(chain[b-1], bridgeSidePort(chain[b-1],'e',true));
+}
+// Klick auf einen Übergangs-Punkt: erster Klick merkt die Position, zweiter Klick
+// verbrückt alle Klemmen zwischen den beiden gewählten Punkten.
+function onBridgeBoundaryDown(chain, bIdx) {
+  const sameChain = c => c && c.length===chain.length && c.every((k,i)=>k.id===chain[i].id);
+  if (!bridgeFrom || !sameChain(bridgeFrom.chain)) { bridgeFrom={chain, bIdx}; return; }
+  if (bridgeFrom.bIdx===bIdx) { bridgeFrom=null; return; }
+  const lo=Math.min(bridgeFrom.bIdx,bIdx), hi=Math.max(bridgeFrom.bIdx,bIdx);
+  const span = chain.slice(lo,hi);
+  bridgeFrom=null;
+  if (span.length<2) return;
   pushHistory();
-  const wantDir = fpd.dir;
-  for (let k=0;k<chain.length-1;k++) {
-    const a=chain[k], b=chain[k+1];
-    const api = (a.id===fc.id) ? bridgeFrom.p : bridgeSidePort(a, wantDir, true);
-    const bpi = (b.id===comp.id) ? pi : bridgeSidePort(b, wantDir, false);
+  for (let k=0;k<span.length-1;k++) {
+    const a=span[k], b=span[k+1];
+    const api = bridgeSidePort(a,'e',true), bpi = bridgeSidePort(b,'w',false);
     if (api<0 || bpi<0) continue;
     const exists = wires.some(w=>
       (w.fid===a.id&&w.fp===api&&w.tid===b.id&&w.tp===bpi)||
@@ -3367,8 +3373,6 @@ function onBridgePortDown(comp, pi, pd) {
         color:'#9ca3af', label:'', cable:'single', bridge:true});
     }
   }
-  bridgeFrom=null;
-  render();
 }
 
 // ── Pointer events (Maus + Touch + Stift) ──────────────────────────────────
@@ -3855,6 +3859,7 @@ function setMode(m) {
   if (m!=='wire') cancelWire();
   if (m!=='bridge') bridgeFrom=null;
   if (m!=='frame') { frameDrawing=null; document.getElementById('fpreview').style.display='none'; }
+  render();
 }
 
 function pickWireColor(label, color, el) {
