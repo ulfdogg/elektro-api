@@ -2026,11 +2026,16 @@ function motorSpinGroup(g, cx, cy, r, col, cw, speed) {
 }
 
 function drawMotor(g, state) {
-  const running = state && state.running, dir = state && state.direction;
-  const bodyFill = running ? (dir==='cw'?'#dcfce7':'#fff7ed') : '#e0f2fe';
-  const bodyStroke = running ? (dir==='cw'?'#16a34a':'#f97316') : '#0284c7';
-  mk('circle',{cx:35,cy:40,r:28,fill:bodyFill,stroke:bodyStroke,'stroke-width':2.5,filter:'url(#shadow)'},g);
-  if (running) motorSpinGroup(g, 35, 40, 20, dir==='cw'?'#22c55e':'#f97316', dir==='cw', state.freqHz||undefined);
+  const running = state && state.running, dir = state && state.direction, cw = dir==='cw';
+  const fullPower = running && state.connection==='Δ';
+  let bodyFill='#e0f2fe', bodyStroke='#0284c7', sw=2.5;
+  if (running) {
+    if (fullPower) { bodyFill = cw?'#4ade80':'#fb923c'; bodyStroke = cw?'#15803d':'#c2410c'; sw=3.5; }
+    else           { bodyFill = cw?'#dcfce7':'#fff7ed'; bodyStroke = cw?'#86efac':'#fdba74'; sw=2.5; }
+  }
+  if (fullPower) mk('circle',{cx:35,cy:40,r:32,fill:bodyStroke,opacity:0.25,filter:'url(#glow-y)','pointer-events':'none'},g);
+  mk('circle',{cx:35,cy:40,r:28,fill:bodyFill,stroke:bodyStroke,'stroke-width':sw,filter:'url(#shadow)'},g);
+  if (running) motorSpinGroup(g, 35, 40, 20, cw?'#22c55e':'#f97316', cw, state.freqHz||undefined);
   mk('text',{x:35,y:47,'text-anchor':'middle','font-size':18,fill:'#0284c7','font-weight':'bold','pointer-events':'none'},g).textContent='M';
   mk('text',{x:35,y:60,'text-anchor':'middle','font-size':9,fill:'#0284c7','pointer-events':'none'},g).textContent='3~';
   mk('line',{x1:63,y1:40,x2:70,y2:40,stroke:'#16a34a','stroke-width':2},g);
@@ -2038,11 +2043,16 @@ function drawMotor(g, state) {
 
 function drawDahlander(g, state) {
   const W=80, H=80, cx=W/2, cy=H/2;
-  const running = state && state.running, dir = state && state.direction;
-  const bodyFill = running ? (dir==='cw'?'#dcfce7':'#fff7ed') : '#e0f2fe';
-  const bodyStroke = running ? (dir==='cw'?'#16a34a':'#f97316') : '#0284c7';
-  mk('circle',{cx,cy,r:34,fill:bodyFill,stroke:bodyStroke,'stroke-width':2.5,filter:'url(#shadow)'},g);
-  if (running) motorSpinGroup(g, cx, cy, 24, dir==='cw'?'#22c55e':'#f97316', dir==='cw', state.speed);
+  const running = state && state.running, dir = state && state.direction, cw = dir==='cw';
+  const fullPower = running && state.speed===2;
+  let bodyFill='#e0f2fe', bodyStroke='#0284c7', sw=2.5;
+  if (running) {
+    if (fullPower) { bodyFill = cw?'#4ade80':'#fb923c'; bodyStroke = cw?'#15803d':'#c2410c'; sw=3.5; }
+    else           { bodyFill = cw?'#dcfce7':'#fff7ed'; bodyStroke = cw?'#86efac':'#fdba74'; sw=2.5; }
+  }
+  if (fullPower) mk('circle',{cx,cy,r:38,fill:bodyStroke,opacity:0.25,filter:'url(#glow-y)','pointer-events':'none'},g);
+  mk('circle',{cx,cy,r:34,fill:bodyFill,stroke:bodyStroke,'stroke-width':sw,filter:'url(#shadow)'},g);
+  if (running) motorSpinGroup(g, cx, cy, 24, cw?'#22c55e':'#f97316', cw, state.speed);
   mk('text',{x:cx,y:cy+5,'text-anchor':'middle','font-size':16,fill:'#0284c7','font-weight':'bold','pointer-events':'none'},g).textContent='M';
   mk('text',{x:cx,y:cy+17,'text-anchor':'middle','font-size':7,fill:'#0369a1','pointer-events':'none'},g).textContent='2/4p 3~';
   mk('circle',{cx:cx-9,cy:cy-15,r:5,fill:'none',stroke:'#0284c7','stroke-width':1.5,'pointer-events':'none'},g);
