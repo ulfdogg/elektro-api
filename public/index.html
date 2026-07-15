@@ -3082,11 +3082,20 @@ function render() {
       // Motor/Dahlander: Laufzustand + Drehrichtung + Schaltung
       if ((comp.type==='motor'||comp.type==='dahlander') && ss.running) {
         const dir=ss.direction, conn=ss.connection, speed=ss.speed;
-        const col=dir==='cw'?'#22c55e':'#f97316';
+        // Volle Leistung (Dreieck bzw. Dahlander-Stufe 2) = kräftige, gesättigte Farbe + Glow;
+        // reduzierte Leistung (Stern bzw. Stufe 1) = dieselbe Farbfamilie, aber blass/gedämpft
+        // (bei Dahlander bedeutet conn==='Δ' die NIEDRIGE Stufe, also nur speed===2 zählt dort)
+        const fullPower = comp.type==='motor' ? (conn==='Δ') : (speed===2);
+        const col = dir==='cw'
+          ? (fullPower ? '#16a34a' : '#86efac')
+          : (fullPower ? '#ea580c' : '#fdba74');
         const arrow=dir==='cw'?'↻':'↺';
         const rl=dir==='cw'?'Rechtslauf':'Linkslauf';
+        if (fullPower) {
+          mk('circle',{cx,cy:bb.y1-17,r:10,fill:col,opacity:0.3,filter:'url(#glow-y)','pointer-events':'none'},CG);
+        }
         // Zeile 1: Drehrichtung
-        mk('text',{x:cx,y:bb.y1-14,'text-anchor':'middle','font-size':9,
+        mk('text',{x:cx,y:bb.y1-14,'text-anchor':'middle','font-size':fullPower?10:9,
           fill:col,'font-weight':'bold','pointer-events':'none'},CG).textContent=`${arrow} ${rl}`;
         // Zeile 2: Schaltungsart / Stufe
         let connLabel='';
@@ -4620,21 +4629,17 @@ function motorDir(p0,p1,p2){
   return cw?'cw':'ccw';
 }
 
-function motorCheck(pU1,pV1,pW1,pU2,pV2,pW2){
-  const bU1=pU1&ANY_L, bV1=pV1&ANY_L, bW1=pW1&ANY_L;
-  const bU2=pU2&ANY_L, bV2=pV2&ANY_L, bW2=pW2&ANY_L;
-  const dir=motorDir(pU1,pV1,pW1);
-  if(dir){
-    let conn=null;
-    if(bU1&&bU1===bW2&&bV1===bU2&&bW1===bV2) conn='Δ';
-    else if(!bU2&&!bV2&&!bW2) conn='Y';
-    return{dir,conn};
-  }
-  if(bU1===bV1&&bV1===bW1){
-    const rd=motorDir(pU2,pV2,pW2);
-    if(rd) return{dir:rd==='cw'?'ccw':'cw',conn:'Y↑'};
-  }
-  return{dir:null,conn:null};
+// Stern/Dreieck wird über ECHTE Knoten-Identität geprüft (nicht nur zufällig gleiche
+// Potentialwerte) — sonst würde z.B. "beide zufällig 0/nicht verbunden" fälschlich als
+// Stern durchgehen. root(...) = null bedeutet "kein Anschluss vorhanden".
+function motorConn(rootU1,rootV1,rootW1,rootU2,rootV2,rootW2){
+  if(rootU2==null||rootV2==null||rootW2==null) return null; // "2er" gar nicht verdrahtet → weder Stern noch Dreieck
+  // Dreieck: U2↔V1, V2↔W1, W2↔U1 jeweils derselbe Knoten (Wicklungsenden in Reihe)
+  if(rootU2===rootV1 && rootV2===rootW1 && rootW2===rootU1) return 'Δ';
+  // Stern: U2, V2, W2 alle derselbe Knoten (Sternpunkt) — und nicht zufällig an einer der drei Phasen selbst
+  if(rootU2===rootV2 && rootV2===rootW2 &&
+     rootU2!==rootU1 && rootU2!==rootV1 && rootU2!==rootW1) return 'Y';
+  return null; // falsch verdrahtet/offen — Motor darf nicht laufen
 }
 
 // --- Hauptfunktion ---
@@ -4807,10 +4812,12 @@ function simulate(comps, wires, simSt, _depth){
       if(lit){ activeLoadPorts.push(idx[c.id+':0']); activeLoadPorts.push(idx[c.id+':1']); }
     }
     if(c.type==='motor'){
-      const{dir,conn}=motorCheck(gp(c.id,0),gp(c.id,1),gp(c.id,2),
-                                  gp(c.id,4),gp(c.id,5),gp(c.id,6));
-      result[c.id]={...s,running:!!dir,direction:dir||null,connection:conn,speed:null};
-      if(dir) for(const pi of [0,1,2,4,5,6]) activeLoadPorts.push(idx[c.id+':'+pi]);
+      const dir=motorDir(gp(c.id,0),gp(c.id,1),gp(c.id,2));
+      const root=pi=>{ const p=idx[c.id+':'+pi]; return p!=null?uf.find(p):null; };
+      const conn=motorConn(root(0),root(1),root(2),root(4),root(5),root(6));
+      const running=!!(dir&&conn);
+      result[c.id]={...s,running,direction:running?dir:null,connection:conn,speed:null};
+      if(running) for(const pi of [0,1,2,4,5,6]) activeLoadPorts.push(idx[c.id+':'+pi]);
     }
     if(c.type==='dahlander'){
       let dir=motorDir(gp(c.id,0),gp(c.id,1),gp(c.id,2));
