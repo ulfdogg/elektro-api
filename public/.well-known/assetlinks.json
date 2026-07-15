@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "de.elektrosimulator.twa",
+    "sha256_cert_fingerprints": [
+      "2F:1C:39:93:26:A5:81:A4:6E:9A:50:BC:5C:82:C6:93:BF:BD:C2:B1:D9:04:83:26:30:AE:46:35:EE:2F:6C:64"
+    ]
+  }
+}]
