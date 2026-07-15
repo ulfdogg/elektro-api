@@ -1082,8 +1082,9 @@ const D = {
       {x:12,y:0,  dir:'n',color:'#8B4513',label:'L'},
       {x:30,y:0,  dir:'n',color:'#1a56db',label:'A1'},
       {x:48,y:0,  dir:'n',color:'#1a56db',label:'N'},
-      {x:20,y:140,dir:'s',color:'#9ca3af',label:'1'},
-      {x:40,y:140,dir:'s',color:'#9ca3af',label:'2'},
+      {x:12,y:140,dir:'s',color:'#9ca3af',label:'1'},
+      {x:30,y:140,dir:'s',color:'#f59e0b',label:'COM'},
+      {x:48,y:140,dir:'s',color:'#9ca3af',label:'2'},
     ],
     label:'Multifunktions-Zeitrelais'
   },
@@ -2370,16 +2371,20 @@ function drawZeitrelais(g, comp) {
     drag={zrComp:comp, startX:p.x, startDelay:delay};
   });
 
-  // ── untere Klemmen: potenzialfreier Wechsel-/Schließkontakt 1/2 ─────────
+  // ── untere Klemmen: Wechslerkontakt 1/COM/2 ─────────
   mk('rect',{x:2,y:H-24,width:W-4,height:14,fill:'#f1f5f9',stroke:'#cbd5e1','stroke-width':0.8,rx:2},g);
-  mk('text',{x:W/2,y:H-25,'text-anchor':'middle','font-size':3.5,fill:'#94a3b8'},g).textContent=on?'Kontakt: ZU':'Kontakt: OFFEN';
-  const cCols=['#9ca3af','#9ca3af'], cX=[20,40], cLbl=['1','2'];
-  for(let i=0;i<2;i++){
+  mk('text',{x:W/2,y:H-25,'text-anchor':'middle','font-size':3.5,fill:'#94a3b8'},g).textContent=on?'COM→1':'COM→2';
+  // Verbindungslinie COM zu aktivem Kontakt
+  mk('line',{x1:30,y1:H-10,x2:on?12:48,y2:H-10,stroke:on?'#22c55e':'#f59e0b','stroke-width':1.5,'stroke-dasharray':'1,1'},g);
+  const cX=[12,30,48], cLbl=['1','COM','2'];
+  for(let i=0;i<3;i++){
     const cx=cX[i];
+    const isActive=(i===1)||(on&&i===0)||(!on&&i===2);
+    const col=i===1?'#f59e0b':(isActive?'#22c55e':'#9ca3af');
     mk('rect',{x:cx-7,y:H-13,width:14,height:13,fill:'#374151',stroke:'#4b5563','stroke-width':0.7,rx:1.5},g);
     mk('circle',{cx,cy:H-6.5,r:4,fill:'#1f2937'},g);
-    mk('circle',{cx,cy:H-6.5,r:2.5,fill:on?'#22c55e':cCols[i],stroke:'rgba(255,255,255,0.35)','stroke-width':0.5},g);
-    mk('text',{x:cx,y:H-15,'text-anchor':'middle','font-size':4.5,fill:'#64748b'},g).textContent=cLbl[i];
+    mk('circle',{cx,cy:H-6.5,r:2.5,fill:col,stroke:'rgba(255,255,255,0.35)','stroke-width':0.5},g);
+    mk('text',{x:cx,y:H-15,'text-anchor':'middle','font-size':i===1?3.5:4.5,fill:'#64748b'},g).textContent=cLbl[i];
   }
 }
 
@@ -4879,7 +4884,8 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
         else     U(P(2),P(5));   // NC 21-22 geschlossen
         break;
       case'zeitrelais':
-        if(s.on) U(P(3),P(4));   // potenzialfreier Kontakt 1-2 geschlossen
+        if(s.on) U(P(4),P(3));   // Wechsler: COM-1 geschlossen (NO)
+        else     U(P(4),P(5));   // Wechsler: COM-2 geschlossen (NC)
         break;
       case'schuetz': {
         if(s.coilOn){ U(P(0),P(3)); U(P(1),P(4)); U(P(2),P(5)); }
