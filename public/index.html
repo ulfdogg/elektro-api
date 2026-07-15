@@ -514,6 +514,16 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
         </svg>
         <span class="s-label">Bewegungsmelder</span>
       </div>
+      <div class="s-item" ondragstart="sbDrag('frequenzumrichter')" draggable="true">
+        <svg width="34" height="46">
+          <rect x="1" y="1" width="32" height="44" fill="#eef2ff" stroke="#4338ca" stroke-width="1.2" rx="3"/>
+          <text x="17" y="12" text-anchor="middle" font-size="7" fill="#4338ca" font-weight="bold">FU</text>
+          <line x1="6" y1="26" x2="28" y2="26" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="20" cy="26" r="3.2" fill="#6366f1" stroke="#312e81" stroke-width="1"/>
+          <text x="17" y="38" text-anchor="middle" font-size="6" fill="#312e81" font-weight="bold">Hz</text>
+        </svg>
+        <span class="s-label">Frequenzumrichter</span>
+      </div>
 
       <div class="s-head">Steuerung</div>
       <div class="s-item" ondragstart="sbDrag('logo')" draggable="true">
@@ -971,6 +981,20 @@ const D = {
       {x:80,y:40, dir:'e',color:'#16a34a',label:'PE'},
     ],
     label:'Dahlandermotor'
+  },
+  frequenzumrichter: {
+    w:80, h:110, isDINDevice:true, te:4,
+    ports:[
+      {x:10,y:0,   dir:'n',color:'#111',   label:'L1'},
+      {x:30,y:0,   dir:'n',color:'#222',label:'L2'},
+      {x:50,y:0,   dir:'n',color:'#6b7280',label:'L3'},
+      {x:70,y:0,   dir:'n',color:'#16a34a',label:'PE'},
+      {x:10,y:110, dir:'s',color:'#111',   label:'U'},
+      {x:30,y:110, dir:'s',color:'#222',label:'V'},
+      {x:50,y:110, dir:'s',color:'#6b7280',label:'W'},
+      {x:70,y:110, dir:'s',color:'#16a34a',label:'PE'},
+    ],
+    label:'Frequenzumrichter'
   },
   schuetz: {
     w:80, h:150, isDINDevice:true, te:4,
@@ -1983,8 +2007,14 @@ function motorSpinGroup(g, cx, cy, r, col, cw, speed) {
     mk('circle',{cx:cx+ex,cy:cy+ey,r:3,fill:col,'fill-opacity':0.8},sg);
   }
   // Native SVG rotation – works everywhere incl. iOS Safari; no transform-origin issues
-  // Drehzahl-abhängige Dauer: Stufe 2 (hohe Drehzahl) spürbar schneller als Stufe 1
-  const dur = speed===2 ? '0.32s' : speed===1 ? '1.15s' : '0.7s';
+  // Drehzahl-abhängige Dauer: Stufe 2 (hohe Drehzahl) spürbar schneller als Stufe 1;
+  // bei Frequenzumrichter-Betrieb (speed > 2 = Hz-Wert) skaliert die Dauer stufenlos
+  // relativ zu 50 Hz (Netzfrequenz-Baseline = 0.7s Umdrehungsdauer)
+  let dur;
+  if (speed===2) dur='0.32s';
+  else if (speed===1) dur='1.15s';
+  else if (typeof speed==='number' && speed>2) dur=Math.max(0.15,Math.min(3,0.7*50/Math.max(5,speed))).toFixed(2)+'s';
+  else dur='0.7s';
   const at = document.createElementNS('http://www.w3.org/2000/svg','animateTransform');
   at.setAttribute('attributeName','transform');
   at.setAttribute('type','rotate');
@@ -2000,7 +2030,7 @@ function drawMotor(g, state) {
   const bodyFill = running ? (dir==='cw'?'#dcfce7':'#fff7ed') : '#e0f2fe';
   const bodyStroke = running ? (dir==='cw'?'#16a34a':'#f97316') : '#0284c7';
   mk('circle',{cx:35,cy:40,r:28,fill:bodyFill,stroke:bodyStroke,'stroke-width':2.5,filter:'url(#shadow)'},g);
-  if (running) motorSpinGroup(g, 35, 40, 20, dir==='cw'?'#22c55e':'#f97316', dir==='cw');
+  if (running) motorSpinGroup(g, 35, 40, 20, dir==='cw'?'#22c55e':'#f97316', dir==='cw', state.freqHz||undefined);
   mk('text',{x:35,y:47,'text-anchor':'middle','font-size':18,fill:'#0284c7','font-weight':'bold','pointer-events':'none'},g).textContent='M';
   mk('text',{x:35,y:60,'text-anchor':'middle','font-size':9,fill:'#0284c7','pointer-events':'none'},g).textContent='3~';
   mk('line',{x1:63,y1:40,x2:70,y2:40,stroke:'#16a34a','stroke-width':2},g);
@@ -2018,6 +2048,24 @@ function drawDahlander(g, state) {
   mk('circle',{cx:cx-9,cy:cy-15,r:5,fill:'none',stroke:'#0284c7','stroke-width':1.5,'pointer-events':'none'},g);
   mk('circle',{cx:cx+9,cy:cy-15,r:5,fill:'none',stroke:'#0284c7','stroke-width':1.5,'pointer-events':'none'},g);
   mk('line',{x1:cx-4,y1:cy-15,x2:cx+4,y2:cy-15,stroke:'#0284c7','stroke-width':1,'pointer-events':'none'},g);
+}
+
+function drawFrequenzumrichter(g, state) {
+  const W=80, H=110;
+  const freq = (state && state.freq!=null) ? state.freq : 50;
+  const enabled = !!(state && state._enabled);
+  mk('rect',{x:0,y:0,width:W,height:H,fill:'#eef2ff',stroke:'#4338ca','stroke-width':1.5,rx:4,filter:'url(#shadow)'},g);
+  mk('text',{x:W/2,y:15,'text-anchor':'middle','font-size':10,fill:'#4338ca','font-weight':'bold','pointer-events':'none'},g).textContent='FU';
+  mk('text',{x:W/2,y:25,'text-anchor':'middle','font-size':6,fill:'#6366f1','pointer-events':'none'},g).textContent='3~ Frequenzumrichter';
+  mk('circle',{cx:W-10,cy:10,r:3.5,fill:enabled?'#22c55e':'#94a3b8','pointer-events':'none'},g);
+  // Schieberegler für Frequenz-Sollwert (0–100 Hz)
+  const tx1=10, tx2=W-10, ty=58;
+  mk('line',{x1:tx1,y1:ty,x2:tx2,y2:ty,stroke:'#94a3b8','stroke-width':3,'stroke-linecap':'round','pointer-events':'none'},g);
+  mk('text',{x:tx1,y:ty-8,'font-size':6,fill:'#94a3b8','pointer-events':'none'},g).textContent='0';
+  mk('text',{x:tx2,y:ty-8,'text-anchor':'end','font-size':6,fill:'#94a3b8','pointer-events':'none'},g).textContent='100';
+  const knobX = tx1 + (tx2-tx1) * Math.max(0,Math.min(100,freq))/100;
+  mk('circle',{cx:knobX,cy:ty,r:7,fill:'#6366f1',stroke:'#312e81','stroke-width':1.5,cursor:'ew-resize',class:'fu-knob'},g);
+  mk('text',{x:W/2,y:ty+20,'text-anchor':'middle','font-size':11,fill:'#312e81','font-weight':'bold','pointer-events':'none'},g).textContent=Math.round(freq)+' Hz';
 }
 
 function drawSchuetz(g, state) {
@@ -2484,6 +2532,7 @@ function drawComp(g, comp) {
     case 'rcbo':            drawRCBO(g); break;
     case 'motor':           drawMotor(g, comp.state); break;
     case 'dahlander':       drawDahlander(g, comp.state); break;
+    case 'frequenzumrichter': drawFrequenzumrichter(g, comp.state); break;
     case 'schuetz':         drawSchuetz(g, comp.state); break;
     case 'stromstoss':      drawStromstoss(g, comp.state); break;
     case 'bewegungsmelder': drawBewegungsmelder(g); break;
@@ -2826,6 +2875,19 @@ function render() {
       });
     }
     drawPorts(g, comp);
+    // Frequenzumrichter: Schieberegler-Knopf zieh­bar machen
+    if (comp.type === 'frequenzumrichter') {
+      const knob = g.querySelector('.fu-knob');
+      if (knob) {
+        knob.addEventListener('pointerdown', e => {
+          e.stopPropagation();
+          if (e.pointerType !== 'mouse') SVG.setPointerCapture(e.pointerId);
+          if (!comp.state) comp.state = {};
+          const p = svgPt(e);
+          drag = { freqComp: comp, startX: p.x, startFreq: comp.state.freq != null ? comp.state.freq : 50 };
+        });
+      }
+    }
     // Label — draggable + dblclick-editable with overlap avoidance
     const hasCustomLabel = comp.label && comp.label !== comp.def.label;
     const isSel = sel===comp.id;
@@ -3057,6 +3119,7 @@ function render() {
           if(conn==='Y')      connLabel='Stern (Y)';
           else if(conn==='Δ') connLabel='Dreieck (Δ)';
         }
+        if(comp.type==='motor' && ss.freqHz) connLabel = (connLabel?connLabel+' · ':'')+Math.round(ss.freqHz)+' Hz';
         if(connLabel) mk('text',{x:cx,y:bb.y1-5,'text-anchor':'middle','font-size':8,
           fill:'#94a3b8','pointer-events':'none'},CG).textContent=connLabel;
       }
@@ -3468,6 +3531,13 @@ SVG.addEventListener('pointermove', e=>{
     if (drag.railResize) {
       const deltaTe = Math.round((p.x-drag.startX)/20);
       drag.railResize.teCount = Math.max(2, drag.startTe+deltaTe);
+      render(); return;
+    }
+    if (drag.freqComp) {
+      const c = drag.freqComp;
+      if (!c.state) c.state = {};
+      const df = p.x - drag.startX;
+      c.state.freq = Math.max(0, Math.min(100, Math.round(drag.startFreq + df*(100/60))));
       render(); return;
     }
     if (drag.midDrag) {
@@ -4166,8 +4236,10 @@ function runSim() {
       c.state.direction = ss.direction || null;
       c.state.connection = ss.connection || null;
       c.state.speed = ss.speed || null;
+      c.state.freqHz = ss.freqHz || null;
     }
     if (c.type === 'schuetz') c.state.coilOn = !!ss.coilOn;
+    if (c.type === 'frequenzumrichter') c.state._enabled = !!ss.enabled;
     if (['ls1','ls3','rcbo','rcd2','rcd4'].includes(c.type)) {
       c.state._on = ss.on !== false && !ss.tripped;
       c.state._tripped = !!ss.tripped;
@@ -4540,6 +4612,10 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
           U(P(8),P(9)); U(P(10),P(11));
         }
         break;
+      case'frequenzumrichter':
+        // PE ist ein durchgehender Schutzleiter (Eingang PE = Port 3, Ausgang PE = Port 7)
+        U(P(3),P(7));
+        break;
       case'bewegungsmelder':
         if(s.triggered) U(P(0),P(2)); break;
       case'cable3':
@@ -4620,6 +4696,23 @@ function simulate(comps, wires, simSt, _depth){
   }
 
   const gp=(id,pi)=>{const p=idx[id+':'+pi];return p!=null?pot[uf.find(p)]:0;};
+
+  // Frequenzumrichter: synthetisiert ein 3-Phasen-Ersatzfeld am Ausgang (U/V/W),
+  // sobald am Eingang alle 3 Phasen anliegen. Galvanisch getrennt vom Eingang
+  // (kein union), die Frequenz bestimmt nur die Motor-Drehzahl (Anzeige/Animation).
+  const fuOutFreq = new Map();
+  for(const c of comps){
+    if(c.type!=='frequenzumrichter') continue;
+    const enabled = !!((gp(c.id,0)&L1)&&(gp(c.id,1)&L2)&&(gp(c.id,2)&L3));
+    const freq = (c.state && c.state.freq!=null) ? c.state.freq : 50;
+    if(enabled && freq>0){
+      const outMap=[[4,L1],[5,L2],[6,L3]];
+      for(const [pi,bit] of outMap){
+        const p=idx[c.id+':'+pi];
+        if(p!=null){ const r=uf.find(p); pot[r]|=bit; fuOutFreq.set(r,freq); }
+      }
+    }
+  }
 
   // Rückkopplungen (Schütz, Stromstoß)
   const delta={};
@@ -4768,8 +4861,14 @@ function simulate(comps, wires, simSt, _depth){
       const root=pi=>{ const p=idx[c.id+':'+pi]; return p!=null?uf.find(p):null; };
       const conn=motorConn(root(0),root(1),root(2),root(4),root(5),root(6));
       const running=!!(dir&&conn);
-      result[c.id]={...s,running,direction:running?dir:null,connection:conn,speed:null};
+      const freqHz=running?(fuOutFreq.get(root(0))??null):null;
+      result[c.id]={...s,running,direction:running?dir:null,connection:conn,speed:null,freqHz};
       if(running) for(const pi of [0,1,2,4,5,6]) activeLoadPorts.push(idx[c.id+':'+pi]);
+    }
+    if(c.type==='frequenzumrichter'){
+      const enabled=!!((gp(c.id,0)&L1)&&(gp(c.id,1)&L2)&&(gp(c.id,2)&L3));
+      const freq=(c.state&&c.state.freq!=null)?c.state.freq:50;
+      result[c.id]={...s,enabled,freq};
     }
     if(c.type==='dahlander'){
       const root=pi=>{ const p=idx[c.id+':'+pi]; return p!=null?uf.find(p):null; };
