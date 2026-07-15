@@ -2,7 +2,7 @@
   "name": "ElektroSim – Elektroinstallations-Planer",
   "short_name": "ElektroSim",
   "description": "Aufbaupläne für Elektroinstallationen zeichnen und simulieren",
-  "start_url": "/index.html",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
