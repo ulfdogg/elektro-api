@@ -2587,7 +2587,7 @@ function drawPorts(g, comp) {
       .textContent = portLabel;
     c.addEventListener('pointerdown', e => {
       if (mode==='wire') e.stopPropagation();
-      if (mode==='bridge') { e.stopPropagation(); onBridgePortDown(comp, i, pd); return; }
+      if (mode==='bridge') { e.stopPropagation(); onBridgePortDown(comp, i, pd); render(); return; }
       onPortDown(comp, i, pd);
     });
     c.addEventListener('dblclick', e => {
@@ -2610,6 +2610,28 @@ function drawPorts(g, comp) {
     });
     c.addEventListener('pointerleave', hideTip);
   });
+
+  // Brücken-Modus: bei aneinandergrenzenden Klemmen liegen die winzigen e/w-Brücken-
+  // punkte exakt aufeinander (nicht klickbar unterscheidbar). Stattdessen je Hälfte
+  // der Klemme eine große, eindeutige Klickzone anbieten (bleibt innerhalb der
+  // eigenen Bauteil-Breite, überschneidet sich also nie mit der Nachbarklemme).
+  if (comp.def.bridgeable && mode==='bridge') {
+    const W=comp.def.w, H=comp.def.h;
+    const wPort=comp.def.ports.find(p=>p.dir==='w'), ePort=comp.def.ports.find(p=>p.dir==='e');
+    const y1=H*0.28, y2=H*0.72;
+    const zone = (port, x, w) => {
+      if (!port) return;
+      const pi = comp.def.ports.indexOf(port);
+      const isSel = !!(bridgeFrom && bridgeFrom.id===comp.id && bridgeFrom.p===pi);
+      const r = mk('rect',{x,y:y1,width:w,height:y2-y1,
+        fill:isSel?'rgba(245,158,11,0.4)':'rgba(99,102,241,0.16)',
+        stroke:isSel?'#f59e0b':'#818cf8','stroke-width':isSel?1.5:0.7,
+        cursor:'pointer','pointer-events':'all'},g);
+      r.addEventListener('pointerdown', e => { e.stopPropagation(); onBridgePortDown(comp, pi, port); render(); });
+    };
+    zone(wPort, 0, W/2);
+    zone(ePort, W/2, W-W/2);
+  }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
