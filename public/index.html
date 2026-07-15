@@ -1022,7 +1022,7 @@ const D = {
     label:'Frequenzumrichter'
   },
   schuetz: {
-    w:80, h:150, isDINDevice:true, te:4,
+    w:80, h:236, isDINDevice:true, te:4,
     ports:[
       {x:14,y:0,   dir:'n',color:'#111',   label:'1'},
       {x:40,y:0,   dir:'n',color:'#222',label:'3'},
@@ -1030,16 +1030,16 @@ const D = {
       {x:14,y:90,  dir:'s',color:'#111',   label:'2'},
       {x:40,y:90,  dir:'s',color:'#222',label:'4'},
       {x:66,y:90,  dir:'s',color:'#6b7280',label:'6'},
-      {x:0, y:102, dir:'w',color:'#374151',label:'13'},
-      {x:80,y:102, dir:'e',color:'#374151',label:'14'},
-      {x:0, y:114, dir:'w',color:'#374151',label:'21'},
-      {x:80,y:114, dir:'e',color:'#374151',label:'22'},
-      {x:0, y:126, dir:'w',color:'#374151',label:'31'},
-      {x:80,y:126, dir:'e',color:'#374151',label:'32'},
-      {x:0, y:138, dir:'w',color:'#374151',label:'43'},
-      {x:80,y:138, dir:'e',color:'#374151',label:'44'},
-      {x:20,y:150, dir:'s',color:'#3b82f6',label:'A1'},
-      {x:60,y:150, dir:'s',color:'#3b82f6',label:'A2'},
+      {x:0, y:116, dir:'w',color:'#374151',label:'13'},
+      {x:80,y:116, dir:'e',color:'#374151',label:'14'},
+      {x:0, y:140, dir:'w',color:'#374151',label:'21'},
+      {x:80,y:140, dir:'e',color:'#374151',label:'22'},
+      {x:0, y:164, dir:'w',color:'#374151',label:'31'},
+      {x:80,y:164, dir:'e',color:'#374151',label:'32'},
+      {x:0, y:188, dir:'w',color:'#374151',label:'43'},
+      {x:80,y:188, dir:'e',color:'#374151',label:'44'},
+      {x:20,y:236, dir:'s',color:'#3b82f6',label:'A1'},
+      {x:60,y:236, dir:'s',color:'#3b82f6',label:'A2'},
     ],
     label:'Schütz'
   },
@@ -2103,9 +2103,20 @@ function drawFrequenzumrichter(g, state) {
   mk('text',{x:W/2,y:ty+20,'text-anchor':'middle','font-size':11,fill:'#312e81','font-weight':'bold','pointer-events':'none'},g).textContent=Math.round(freq)+' Hz';
 }
 
-function drawSchuetz(g, state) {
+// IEC-Klemmenbezifferung für Hilfskontakte: Zehnerstelle = Kontaktposition (1-4),
+// Einerstelle 1/2 = Öffner (NC), 3/4 = Schließer (NO).
+function schuetzAuxPortLabel(comp, portIdx) {
+  const auxTypes = (comp.state && comp.state.auxTypes) || ['no','nc','nc','no'];
+  const pairIdx = Math.floor((portIdx-6)/2), isFirst = (portIdx-6)%2===0;
+  const pos = pairIdx+1, nc = auxTypes[pairIdx]==='nc';
+  return String(pos) + (nc ? (isFirst?'1':'2') : (isFirst?'3':'4'));
+}
+
+function drawSchuetz(g, comp) {
+  const state = comp.state || (comp.state = {});
   const W = 80;
-  const coilOn = !!(state && state.coilOn);
+  const coilOn = !!state.coilOn;
+  const auxTypes = state.auxTypes || (state.auxTypes = ['no','nc','nc','no']);
   const ph = ['#8B4513','#111','#6b7280']; // L1 braun, L2 schwarz, L3 grau
 
   // ── Hauptkontakt-Bereich (Eingang 1/3/5 oben, Ausgang 2/4/6 unten) ──
@@ -2150,40 +2161,48 @@ function drawSchuetz(g, state) {
   mk('text',{x:W/2,y:56,'text-anchor':'middle','font-size':9,fill:'#475569','font-weight':'bold','opacity':0.45},g).textContent='K';
 
   // ── Hilfskontakt-Bereich ──────────────────────────────────────────────
-  mk('rect',{x:0,y:93,width:W,height:51,fill:'#f8fafc',stroke:'#374151','stroke-width':1.5,rx:2},g);
-  mk('text',{x:W/2,y:101,'text-anchor':'middle','font-size':4,fill:'#94a3b8'},g).textContent='HILFSKONTAKTE';
+  const auxY=[116,140,164,188], auxTop=93, auxBottom=210;
+  mk('rect',{x:0,y:auxTop,width:W,height:auxBottom-auxTop,fill:'#f8fafc',stroke:'#374151','stroke-width':1.5,rx:2},g);
+  mk('text',{x:W/2,y:102,'text-anchor':'middle','font-size':5,fill:'#94a3b8'},g).textContent='HILFSKONTAKTE · antippen = NO/NC';
 
-  const auxD=[
-    {y:109,l1:'13',l2:'14',nc:false},
-    {y:118,l1:'21',l2:'22',nc:true},
-    {y:127,l1:'31',l2:'32',nc:true},
-    {y:136,l1:'43',l2:'44',nc:false}
-  ];
-  for(const a of auxD){
-    mk('text',{x:2,y:a.y+2,'font-size':5,fill:'#374151','font-weight':'bold'},g).textContent=a.l1;
-    mk('text',{x:W-2,y:a.y+2,'text-anchor':'end','font-size':5,fill:'#374151','font-weight':'bold'},g).textContent=a.l2;
-    const x1=12, x2=W-12, mx=(x1+x2)/2;
-    const closed = a.nc ? !coilOn : coilOn;
-    mk('line',{x1,y1:a.y,x2:x1+10,y2:a.y,stroke:'#374151','stroke-width':1.5},g);
-    mk('line',{x1:x2-10,y1:a.y,x2,y2:a.y,stroke:'#374151','stroke-width':1.5},g);
+  for(let i=0;i<4;i++){
+    const y=auxY[i], pos=i+1, nc=auxTypes[i]==='nc';
+    const l1=pos+(nc?'1':'3'), l2=pos+(nc?'2':'4');
+    // Zebra-Streifen je Zeile
+    if(i%2===1) mk('rect',{x:1,y:y-10,width:W-2,height:20,fill:'#eef1f5','pointer-events':'none'},g);
+    mk('text',{x:4,y:y-2,'font-size':6.5,fill:'#374151','font-weight':'bold','pointer-events':'none'},g).textContent=l1;
+    mk('text',{x:W-4,y:y-2,'text-anchor':'end','font-size':6.5,fill:'#374151','font-weight':'bold','pointer-events':'none'},g).textContent=l2;
+    const x1=17, x2=W-17, mx=(x1+x2)/2;
+    const closed = nc ? !coilOn : coilOn;
+    mk('line',{x1,y1:y,x2:x1+9,y2:y,stroke:'#374151','stroke-width':1.5,'pointer-events':'none'},g);
+    mk('line',{x1:x2-9,y1:y,x2,y2:y,stroke:'#374151','stroke-width':1.5,'pointer-events':'none'},g);
     if(closed){
-      mk('line',{x1:x1+10,y1:a.y+2,x2:x2-10,y2:a.y-2,stroke:'#374151','stroke-width':1.5,'stroke-linecap':'round'},g);
+      mk('line',{x1:x1+9,y1:y+2,x2:x2-9,y2:y-2,stroke:'#374151','stroke-width':1.5,'stroke-linecap':'round','pointer-events':'none'},g);
     } else {
-      mk('line',{x1:x1+10,y1:a.y+3,x2:mx,y2:a.y,'stroke':'#374151','stroke-width':1.5,'stroke-linecap':'round'},g);
+      mk('line',{x1:x1+9,y1:y+3,x2:mx,y2:y,'stroke':'#374151','stroke-width':1.5,'stroke-linecap':'round','pointer-events':'none'},g);
     }
-    // NC-Kennzeichnung (Schrägstrich)
-    if(a.nc) mk('line',{x1:mx-3,y1:a.y-4,x2:mx+3,y2:a.y+4,stroke:'#374151','stroke-width':1},g);
-    mk('text',{x:mx,y:a.y-3,'text-anchor':'middle','font-size':3.5,fill:'#9ca3af'},g).textContent=a.nc?'NC':'NO';
+    if(nc) mk('line',{x1:mx-3,y1:y-5,x2:mx+3,y2:y+3,stroke:'#374151','stroke-width':1,'pointer-events':'none'},g);
+    // NO/NC-Umschalter (jederzeit klickbar, unabhängig vom Modus)
+    const badge=mk('rect',{x:mx-11,y:y+4,width:22,height:9,rx:2,
+      fill:nc?'#fef3c7':'#dcfce7',stroke:nc?'#d97706':'#16a34a','stroke-width':0.8,
+      cursor:'pointer'},g);
+    mk('text',{x:mx,y:y+11,'text-anchor':'middle','font-size':6,'font-weight':'bold',
+      fill:nc?'#b45309':'#15803d','pointer-events':'none'},g).textContent=nc?'NC':'NO';
+    badge.addEventListener('pointerdown', e=>{
+      e.stopPropagation();
+      auxTypes[i]=nc?'no':'nc';
+      render();
+    });
   }
 
   // ── Spule ──────────────────────────────────────────────────────────────
   const sBg = coilOn ? '#1d4ed8' : '#dbeafe', sFg = coilOn ? '#93c5fd' : '#1d4ed8';
-  mk('rect',{x:8,y:143,width:W-16,height:13,fill:sBg,stroke:'#3b82f6','stroke-width':1.2,rx:2},g);
+  mk('rect',{x:8,y:216,width:W-16,height:16,fill:sBg,stroke:'#3b82f6','stroke-width':1.2,rx:2},g);
   for(let i=0;i<4;i++){
     const bx=22+i*8;
-    mk('path',{d:`M${bx},150 Q${bx+2},146 ${bx+4},150`,stroke:sFg,fill:'none','stroke-width':1.3},g);
+    mk('path',{d:`M${bx},224 Q${bx+2},219 ${bx+4},224`,stroke:sFg,fill:'none','stroke-width':1.3},g);
   }
-  mk('text',{x:W/2,y:153,'text-anchor':'middle','font-size':4,fill:sFg},g).textContent='A1  SPULE  A2';
+  mk('text',{x:W/2,y:229,'text-anchor':'middle','font-size':5,fill:sFg},g).textContent='A1  SPULE  A2';
 }
 
 function drawRCBO(g) {
@@ -2568,7 +2587,7 @@ function drawComp(g, comp) {
     case 'motor':           drawMotor(g, comp.state); break;
     case 'dahlander':       drawDahlander(g, comp.state); break;
     case 'frequenzumrichter': drawFrequenzumrichter(g, comp.state); break;
-    case 'schuetz':         drawSchuetz(g, comp.state); break;
+    case 'schuetz':         drawSchuetz(g, comp); break;
     case 'stromstoss':      drawStromstoss(g, comp.state); break;
     case 'bewegungsmelder': drawBewegungsmelder(g); break;
     case 'logo':             drawLogo(g); break;
@@ -2619,7 +2638,8 @@ function drawPorts(g, comp) {
       : {x:lx+off,y:ly+4,'text-anchor': pd.dir==='w'?'end':'start'};
     const rot=comp.rot||0;
     const counterRot=rot?` rotate(${-rot},${lx},${ly})`:'';
-    const portLabel = (comp.portLabels && comp.portLabels[i] != null) ? comp.portLabels[i] : pd.label;
+    const portLabel = (comp.portLabels && comp.portLabels[i] != null) ? comp.portLabels[i]
+      : (comp.type==='schuetz' && i>=6 && i<=13) ? schuetzAuxPortLabel(comp,i) : pd.label;
     mk('text',{...attr,'font-size':8,fill:pd.color||'#374151','pointer-events':'none',
       ...(counterRot?{transform:counterRot}:{})},g)
       .textContent = portLabel;
@@ -4650,14 +4670,17 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
         if(s.on) U(P(1),P(4));   // NO 13-14 geschlossen
         else     U(P(2),P(5));   // NC 21-22 geschlossen
         break;
-      case'schuetz':
-        if(s.coilOn){
-          U(P(0),P(3)); U(P(1),P(4)); U(P(2),P(5));
-          U(P(6),P(7)); U(P(12),P(13));
-        } else {
-          U(P(8),P(9)); U(P(10),P(11));
+      case'schuetz': {
+        if(s.coilOn){ U(P(0),P(3)); U(P(1),P(4)); U(P(2),P(5)); }
+        // Hilfskontakte: pro Position frei wählbar NO (schließt bei coilOn) oder NC (offen bei coilOn)
+        const auxTypes=(c.state&&c.state.auxTypes)||['no','nc','nc','no'];
+        const auxPairs=[[6,7],[8,9],[10,11],[12,13]];
+        for(let i=0;i<4;i++){
+          const closed = auxTypes[i]==='nc' ? !s.coilOn : !!s.coilOn;
+          if(closed) U(P(auxPairs[i][0]),P(auxPairs[i][1]));
         }
         break;
+      }
       case'frequenzumrichter':
         // PE ist ein durchgehender Schutzleiter (Eingang PE = Port 3, Ausgang PE = Port 7)
         U(P(3),P(7));
