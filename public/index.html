@@ -1022,24 +1022,24 @@ const D = {
     label:'Frequenzumrichter'
   },
   schuetz: {
-    w:80, h:236, isDINDevice:true, te:4,
+    w:140, h:130, isDINDevice:true, te:7,
     ports:[
-      {x:14,y:0,   dir:'n',color:'#111',   label:'1'},
-      {x:40,y:0,   dir:'n',color:'#222',label:'3'},
-      {x:66,y:0,   dir:'n',color:'#6b7280',label:'5'},
-      {x:14,y:90,  dir:'s',color:'#111',   label:'2'},
-      {x:40,y:90,  dir:'s',color:'#222',label:'4'},
-      {x:66,y:90,  dir:'s',color:'#6b7280',label:'6'},
-      {x:0, y:116, dir:'w',color:'#374151',label:'13'},
-      {x:80,y:116, dir:'e',color:'#374151',label:'14'},
-      {x:0, y:140, dir:'w',color:'#374151',label:'21'},
-      {x:80,y:140, dir:'e',color:'#374151',label:'22'},
-      {x:0, y:164, dir:'w',color:'#374151',label:'31'},
-      {x:80,y:164, dir:'e',color:'#374151',label:'32'},
-      {x:0, y:188, dir:'w',color:'#374151',label:'43'},
-      {x:80,y:188, dir:'e',color:'#374151',label:'44'},
-      {x:20,y:236, dir:'s',color:'#3b82f6',label:'A1'},
-      {x:60,y:236, dir:'s',color:'#3b82f6',label:'A2'},
+      {x:10, y:0,  dir:'n',color:'#111',   label:'1'},
+      {x:30, y:0,  dir:'n',color:'#222',label:'3'},
+      {x:50, y:0,  dir:'n',color:'#6b7280',label:'5'},
+      {x:10, y:90, dir:'s',color:'#111',   label:'2'},
+      {x:30, y:90, dir:'s',color:'#222',label:'4'},
+      {x:50, y:90, dir:'s',color:'#6b7280',label:'6'},
+      {x:70, y:0,  dir:'n',color:'#374151',label:'13'},
+      {x:70, y:90, dir:'s',color:'#374151',label:'14'},
+      {x:90, y:0,  dir:'n',color:'#374151',label:'21'},
+      {x:90, y:90, dir:'s',color:'#374151',label:'22'},
+      {x:110,y:0,  dir:'n',color:'#374151',label:'31'},
+      {x:110,y:90, dir:'s',color:'#374151',label:'32'},
+      {x:130,y:0,  dir:'n',color:'#374151',label:'43'},
+      {x:130,y:90, dir:'s',color:'#374151',label:'44'},
+      {x:55, y:130,dir:'s',color:'#3b82f6',label:'A1'},
+      {x:85, y:130,dir:'s',color:'#3b82f6',label:'A2'},
     ],
     label:'Schütz'
   },
@@ -2114,79 +2114,78 @@ function schuetzAuxPortLabel(comp, portIdx) {
 
 function drawSchuetz(g, comp) {
   const state = comp.state || (comp.state = {});
-  const W = 80;
+  const W = 140;
   const coilOn = !!state.coilOn;
   const auxTypes = state.auxTypes || (state.auxTypes = ['no','nc','nc','no']);
   const ph = ['#8B4513','#111','#6b7280']; // L1 braun, L2 schwarz, L3 grau
+  const colW = 20; // Spaltenbreite, einheitlich für alle 7 Kontakte
 
-  // ── Hauptkontakt-Bereich (Eingang 1/3/5 oben, Ausgang 2/4/6 unten) ──
+  // ── Kontakt-Bereich: 3 Lastkontakte + 4 Hilfskontakte nebeneinander,
+  // gleiche Höhe und Klemmenreihen oben/unten → gerade, einfache Verkabelung ──
   mk('rect',{x:0,y:0,width:W,height:92,fill:'#1e293b',stroke:'#0f172a','stroke-width':1.5,rx:3,filter:'url(#shadow)'},g);
-  // Phasentrennlinien
-  mk('line',{x1:Math.round(W/3),y1:4,x2:Math.round(W/3),y2:88,stroke:'#334155','stroke-width':0.8},g);
-  mk('line',{x1:Math.round(2*W/3),y1:4,x2:Math.round(2*W/3),y2:88,stroke:'#334155','stroke-width':0.8},g);
-
-  for(let i=0;i<3;i++){
-    const cx = Math.round(i*W/3 + W/6);
-
-    // Eingangs-Klemmenblock (1, 3, 5)
-    mk('rect',{x:cx-8,y:2,width:16,height:18,fill:'#374151',stroke:'#4b5563','stroke-width':0.7,rx:2},g);
-    mk('circle',{cx,cy:11,r:5,fill:'#111'},g);
-    mk('circle',{cx,cy:11,r:3,fill:ph[i]},g);
-    mk('text',{x:cx,y:24,'text-anchor':'middle','font-size':5.5,fill:'#94a3b8'},g).textContent=String(i*2+1);
-
-    // Festkontakt oben
-    mk('line',{x1:cx-7,y1:30,x2:cx+7,y2:30,stroke:'#64748b','stroke-width':2,'stroke-linecap':'round'},g);
-    // Festkontakt unten
-    mk('line',{x1:cx-7,y1:62,x2:cx+7,y2:62,stroke:'#64748b','stroke-width':2,'stroke-linecap':'round'},g);
-
-    if(coilOn){
-      // Kontaktbrücke geschlossen
-      mk('rect',{x:cx-5,y:31,width:10,height:31,fill:'#94a3b8',rx:1.5},g);
-      mk('line',{x1:cx-4,y1:35,x2:cx+4,y2:35,stroke:'#e2e8f0','stroke-width':1},g);
-      mk('line',{x1:cx-4,y1:58,x2:cx+4,y2:58,stroke:'#e2e8f0','stroke-width':1},g);
-    } else {
-      // Kontaktbrücke offen (schwebend in Mitte)
-      mk('rect',{x:cx-5,y:38,width:10,height:14,fill:'#475569',rx:1.5},g);
-      mk('line',{x1:cx-4,y1:41,x2:cx+4,y2:41,stroke:'#94a3b8','stroke-width':0.8},g);
-      mk('line',{x1:cx-4,y1:49,x2:cx+4,y2:49,stroke:'#94a3b8','stroke-width':0.8},g);
-    }
-
-    // Ausgangs-Klemmenblock (2, 4, 6)
-    mk('rect',{x:cx-8,y:72,width:16,height:18,fill:'#374151',stroke:'#4b5563','stroke-width':0.7,rx:2},g);
-    mk('circle',{cx,cy:81,r:5,fill:'#111'},g);
-    mk('circle',{cx,cy:81,r:3,fill:ph[i]},g);
-    mk('text',{x:cx,y:71,'text-anchor':'middle','font-size':5.5,fill:'#94a3b8'},g).textContent=String(i*2+2);
+  for(let i=1;i<7;i++){
+    const thick = i===3; // Trennlinie zwischen Last- und Hilfskontakten stärker
+    mk('line',{x1:i*colW,y1:4,x2:i*colW,y2:88,stroke:thick?'#475569':'#334155','stroke-width':thick?1.3:0.8},g);
   }
-  // Typkennzeichnung
-  mk('text',{x:W/2,y:56,'text-anchor':'middle','font-size':9,fill:'#475569','font-weight':'bold','opacity':0.45},g).textContent='K';
 
-  // ── Hilfskontakt-Bereich ──────────────────────────────────────────────
-  const auxY=[116,140,164,188], auxTop=93, auxBottom=210;
-  mk('rect',{x:0,y:auxTop,width:W,height:auxBottom-auxTop,fill:'#f8fafc',stroke:'#374151','stroke-width':1.5,rx:2},g);
-  mk('text',{x:W/2,y:102,'text-anchor':'middle','font-size':5,fill:'#94a3b8'},g).textContent='HILFSKONTAKTE · antippen = NO/NC';
+  // Lastkontakte (1/3/5 oben, 2/4/6 unten) — unverändert im Stil
+  for(let i=0;i<3;i++){
+    const cx = i*colW + colW/2;
+    mk('rect',{x:cx-7,y:2,width:14,height:16,fill:'#374151',stroke:'#4b5563','stroke-width':0.7,rx:1.5},g);
+    mk('circle',{cx,cy:10,r:4.2,fill:'#111'},g);
+    mk('circle',{cx,cy:10,r:2.6,fill:ph[i]},g);
+    mk('text',{x:cx,y:23,'text-anchor':'middle','font-size':5,fill:'#94a3b8'},g).textContent=String(i*2+1);
 
-  for(let i=0;i<4;i++){
-    const y=auxY[i], pos=i+1, nc=auxTypes[i]==='nc';
-    const l1=pos+(nc?'1':'3'), l2=pos+(nc?'2':'4');
-    // Zebra-Streifen je Zeile
-    if(i%2===1) mk('rect',{x:1,y:y-10,width:W-2,height:20,fill:'#eef1f5','pointer-events':'none'},g);
-    mk('text',{x:4,y:y-2,'font-size':6.5,fill:'#374151','font-weight':'bold','pointer-events':'none'},g).textContent=l1;
-    mk('text',{x:W-4,y:y-2,'text-anchor':'end','font-size':6.5,fill:'#374151','font-weight':'bold','pointer-events':'none'},g).textContent=l2;
-    const x1=17, x2=W-17, mx=(x1+x2)/2;
-    const closed = nc ? !coilOn : coilOn;
-    mk('line',{x1,y1:y,x2:x1+9,y2:y,stroke:'#374151','stroke-width':1.5,'pointer-events':'none'},g);
-    mk('line',{x1:x2-9,y1:y,x2,y2:y,stroke:'#374151','stroke-width':1.5,'pointer-events':'none'},g);
-    if(closed){
-      mk('line',{x1:x1+9,y1:y+2,x2:x2-9,y2:y-2,stroke:'#374151','stroke-width':1.5,'stroke-linecap':'round','pointer-events':'none'},g);
+    mk('line',{x1:cx-6,y1:30,x2:cx+6,y2:30,stroke:'#64748b','stroke-width':2,'stroke-linecap':'round'},g);
+    mk('line',{x1:cx-6,y1:62,x2:cx+6,y2:62,stroke:'#64748b','stroke-width':2,'stroke-linecap':'round'},g);
+    if(coilOn){
+      mk('rect',{x:cx-4,y:31,width:8,height:31,fill:'#94a3b8',rx:1.2},g);
+      mk('line',{x1:cx-3,y1:35,x2:cx+3,y2:35,stroke:'#e2e8f0','stroke-width':1},g);
+      mk('line',{x1:cx-3,y1:58,x2:cx+3,y2:58,stroke:'#e2e8f0','stroke-width':1},g);
     } else {
-      mk('line',{x1:x1+9,y1:y+3,x2:mx,y2:y,'stroke':'#374151','stroke-width':1.5,'stroke-linecap':'round','pointer-events':'none'},g);
+      mk('rect',{x:cx-4,y:38,width:8,height:14,fill:'#475569',rx:1.2},g);
+      mk('line',{x1:cx-3,y1:41,x2:cx+3,y2:41,stroke:'#94a3b8','stroke-width':0.8},g);
+      mk('line',{x1:cx-3,y1:49,x2:cx+3,y2:49,stroke:'#94a3b8','stroke-width':0.8},g);
     }
-    if(nc) mk('line',{x1:mx-3,y1:y-5,x2:mx+3,y2:y+3,stroke:'#374151','stroke-width':1,'pointer-events':'none'},g);
+    mk('rect',{x:cx-7,y:72,width:14,height:16,fill:'#374151',stroke:'#4b5563','stroke-width':0.7,rx:1.5},g);
+    mk('circle',{cx,cy:80,r:4.2,fill:'#111'},g);
+    mk('circle',{cx,cy:80,r:2.6,fill:ph[i]},g);
+    mk('text',{x:cx,y:70,'text-anchor':'middle','font-size':5,fill:'#94a3b8'},g).textContent=String(i*2+2);
+  }
+
+  // Hilfskontakte (13/14 … 43/44) — gleiche Spaltenhöhe, NO/NC farblich statt Phase,
+  // dünne Kontaktlinie statt Schaltbrücke, darunter antippbarer NO/NC-Umschalter
+  for(let i=0;i<4;i++){
+    const col=i+3, cx=col*colW+colW/2, pos=i+1, nc=auxTypes[i]==='nc';
+    const l1=pos+(nc?'1':'3'), l2=pos+(nc?'2':'4');
+    const dotCol = nc?'#d97706':'#16a34a';
+
+    mk('rect',{x:cx-7,y:2,width:14,height:16,fill:'#374151',stroke:'#4b5563','stroke-width':0.7,rx:1.5},g);
+    mk('circle',{cx,cy:10,r:4.2,fill:'#111'},g);
+    mk('circle',{cx,cy:10,r:2.6,fill:dotCol},g);
+    mk('text',{x:cx,y:23,'text-anchor':'middle','font-size':5,fill:'#94a3b8'},g).textContent=l1;
+
+    mk('line',{x1:cx-6,y1:30,x2:cx+6,y2:30,stroke:'#64748b','stroke-width':1.3,'stroke-linecap':'round'},g);
+    mk('line',{x1:cx-6,y1:62,x2:cx+6,y2:62,stroke:'#64748b','stroke-width':1.3,'stroke-linecap':'round'},g);
+    const closed = nc ? !coilOn : coilOn;
+    if(closed){
+      mk('line',{x1:cx-3,y1:33,x2:cx+3,y2:59,stroke:'#94a3b8','stroke-width':1.5,'stroke-linecap':'round'},g);
+    } else {
+      mk('line',{x1:cx-3,y1:33,x2:cx,y2:46,stroke:'#94a3b8','stroke-width':1.5,'stroke-linecap':'round'},g);
+    }
+    if(nc) mk('line',{x1:cx-4,y1:44,x2:cx+4,y2:52,stroke:'#64748b','stroke-width':1},g);
+
+    mk('rect',{x:cx-7,y:72,width:14,height:16,fill:'#374151',stroke:'#4b5563','stroke-width':0.7,rx:1.5},g);
+    mk('circle',{cx,cy:80,r:4.2,fill:'#111'},g);
+    mk('circle',{cx,cy:80,r:2.6,fill:dotCol},g);
+    mk('text',{x:cx,y:70,'text-anchor':'middle','font-size':5,fill:'#94a3b8'},g).textContent=l2;
+
     // NO/NC-Umschalter (jederzeit klickbar, unabhängig vom Modus)
-    const badge=mk('rect',{x:mx-11,y:y+4,width:22,height:9,rx:2,
+    const bw=18, bh=10;
+    const badge=mk('rect',{x:cx-bw/2,y:94,width:bw,height:bh,rx:2,
       fill:nc?'#fef3c7':'#dcfce7',stroke:nc?'#d97706':'#16a34a','stroke-width':0.8,
       cursor:'pointer'},g);
-    mk('text',{x:mx,y:y+11,'text-anchor':'middle','font-size':6,'font-weight':'bold',
+    mk('text',{x:cx,y:101.5,'text-anchor':'middle','font-size':6,'font-weight':'bold',
       fill:nc?'#b45309':'#15803d','pointer-events':'none'},g).textContent=nc?'NC':'NO';
     badge.addEventListener('pointerdown', e=>{
       e.stopPropagation();
@@ -2194,15 +2193,16 @@ function drawSchuetz(g, comp) {
       render();
     });
   }
+  mk('text',{x:W/2,y:110,'text-anchor':'middle','font-size':4,fill:'#94a3b8'},g).textContent='HILFSKONTAKTE · antippen = NO/NC';
 
   // ── Spule ──────────────────────────────────────────────────────────────
   const sBg = coilOn ? '#1d4ed8' : '#dbeafe', sFg = coilOn ? '#93c5fd' : '#1d4ed8';
-  mk('rect',{x:8,y:216,width:W-16,height:16,fill:sBg,stroke:'#3b82f6','stroke-width':1.2,rx:2},g);
-  for(let i=0;i<4;i++){
-    const bx=22+i*8;
-    mk('path',{d:`M${bx},224 Q${bx+2},219 ${bx+4},224`,stroke:sFg,fill:'none','stroke-width':1.3},g);
+  mk('rect',{x:40,y:112,width:60,height:16,fill:sBg,stroke:'#3b82f6','stroke-width':1.2,rx:2},g);
+  for(let i=0;i<5;i++){
+    const bx=50+i*8;
+    mk('path',{d:`M${bx},120 Q${bx+2},115 ${bx+4},120`,stroke:sFg,fill:'none','stroke-width':1.3},g);
   }
-  mk('text',{x:W/2,y:229,'text-anchor':'middle','font-size':5,fill:sFg},g).textContent='A1  SPULE  A2';
+  mk('text',{x:W/2,y:125,'text-anchor':'middle','font-size':5,fill:sFg},g).textContent='A1  SPULE  A2';
 }
 
 function drawRCBO(g) {
