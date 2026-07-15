@@ -6,15 +6,25 @@
 <script>
 (function(){
   document.documentElement.style.visibility='hidden';
-  fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
-    if(!d.user){ location.href='/login.html'; return; }
-    window._esUser=d.user;
+  function proceed(user){
+    window._esUser=user;
     document.documentElement.style.visibility='';
     document.addEventListener('DOMContentLoaded',()=>{
       const el=document.getElementById('es-username');
-      if(el) el.textContent=d.user.username;
+      if(el) el.textContent=user.username;
     });
-  }).catch(()=>{ location.href='/login.html'; });
+  }
+  fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
+    if(!d.user){ localStorage.removeItem('elektroplan_user'); location.href='/login.html'; return; }
+    localStorage.setItem('elektroplan_user', JSON.stringify(d.user));
+    proceed(d.user);
+  }).catch(()=>{
+    // Offline: mit zuletzt bekanntem Login weiterarbeiten (siehe index.html)
+    let cached=null;
+    try { cached=JSON.parse(localStorage.getItem('elektroplan_user')||'null'); } catch(e){}
+    if (cached) proceed(cached);
+    else location.href='/login.html';
+  });
 })();
 </script>
 <style>

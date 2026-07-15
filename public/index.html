@@ -5,22 +5,47 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Elektroinstallations-Planer</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ElektroSim">
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+}
+</script>
 <script>
 (function(){
   document.documentElement.style.visibility='hidden';
-  fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
-    if(!d.user){ location.href='/login.html'; return; }
-    window._esUser=d.user;
+  function proceed(user){
+    window._esUser=user;
     document.documentElement.style.visibility='';
     const applyUser=()=>{
       const el=document.getElementById('es-username');
-      if(el) el.textContent=d.user.username;
+      if(el) el.textContent=user.username;
       const admin=document.getElementById('es-admin-link');
-      if(admin && d.user.is_admin) admin.style.display='';
+      if(admin && user.is_admin) admin.style.display='';
     };
     if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',applyUser);
     else applyUser();
-  }).catch(()=>{ location.href='/login.html'; });
+  }
+  fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
+    if(!d.user){ localStorage.removeItem('elektroplan_user'); location.href='/login.html'; return; }
+    localStorage.setItem('elektroplan_user', JSON.stringify(d.user));
+    proceed(d.user);
+  }).catch(()=>{
+    // Kein Netzwerk (offline) — /api/me.php kann nicht geprüft werden. Mit dem
+    // zuletzt bekannten Login weiterarbeiten, damit die App als installierte
+    // PWA auch ohne Internetverbindung nutzbar bleibt.
+    let cached=null;
+    try { cached=JSON.parse(localStorage.getItem('elektroplan_user')||'null'); } catch(e){}
+    if (cached) proceed(cached);
+    else location.href='/login.html';
+  });
 })();
 </script>
 <script>
