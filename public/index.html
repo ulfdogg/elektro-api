@@ -182,6 +182,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <button class="t-btn" onclick="exportPNG()">🖼 PNG</button>
       <div class="t-sep"></div>
       <button class="t-btn" id="btn-sim" onclick="toggleSim()">⚡ Simulation</button>
+      <button class="t-btn" id="btn-probe" onclick="toggleProbeMode()" style="display:none" title="Zwei Kontaktpunkte antippen, um Spannung/Durchgang zu messen (400/230V TN-C-S)">🔍 Prüfer</button>
       <span class="t-hint" id="sim-hint" style="display:none;color:#fbbf24;font-size:10px;padding:0 8px;">SIM: Klick=schalten &nbsp;|&nbsp; CEE-Kupplung=Quelle &nbsp;|&nbsp; Leitungen gelb=unter Spannung</span>
       <span class="t-hint" id="normal-hint">Ziehen auf Hintergrund=Verschieben &nbsp;|&nbsp; <kbd>Shift</kbd>+Ziehen=Auswahlrahmen &nbsp;|&nbsp; <kbd>Entf</kbd>=Löschen &nbsp;|&nbsp; <kbd>Esc</kbd>=Abbruch &nbsp;|&nbsp; Doppelklick=Umbenennen &nbsp;|&nbsp; <kbd>Strg</kbd>+Klick=Mehrfachauswahl &nbsp;|&nbsp; Touch: Gedrückt halten=Mehrfachauswahl &nbsp;|&nbsp; 2 Finger=Zoom/Pan</span>
       <span id="place-hint" style="display:none;color:#34d399;font-size:12px;padding:0 8px;font-weight:600;"></span>
@@ -197,11 +198,6 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
         <div class="swatch" style="background:#6b7280" title="L3 grau" onclick="pickWireColor('L3','#6b7280',this)"></div>
         <div class="swatch" style="background:#ef4444" title="Rot" onclick="pickWireColor('Rot','#ef4444',this)"></div>
       </div>
-      <div class="t-sep"></div>
-      <span class="t-label">Kabel:</span>
-      <button class="t-btn" id="cbtn-3x15" onclick="pickCable('3x1.5')">3×1,5</button>
-      <button class="t-btn" id="cbtn-5x15" onclick="pickCable('5x1.5')">5×1,5</button>
-      <button class="t-btn" id="cbtn-5x25" onclick="pickCable('5x2.5')">5×2,5</button>
       <div class="t-sep"></div>
       <div id="comp-color-wrap">
         <span class="t-label">Bauteilfarbe:</span>
@@ -544,17 +540,6 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
         </svg>
         <span class="s-label">Zeitrelais (Multifunktion)</span>
       </div>
-      <div class="s-item" ondragstart="sbDrag('spannungspruefer')" draggable="true">
-        <svg width="26" height="40">
-          <rect x="1" y="1" width="24" height="24" fill="#f59e0b" stroke="#b45309" stroke-width="1.2" rx="4"/>
-          <rect x="4" y="5" width="18" height="9" fill="#111827" rx="1"/>
-          <text x="13" y="12" text-anchor="middle" font-size="5" fill="#4ade80" font-weight="bold" font-family="monospace">230V</text>
-          <path d="M15,25 L20,32 L6,32 L11,25 Z" fill="#f59e0b" stroke="#b45309" stroke-width="0.8"/>
-          <line x1="9" y1="32" x2="9" y2="38" stroke="#ef4444" stroke-width="2" stroke-linecap="round"/>
-          <line x1="17" y1="32" x2="17" y2="38" stroke="#1f2937" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <span class="s-label">Spannungsprüfer (2-polig)</span>
-      </div>
       <div class="s-item" ondragstart="sbDrag('bewegungsmelder')" draggable="true">
         <svg width="36" height="36">
           <rect x="0" y="0" width="36" height="36" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" rx="5"/>
@@ -745,7 +730,8 @@ let longPressTimer = null, longPressStartX = 0, longPressStartY = 0, longPressCo
 let mode = 'select', drag = null, wfrom = null;
 let lastClickId = null, lastClickTime = 0; // for double-click detection
 // ── Simulation ────────────────────────────────────────────────────────────────
-let simMode = false, simState = {}, portPotMap = {}, activeWireIds = new Set();
+let simMode = false, simState = {}, portPotMap = {}, portNodeMap = {}, activeWireIds = new Set();
+let probeMode = false, probeA = null, probeB = null;
 let wpts = [];   // committed waypoints during wire drawing
 let wHfirst = true; // H-first (true) or V-first (false) for next bend
 let frameDrawing = null;
@@ -1079,14 +1065,6 @@ const D = {
       {x:40,y:140,dir:'s',color:'#9ca3af',label:'2'},
     ],
     label:'Multifunktions-Zeitrelais'
-  },
-  spannungspruefer: { // Zweipoliger Spannungsprüfer (Messwerkzeug, hochohmig)
-    w:40, h:70,
-    ports:[
-      {x:14,y:70, dir:'s',color:'#ef4444',label:'P1'},
-      {x:26,y:70, dir:'s',color:'#1f2937',label:'P2'},
-    ],
-    label:'Spannungsprüfer'
   },
   stromstoss: { // 2 DIN-Einheiten = 40px
     w:40, h:72, isDINDevice:true, te:2,
@@ -2370,32 +2348,6 @@ function drawZeitrelais(g, comp) {
   }
 }
 
-function drawSpannungspruefer(g, comp) {
-  const s = comp.state || (comp.state = {});
-  const W=40, H=70;
-  const active = !!s._sprConnected;
-  const reading = s._sprReading || '– – –';
-  const durchgang = !!s._sprContinuity;
-
-  // ── Gehäuse ──────────────────────────────────────────────────────────────
-  mk('rect',{x:2,y:2,width:W-4,height:44,fill:'#f59e0b',stroke:'#b45309','stroke-width':1.5,rx:6,filter:'url(#shadow)'},g);
-  // Display
-  mk('rect',{x:5,y:7,width:W-10,height:15,fill:'#111827',stroke:'#374151','stroke-width':0.8,rx:2},g);
-  mk('text',{x:W/2,y:17.5,'text-anchor':'middle','font-size':6,'font-weight':'bold','font-family':'monospace',
-    fill: !active?'#4b5563' : durchgang?'#4ade80' : '#facc15'},g).textContent=reading;
-  // Wechselspannungs-Symbol
-  mk('path',{d:'M9,29 Q12,24 15,29 T21,29',stroke:'#78350f',fill:'none','stroke-width':1.1},g);
-  mk('path',{d:'M23,29 Q26,24 29,29 T35,29',stroke:'#78350f',fill:'none','stroke-width':1.1},g);
-  mk('text',{x:W/2,y:41,'text-anchor':'middle','font-size':3.6,fill:'#78350f','font-weight':'bold'},g).textContent='2-POL PRÜFER';
-  // Griffverjüngung
-  mk('path',{d:`M7,46 L${W-7},46 L${W/2+6},58 L${W/2-6},58 Z`,fill:'#f59e0b',stroke:'#b45309','stroke-width':1},g);
-  // Messspitzen (rot / schwarz)
-  mk('line',{x1:14,y1:58,x2:14,y2:68,stroke:'#ef4444','stroke-width':2.5,'stroke-linecap':'round'},g);
-  mk('line',{x1:26,y1:58,x2:26,y2:68,stroke:'#1f2937','stroke-width':2.5,'stroke-linecap':'round'},g);
-  mk('circle',{cx:14,cy:69,r:1.8,fill:'#ef4444'},g);
-  mk('circle',{cx:26,cy:69,r:1.8,fill:'#1f2937'},g);
-}
-
 function drawStromstoss(g, state) {
   // Eltako-Style FSS12: A1/13/21 oben, A2/14/22 unten
   const W=40, H=72;
@@ -2750,7 +2702,6 @@ function drawComp(g, comp) {
     case 'schuetz':         drawSchuetz(g, comp); break;
     case 'stromstoss':      drawStromstoss(g, comp.state); break;
     case 'zeitrelais':      drawZeitrelais(g, comp); break;
-    case 'spannungspruefer': drawSpannungspruefer(g, comp); break;
     case 'bewegungsmelder': drawBewegungsmelder(g); break;
     case 'logo':             drawLogo(g); break;
     case 'aufputzgehaeuse1':
@@ -2806,6 +2757,7 @@ function drawPorts(g, comp) {
       ...(counterRot?{transform:counterRot}:{})},g)
       .textContent = portLabel;
     c.addEventListener('pointerdown', e => {
+      if (probeMode && simMode) { e.stopPropagation(); onProbePortDown(comp, i); return; }
       if (mode==='wire') e.stopPropagation();
       if (mode==='bridge') { e.stopPropagation(); return; }
       onPortDown(comp, i, pd);
@@ -2951,9 +2903,8 @@ function render() {
       mk('rect',{x:mx-22,y:my-13,width:44,height:14,fill:'#fff',rx:2,opacity:0.92},WG);
       mk('text',{x:mx,y:my-2,'text-anchor':'middle','font-size':9,fill:'#1f2937','font-weight':'bold'},WG).textContent=lbl;
     } else {
-      const probeAttrs = w.probe ? {'stroke-dasharray':'4,3'} : {};
       mk('path',{d,fill:'none',stroke:w.color,'stroke-width':strokeW,
-        'stroke-linecap':'round','stroke-linejoin':'round',opacity:isSel?1:0.85,...probeAttrs},WG);
+        'stroke-linecap':'round','stroke-linejoin':'round',opacity:isSel?1:0.85},WG);
     }
 
     // Selected wire: draw segment handles + vertex dots
@@ -3446,6 +3397,35 @@ function render() {
     });
   }
 
+  // Spannungsprüfer-Werkzeug: angetippte Messpunkte + Messwert einblenden
+  if (simMode && probeMode) {
+    const drawProbeDot = (pt, col) => {
+      const pc = comps.find(c=>c.id===pt.id);
+      if (!pc) return null;
+      const [x,y] = portWorld(pc, pt.p);
+      mk('circle',{cx:x,cy:y,r:9,fill:col,opacity:0.25,filter:'url(#glow-y)','pointer-events':'none'},CG);
+      mk('circle',{cx:x,cy:y,r:5.5,fill:'none',stroke:col,'stroke-width':2.5,'pointer-events':'none'},CG);
+      return [x,y];
+    };
+    const p1 = probeA ? drawProbeDot(probeA, '#ef4444') : null;
+    const p2 = probeB ? drawProbeDot(probeB, '#1f2937') : null;
+    if (p1 && p2) {
+      const mx=(p1[0]+p2[0])/2, my=(p1[1]+p2[1])/2;
+      mk('line',{x1:p1[0],y1:p1[1],x2:p2[0],y2:p2[1],stroke:'#f59e0b','stroke-width':1.5,
+        'stroke-dasharray':'4,3',opacity:0.7,'pointer-events':'none'},CG);
+      const pn1=portNodeMap[probeA.id+':'+probeA.p], pn2=portNodeMap[probeB.id+':'+probeB.p];
+      const pp1=portPotMap[probeA.id+':'+probeA.p]||0, pp2=portPotMap[probeB.id+':'+probeB.p]||0;
+      const continuity = pn1!=null && pn1===pn2;
+      const reading = window.ElektroSim ? ElektroSim.sprReading(pp1, pp2, continuity) : '?';
+      const rw = reading.length*6.2+16;
+      mk('rect',{x:mx-rw/2,y:my-19,width:rw,height:16,rx:3,fill:'#111827',stroke:'#f59e0b','stroke-width':1,'pointer-events':'none'},CG);
+      mk('text',{x:mx,y:my-7,'text-anchor':'middle','font-size':9,'font-weight':'bold','font-family':'monospace',
+        fill: continuity ? '#4ade80' : '#facc15','pointer-events':'none'},CG).textContent=reading;
+    } else if (p1) {
+      mk('text',{x:p1[0],y:p1[1]-15,'text-anchor':'middle','font-size':8,fill:'#ef4444','font-weight':'bold','pointer-events':'none'},CG).textContent='2. Punkt antippen…';
+    }
+  }
+
   // Multi-selection highlights
   selSet.forEach(id => {
     const c = comps.find(c=>c.id===id);
@@ -3511,16 +3491,6 @@ function onPortDown(comp, pi, pd) {
     if (!exists) {
       pushHistory();
       const newWire = {id:++wid, fid:wfrom.id,fp:wfrom.p, tid:comp.id,tp:pi, color:wcolor, label:wlabel, cable:wcable};
-      // Messleitung eines Spannungsprüfers: verbindet nicht elektrisch (kein Kurzschluss
-      // durchs "Anklemmen"), sondern liest nur den Zustand am berührten Punkt aus.
-      const fromComp = comps.find(cc=>cc.id===wfrom.id);
-      const fromIsProbe = !!(fromComp && fromComp.type==='spannungspruefer');
-      const toIsProbe = comp.type==='spannungspruefer';
-      if (fromIsProbe || toIsProbe) {
-        newWire.probe = true;
-        newWire.color = (fromIsProbe ? wfrom.p : pi) === 0 ? '#ef4444' : '#1f2937';
-        newWire.label = '';
-      }
       if (wpts.length > 0) {
         // Build full manual path: start → waypoints → final corner → end
         const pts = [[wfrom.x, wfrom.y], ...wpts];
@@ -4084,7 +4054,6 @@ function setMode(m) {
 
 function pickWireColor(label, color, el) {
   wlabel=label; wcolor=color; wcable='single';
-  document.querySelectorAll('#cbtn-3x15,#cbtn-5x15,#cbtn-5x25').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.tb-row:last-child .swatch:not(#comp-color-wrap .swatch)').forEach(s=>s.classList.remove('active'));
   el.classList.add('active');
   // Wenn eine Ader ausgewählt ist, Farbe direkt ändern
@@ -4106,15 +4075,6 @@ function pickCompColor(color, el) {
 }
 
 function pickColor(label, color, el) { pickWireColor(label, color, el); }
-
-function pickCable(type) {
-  wcable=type;
-  document.querySelectorAll('.tb-row:last-child .swatch').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('#cbtn-3x15,#cbtn-5x15,#cbtn-5x25').forEach(b=>b.classList.remove('active'));
-  const btnId = 'cbtn-' + type.replace(/\./g,'');
-  const btn = document.getElementById(btnId);
-  if (btn) btn.classList.add('active');
-}
 
 function updateCompColorPanel() {
   const wrap = document.getElementById('comp-color-wrap');
@@ -4223,7 +4183,6 @@ function buildSaveData() {
                  color:w.color, label:w.label, cable:w.cable||'single'};
       if (w.manual && w.pts) { o.pts=w.pts; o.manual=true; }
       if (w.bridge) o.bridge = true;
-      if (w.probe) o.probe = true;
       return o;
     }),
     frames: frames.map(f=>({...f})),
@@ -4416,6 +4375,7 @@ function hideTip() { TIP.style.display='none'; }
 function toggleSim() {
   simMode = !simMode;
   document.getElementById('btn-sim').classList.toggle('active', simMode);
+  document.getElementById('btn-probe').style.display = simMode ? '' : 'none';
   document.getElementById('sim-hint').style.display = simMode ? 'inline' : 'none';
   document.getElementById('normal-hint').style.display = simMode ? 'none' : 'inline';
   if (simMode) {
@@ -4424,11 +4384,29 @@ function toggleSim() {
     runSim();
   } else {
     portPotMap = {};
+    portNodeMap = {};
     activeWireIds = new Set();
+    probeMode = false; probeA = null; probeB = null;
+    document.getElementById('btn-probe').classList.remove('active');
     // lit-State der Lampen zurücksetzen
-    comps.forEach(c => { if (c.state) { delete c.state.lit; delete c.state.running; delete c.state.direction; delete c.state.connection; delete c.state.speed; delete c.state.coilOn; delete c.state._on; delete c.state._tripped; delete c.state._zrOn; delete c.state._zrWaiting; delete c.state._sprConnected; delete c.state._sprContinuity; delete c.state._sprReading; } c._zr = null; });
+    comps.forEach(c => { if (c.state) { delete c.state.lit; delete c.state.running; delete c.state.direction; delete c.state.connection; delete c.state.speed; delete c.state.coilOn; delete c.state._on; delete c.state._tripped; delete c.state._zrOn; delete c.state._zrWaiting; } c._zr = null; });
     render();
   }
+}
+
+function toggleProbeMode() {
+  if (!simMode) return;
+  probeMode = !probeMode;
+  probeA = null; probeB = null;
+  document.getElementById('btn-probe').classList.toggle('active', probeMode);
+  render();
+}
+
+function onProbePortDown(comp, pi) {
+  if (probeA && probeB) { probeA = null; probeB = null; }
+  if (!probeA) { probeA = {id:comp.id, p:pi}; }
+  else if (!(probeA.id===comp.id && probeA.p===pi)) { probeB = {id:comp.id, p:pi}; }
+  render();
 }
 
 function initSimState() {
@@ -4457,6 +4435,7 @@ function runSim() {
     let res = ElektroSim.simulate(comps, wires, simState);
     simState = res.state;
     portPotMap = res.portPot || {};
+    portNodeMap = res.portNode || {};
     activeWireIds = new Set(res.activeWires || []);
 
     // Schutzgeräte auslösen bei Fehlern (LS/FI rausfliegen)
@@ -4472,9 +4451,10 @@ function runSim() {
       res = ElektroSim.simulate(comps, wires, simState);
       simState = res.state;
       portPotMap = res.portPot || {};
+      portNodeMap = res.portNode || {};
       activeWireIds = new Set(res.activeWires || []);
     }
-  } catch(e) { console.error('Sim:', e); portPotMap = {}; activeWireIds = new Set(); }
+  } catch(e) { console.error('Sim:', e); portPotMap = {}; portNodeMap = {}; activeWireIds = new Set(); }
   // lit-State in comp.state übernehmen
   comps.forEach(c => {
     const ss = simState[c.id];
@@ -4495,11 +4475,6 @@ function runSim() {
     }
     if (c.type === 'stromstoss') c.state._on = !!ss.on;
     if (c.type === 'zeitrelais') { c.state._zrOn = !!ss.on; c.state._zrWaiting = !!ss.waiting; }
-    if (c.type === 'spannungspruefer') {
-      c.state._sprConnected = !!ss.connected;
-      c.state._sprContinuity = !!ss.continuity;
-      c.state._sprReading = ss.reading || '– – –';
-    }
     if (c.type === 'serienschalter') { c.state._on1 = ss.on1 !== false; c.state._on2 = ss.on2 !== false; }
     if (c.type === 'logo') {
       for (let qi = 1; qi <= 8; qi++) c.state['q'+qi] = !!ss['q'+qi];
@@ -4811,8 +4786,7 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
     }
   };
 
-  // Messleitungen (Spannungsprüfer) sind hochohmig — sie verbinden elektrisch nichts.
-  for(const w of wires) if(!w.probe) U(G(w.fid,w.fp), G(w.tid,w.tp), w.id);
+  for(const w of wires) U(G(w.fid,w.fp), G(w.tid,w.tp), w.id);
 
   for(const c of comps){
     const s=simSt[c.id]||{};
@@ -5251,25 +5225,6 @@ function simulate(comps, wires, simSt, _depth){
       const freq=(c.state&&c.state.freq!=null)?c.state.freq:50;
       result[c.id]={...s,enabled,freq};
     }
-    if(c.type==='spannungspruefer'){
-      // Zielpunkt je Messspitze: das andere Ende der (nicht-leitenden) Messleitung
-      const targetOf = pi => {
-        const w = wires.find(w=>w.probe && ((w.fid===c.id&&w.fp===pi)||(w.tid===c.id&&w.tp===pi)));
-        if(!w) return null;
-        return w.fid===c.id ? {id:w.tid,p:w.tp} : {id:w.fid,p:w.fp};
-      };
-      const t1=targetOf(0), t2=targetOf(1);
-      let connected=false, continuity=false, reading='– – –';
-      if(t1 && t2){
-        const p1=idx[t1.id+':'+t1.p], p2=idx[t2.id+':'+t2.p];
-        if(p1!=null && p2!=null){
-          connected=true;
-          continuity = uf.find(p1)===uf.find(p2);
-          reading = sprReading(pot[uf.find(p1)], pot[uf.find(p2)], continuity);
-        }
-      }
-      result[c.id]={...s,connected,continuity,reading};
-    }
     if(c.type==='dahlander'){
       const root=pi=>{ const p=idx[c.id+':'+pi]; return p!=null?uf.find(p):null; };
       const rootU1=root(0),rootV1=root(1),rootW1=root(2);
@@ -5386,18 +5341,21 @@ function simulate(comps, wires, simSt, _depth){
     }
   }
 
-  // Port-Potential-Map
-  const portPot={};
+  // Port-Potential-Map + Port-Knoten-Map (für Durchgangsprüfung: echte Knoten-Identität
+  // statt nur gleiches Potential — zwei unverbundene, zufällig gleiche Adern sollen nicht
+  // fälschlich als Durchgang gelten)
+  const portPot={}, portNode={};
   for(const c of comps)
     for(let i=0;i<c.def.ports.length;i++){
       const p=idx[c.id+':'+i];
       portPot[c.id+':'+i]=p!=null?pot[uf.find(p)]:0;
+      portNode[c.id+':'+i]=p!=null?uf.find(p):null;
     }
 
-  return{state:result, portPot, faults, activeWires:[...activeWires]};
+  return{state:result, portPot, portNode, faults, activeWires:[...activeWires]};
 }
 
-global.ElektroSim={simulate, ANY_L, POT_N:N, POT_PE:PE, POT_L1:L1, POT_L2:L2, POT_L3:L3};
+global.ElektroSim={simulate, sprReading, ANY_L, POT_N:N, POT_PE:PE, POT_L1:L1, POT_L2:L2, POT_L3:L3};
 })(window);
 </script>
 
