@@ -136,7 +136,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <div class="t-sep"></div>
       <button class="t-btn active" id="btn-sel" onclick="setMode('select')">▶ Auswählen</button>
       <button class="t-btn" id="btn-wire" onclick="setMode('wire')">〰 Kabel</button>
-      <button class="t-btn" id="btn-bridge" onclick="setMode('bridge')" title="Klemme anklicken, dann eine weitere (auch mehrere Klemmen dazwischen) auf derselben Seite anklicken">🌉 Brücke</button>
+      <button class="t-btn" id="btn-bridge" onclick="setMode('bridge')" title="Auf den Punkt zwischen zwei angrenzenden Klemmen klicken, um die Brücke zu setzen bzw. wieder zu entfernen">🌉 Brücke</button>
       <button class="t-btn" id="btn-frame" onclick="setMode('frame')">▭ Rahmen</button>
       <button class="t-btn" id="btn-text" onclick="setMode('text')">T Text</button>
       <div class="t-sep"></div>
@@ -691,7 +691,7 @@ let history = [], spaceDown = false;
 let activePointers = new Map(); // pointerId→{x,y} for multi-touch tracking
 let pinchState = null; // {dist,vpX,vpY,vpZ,mx,my} on pinch start
 let longPressTimer = null, longPressStartX = 0, longPressStartY = 0, longPressComp = null;
-let mode = 'select', drag = null, wfrom = null, bridgeFrom = null;
+let mode = 'select', drag = null, wfrom = null;
 let lastClickId = null, lastClickTime = 0; // for double-click detection
 // ── Simulation ────────────────────────────────────────────────────────────────
 let simMode = false, simState = {}, portPotMap = {}, activeWireIds = new Set();
@@ -3038,24 +3038,20 @@ function render() {
       render();
     });
   });
-  // Brücken-Modus: ein gemeinsamer Übergangs-Punkt pro Klemmen-Grenze (statt je
-  // zwei einzelner, bei aneinanderstoßenden Klemmen exakt überlappender Punkte).
-  // Eine Kette aus N Klemmen hat N+1 Punkte; die beiden Klicks wählen den Bereich.
+  // Brücken-Modus: ein einziger Punkt genau an der Berührstelle zweier Klemmen
+  // (statt je einem Punkt pro Klemme, die sich bei Nachbarschaft exakt überlagern).
+  // Ein Klick auf diesen Punkt setzt bzw. entfernt direkt die Brücke zwischen den
+  // beiden angrenzenden Klemmen — keine Mehrfachauswahl nötig.
   if (mode==='bridge') {
     const railIds = [...new Set(comps.filter(c=>c.def.bridgeable && c.railId!=null).map(c=>c.railId))];
     railIds.forEach(railId => {
-      bridgeChains(railId).forEach(chain => {
-        for (let b=0; b<=chain.length; b++) {
-          const [x,y] = bridgeBoundaryPoint(chain, b);
-          const isSel = !!(bridgeFrom && bridgeFrom.bIdx===b && bridgeFrom.chain.length===chain.length
-            && bridgeFrom.chain.every((k,i)=>k.id===chain[i].id));
-          const attrs = {cx:x,cy:y,r:isSel?6:5,
-            fill:isSel?'#f59e0b':'#fbbf24', stroke:isSel?'#92400e':'#b45309','stroke-width':1.5,
-            cursor:'pointer','pointer-events':'all'};
-          if (isSel) attrs.filter='url(#glow-y)';
-          const dot = mk('circle', attrs, CG);
-          dot.addEventListener('pointerdown', e => { e.stopPropagation(); onBridgeBoundaryDown(chain, b); render(); });
-        }
+      bridgeGaps(railId).forEach(gap => {
+        const [x,y] = bridgeGapPoint(gap);
+        const bridged = !!bridgeGapWire(gap);
+        const dot = mk('circle',{cx:x,cy:y,r:bridged?6:5,
+          fill:bridged?'#f59e0b':'#fff', stroke:'#b45309','stroke-width':2,
+          cursor:'pointer','pointer-events':'all'},CG);
+        dot.addEventListener('pointerdown', e => { e.stopPropagation(); toggleBridgeGap(gap); render(); });
       });
     });
   }
@@ -3337,51 +3333,39 @@ function bridgeSidePort(comp, wantDir, towardRight) {
   const idx = comp.def.ports.findIndex(p=>p.dir===want);
   return idx>=0 ? idx : comp.def.ports.findIndex(p=>p.dir==='e'||p.dir==='w');
 }
-// Zusammenhängende Ketten brückbarer Klemmen auf einer Hutschiene — nur direkt
-// aneinanderstoßende Klemmen zählen als eine Kette; Lücken/andere Bauteile trennen sie.
-function bridgeChains(railId) {
+// Direkt aneinanderstoßende Klemmenpaare auf einer Hutschiene — an jeder Berühr-
+// stelle kann genau eine Brücke zwischen den beiden Nachbarn gesetzt werden.
+function bridgeGaps(railId) {
   const list = comps.filter(c=>c.railId===railId && c.def.bridgeable).sort((a,b)=>a.x-b.x);
-  const chains=[]; let cur=[];
-  for (const c of list) {
-    if (cur.length) {
-      const bA=compBBox(cur[cur.length-1]), bB=compBBox(c);
-      if (Math.abs(bA.x2-bB.x1) > 2) { chains.push(cur); cur=[]; }
-    }
-    cur.push(c);
+  const gaps=[];
+  for (let i=0;i<list.length-1;i++) {
+    const a=list[i], b=list[i+1];
+    const bA=compBBox(a), bB=compBBox(b);
+    if (Math.abs(bA.x2-bB.x1)<=2) gaps.push({a,b});
   }
-  if (cur.length) chains.push(cur);
-  return chains;
+  return gaps;
 }
-// Weltkoordinate des Übergangs-Punkts b (0..chain.length) einer Klemmenkette.
-// b=0/N = äußerer Rand; dazwischen = gemeinsamer Berührpunkt zweier Klemmen.
-function bridgeBoundaryPoint(chain, b) {
-  const N=chain.length;
-  if (b<=0) return portWorld(chain[0], bridgeSidePort(chain[0],'w',false));
-  if (b>=N) return portWorld(chain[N-1], bridgeSidePort(chain[N-1],'e',true));
-  return portWorld(chain[b-1], bridgeSidePort(chain[b-1],'e',true));
+function bridgeGapPoint(gap) {
+  return portWorld(gap.a, bridgeSidePort(gap.a,'e',true));
 }
-// Klick auf einen Übergangs-Punkt: erster Klick merkt die Position, zweiter Klick
-// verbrückt alle Klemmen zwischen den beiden gewählten Punkten.
-function onBridgeBoundaryDown(chain, bIdx) {
-  const sameChain = c => c && c.length===chain.length && c.every((k,i)=>k.id===chain[i].id);
-  if (!bridgeFrom || !sameChain(bridgeFrom.chain)) { bridgeFrom={chain, bIdx}; return; }
-  if (bridgeFrom.bIdx===bIdx) { bridgeFrom=null; return; }
-  const lo=Math.min(bridgeFrom.bIdx,bIdx), hi=Math.max(bridgeFrom.bIdx,bIdx);
-  const span = chain.slice(lo,hi);
-  bridgeFrom=null;
-  if (span.length<2) return;
+function bridgeGapWire(gap) {
+  const api=bridgeSidePort(gap.a,'e',true), bpi=bridgeSidePort(gap.b,'w',false);
+  return wires.find(w=>
+    (w.fid===gap.a.id&&w.fp===api&&w.tid===gap.b.id&&w.tp===bpi)||
+    (w.tid===gap.a.id&&w.tp===api&&w.fid===gap.b.id&&w.fp===bpi));
+}
+// Klick auf den gemeinsamen Punkt: setzt die Brücke, oder entfernt sie wieder,
+// falls dort schon eine liegt.
+function toggleBridgeGap(gap) {
+  const existing = bridgeGapWire(gap);
   pushHistory();
-  for (let k=0;k<span.length-1;k++) {
-    const a=span[k], b=span[k+1];
-    const api = bridgeSidePort(a,'e',true), bpi = bridgeSidePort(b,'w',false);
-    if (api<0 || bpi<0) continue;
-    const exists = wires.some(w=>
-      (w.fid===a.id&&w.fp===api&&w.tid===b.id&&w.tp===bpi)||
-      (w.tid===a.id&&w.tp===api&&w.fid===b.id&&w.fp===bpi));
-    if (!exists) {
-      wires.push({id:++wid, fid:a.id, fp:api, tid:b.id, tp:bpi,
-        color:'#9ca3af', label:'', cable:'single', bridge:true});
-    }
+  if (existing) {
+    wires = wires.filter(w=>w!==existing);
+  } else {
+    const api=bridgeSidePort(gap.a,'e',true), bpi=bridgeSidePort(gap.b,'w',false);
+    if (api<0 || bpi<0) return;
+    wires.push({id:++wid, fid:gap.a.id, fp:api, tid:gap.b.id, tp:bpi,
+      color:'#9ca3af', label:'', cable:'single', bridge:true});
   }
 }
 
@@ -3867,7 +3851,6 @@ function setMode(m) {
   document.getElementById('btn-text').classList.toggle('active',m==='text');
   SVG.style.cursor = (m==='wire'||m==='bridge'||m==='frame'||m==='text')?'crosshair':'grab';
   if (m!=='wire') cancelWire();
-  if (m!=='bridge') bridgeFrom=null;
   if (m!=='frame') { frameDrawing=null; document.getElementById('fpreview').style.display='none'; }
   render();
 }
