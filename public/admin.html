@@ -233,7 +233,7 @@ async function loadProject(id, type) {
     // Open project in appropriate editor
     if (type === 'fbd') {
       // Open LOGO! editor and load project
-      const editor = window.open('/logo-editor.html', '_blank');
+      const editor = window.open('/logo-editor', '_blank');
       editor.addEventListener('load', () => {
         editor.postMessage({action: 'loadAdminProject', data: data}, '*');
       });

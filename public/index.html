@@ -4760,7 +4760,7 @@ function openLogoEditor(comp) {
   if (!comp.state) comp.state = {};
   if (!comp.program || Array.isArray(comp.program)) comp.program = { blocks:[], conns:[] };
   try { localStorage.setItem('logo-prog-'+comp.id, JSON.stringify(comp.program)); } catch(e){}
-  const win = window.open('logo-editor.html?id=' + comp.id, 'logo-editor-' + comp.id);
+  const win = window.open('logo-editor?id=' + comp.id, 'logo-editor-' + comp.id);
   if (win) win.focus();
   setupLogoChannel(comp);
   startLogoSimBroadcast();
