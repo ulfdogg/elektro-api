@@ -737,6 +737,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let comps = [], wires = [], cid = 0, wid = 0;
+let logoChannels = {}, logoSimTimer = null; // compId → { ch, comp } — SPS-Editor-Verknüpfungen
 let frames = [], texts = [], frid = 0, txid = 0;
 let sel = null, selFrame = null, selText = null, selWire = null;
 let selSet = new Set(), selBox = null;
@@ -4323,6 +4324,11 @@ function loadPlan() {
 }
 
 function importPlan(data) {
+  // Alte SPS-Editor-Verknüpfungen kappen: sie zeigen noch auf Bauteile des bisherigen
+  // Plans. Ohne das würde ein neu geladener Plan mit zufällig gleicher Bauteil-ID
+  // (IDs starten in jedem Plan wieder bei 1) den Editor am FALSCHEN, längst nicht mehr
+  // existierenden Bauteil-Objekt hängen lassen.
+  for (const lcId of Object.keys(logoChannels)) { try { logoChannels[lcId].ch.close(); } catch(e){} delete logoChannels[lcId]; }
   comps = (data.comps||[]).map(c=>{
     const def = D[c.type]; if (!def) return null;
     return {...c, def, state:c.state||{}};
@@ -4750,9 +4756,6 @@ SVG.addEventListener('touchcancel', ()=>{
 
 // ── LOGO! FUB Programmiereditor ─────────────────────────────────────────────
 // ── LOGO! FBD Editor — neuer Tab + BroadcastChannel ──────────────────────────
-const logoChannels = {};  // compId → { ch, comp }
-let logoSimTimer = null;
-
 function openLogoEditor(comp) {
   if (!comp.state) comp.state = {};
   if (!comp.program || Array.isArray(comp.program)) comp.program = { blocks:[], conns:[] };
