@@ -197,6 +197,12 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
         <div class="swatch" style="background:#222" title="L2 schwarz" onclick="pickWireColor('L2','#222',this)"></div>
         <div class="swatch" style="background:#6b7280" title="L3 grau" onclick="pickWireColor('L3','#6b7280',this)"></div>
         <div class="swatch" style="background:#ef4444" title="Rot" onclick="pickWireColor('Rot','#ef4444',this)"></div>
+        <div class="swatch" style="background:#f97316" title="Orange" onclick="pickWireColor('Orange','#f97316',this)"></div>
+        <div class="swatch" style="background:#eab308" title="Gelb" onclick="pickWireColor('Gelb','#eab308',this)"></div>
+        <div class="swatch" style="background:#7c3aed" title="Lila" onclick="pickWireColor('Lila','#7c3aed',this)"></div>
+        <div class="swatch" style="background:#ec4899" title="Pink" onclick="pickWireColor('Pink','#ec4899',this)"></div>
+        <div class="swatch" style="background:#06b6d4" title="Türkis" onclick="pickWireColor('Türkis','#06b6d4',this)"></div>
+        <div class="swatch" style="background:#f8fafc" title="Weiß" onclick="pickWireColor('Weiß','#cbd5e1',this)"></div>
       </div>
       <div class="t-sep"></div>
       <div id="comp-color-wrap">
@@ -2540,12 +2546,18 @@ function drawAufputzgehaeuse(g, comp) {
 function drawDrucktaster(g, comp) {
   const color = comp.state && comp.state.color ? comp.state.color : '#6b7280';
   const pressed = simMode && !!(simState[comp.id]?.pressed);
+  // Leuchtdrucktaster: Kappe leuchtet, wenn der verknüpfte LED-Kontakt (gleiches
+  // Gehäuse/gleiche Reihe) unter Spannung steht.
+  const ledSib = comp.housingId!=null ? comps.find(a=>a.housingId===comp.housingId && a.rowIdx===comp.rowIdx && a.type==='kontakt_led') : null;
+  const lit = simMode && !!(ledSib && ledSib.state && ledSib.state.lit);
   // Outer ring (surround)
   mk('circle',{cx:25,cy:25,r:24,fill:'#b0b8c3',stroke:'#7b8794','stroke-width':1.5},g);
   mk('circle',{cx:25,cy:25,r:20,fill:'#9ca3af',stroke:'#6b7280','stroke-width':1},g);
+  if (lit) mk('circle',{cx:25,cy:25,r:19,fill:color,opacity:0.55,filter:'url(#glow-y)','pointer-events':'none'},g);
   // Button cap — slightly smaller and darker when pressed
   const r=pressed?12:15;
   mk('circle',{cx:25,cy:25,r:r,fill:pressed?'#374151':color,stroke:'rgba(0,0,0,0.35)','stroke-width':1},g);
+  if (lit && !pressed) mk('circle',{cx:25,cy:25,r:r-3,fill:'#fff',opacity:0.35,'pointer-events':'none'},g);
   if(!pressed) mk('circle',{cx:25,cy:25,r:15,fill:'url(#btngrad)',opacity:0.45},g);
 }
 
@@ -2557,8 +2569,12 @@ function drawKontakt(g, comp) {
   mk('rect',{x:0,y:0,width:W,height:H,fill:'#e5e7eb',stroke:'#9ca3af','stroke-width':1,rx:2},g);
   // Electrical symbol in center
   if (isLED) {
-    mk('circle',{cx:W/2,cy:H/2,r:4,fill:'#eab308',stroke:'#d97706','stroke-width':0.5},g);
-    mk('circle',{cx:W/2,cy:H/2,r:2,fill:'#fef08a'},g);
+    const lit = simMode && !!(comp.state && comp.state.lit);
+    const sib = comp.housingId!=null ? comps.find(a=>a.housingId===comp.housingId && a.rowIdx===comp.rowIdx && a.type==='drucktaster') : null;
+    const ledCol = (sib && sib.state && sib.state.color) ? sib.state.color : '#eab308';
+    if (lit) mk('circle',{cx:W/2,cy:H/2,r:6,fill:ledCol,opacity:0.55,filter:'url(#glow-y)','pointer-events':'none'},g);
+    mk('circle',{cx:W/2,cy:H/2,r:4,fill:lit?ledCol:'#9ca3af',stroke:lit?ledCol:'#6b7280','stroke-width':0.5},g);
+    mk('circle',{cx:W/2,cy:H/2,r:2,fill:lit?'#fff':'#d1d5db',opacity:lit?0.9:0.6},g);
   } else if (isNC) {
     mk('line',{x1:8,y1:5,x2:22,y2:5,stroke:'#374151','stroke-width':1.5,'stroke-linecap':'round'},g);
     mk('line',{x1:7,y1:3,x2:23,y2:11,stroke:'#374151','stroke-width':1.5,'stroke-linecap':'round'},g);
@@ -4496,7 +4512,7 @@ function runSim() {
   comps.forEach(c => {
     const ss = simState[c.id];
     if (!ss) return;
-    if (c.type === 'lampe' || c.type === 'spot') c.state.lit = !!ss.lit;
+    if (c.type === 'lampe' || c.type === 'spot' || c.type === 'kontakt_led') c.state.lit = !!ss.lit;
     if (c.type === 'motor' || c.type === 'dahlander') {
       c.state.running = !!ss.running;
       c.state.direction = ss.direction || null;
@@ -5249,7 +5265,7 @@ function simulate(comps, wires, simSt, _depth){
   const activeLoadPorts=[]; // Ports aktiver Verbraucher, deren Rückweg zur Quelle den Stromfad markiert
   for(const c of comps){
     const s=simSt[c.id]||{};
-    if(c.type==='lampe'||c.type==='spot'){
+    if(c.type==='lampe'||c.type==='spot'||c.type==='kontakt_led'){
       const p0=gp(c.id,0), p1=gp(c.id,1);
       const lit=!!((p0&ANY_L)&&(p1&N) || (p1&ANY_L)&&(p0&N));
       result[c.id]={...s, lit};
