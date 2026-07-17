@@ -14,7 +14,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ElektroSim">
 <script>
-if ('serviceWorker' in navigator) {
+// OFFLINE_APP: wird beim Bauen der Offline-APK auf true gesetzt (Build-Skript ersetzt
+// diese Zeile). Schaltet Login, Cloud-Speichern und den Server-Update-Check komplett ab,
+// damit die App ganz ohne Netzwerk/Account läuft (lokale Projektverwaltung statt Cloud).
+const OFFLINE_APP = false;
+</script>
+<script>
+if (!OFFLINE_APP && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 }
 </script>
@@ -29,10 +35,23 @@ if ('serviceWorker' in navigator) {
       if(el) el.textContent=user.username;
       const admin=document.getElementById('es-admin-link');
       if(admin && user.is_admin) admin.style.display='';
+      if(OFFLINE_APP){
+        // Kein Login/Cloud in der Offline-App: Account-Leiste ausblenden, Cloud-Buttons
+        // auf die lokale Projektverwaltung umbiegen.
+        if(el) el.style.display='none';
+        const logoutBtn=document.getElementById('es-logout-btn');
+        if(logoutBtn) logoutBtn.style.display='none';
+        if(admin) admin.style.display='none';
+        const saveBtn=document.getElementById('es-cloud-save-btn');
+        if(saveBtn){ saveBtn.textContent='📁 Projekt speichern'; saveBtn.setAttribute('onclick','localProjectSave()'); }
+        const loadBtn=document.getElementById('es-cloud-load-btn');
+        if(loadBtn){ loadBtn.textContent='📁 Projekte'; loadBtn.setAttribute('onclick','localProjectLoad()'); }
+      }
     };
     if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',applyUser);
     else applyUser();
   }
+  if (OFFLINE_APP) { proceed({username:'', is_admin:false}); return; }
   fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
     if(!d.user){ localStorage.removeItem('elektroplan_user'); location.href='/login.html'; return; }
     localStorage.setItem('elektroplan_user', JSON.stringify(d.user));
@@ -49,8 +68,8 @@ if ('serviceWorker' in navigator) {
 })();
 </script>
 <script>
-// Auto-Reload wenn Datei auf Server geändert wurde
-(function(){
+// Auto-Reload wenn Datei auf Server geändert wurde (in der Offline-App irrelevant)
+if (!OFFLINE_APP) (function(){
   let v=null;
   setInterval(()=>fetch('/version.txt?_='+Date.now()).then(r=>r.text()).then(t=>{
     if(v===null){v=t.trim();return;}
@@ -184,13 +203,13 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <span style="flex:1"></span>
       <span id="es-username" style="font-size:11px;color:#9ca3af;padding:0 6px;white-space:nowrap"></span>
       <a id="es-admin-link" href="/admin.html" class="t-btn" style="display:none;text-decoration:none;color:#93c5fd">🛠 Admin</a>
-      <button class="t-btn" onclick="doLogout()" style="color:#f87171;margin-left:4px">⏻ Abmelden</button>
+      <button class="t-btn" id="es-logout-btn" onclick="doLogout()" style="color:#f87171;margin-left:4px">⏻ Abmelden</button>
     </div>
     <div class="tb-row">
       <button class="t-btn" onclick="savePlan()">💾 Datei</button>
       <button class="t-btn" onclick="loadPlan()">📂 Datei</button>
-      <button class="t-btn" onclick="serverSave()">☁ Speichern</button>
-      <button class="t-btn" onclick="serverLoad()">☁ Laden</button>
+      <button class="t-btn" id="es-cloud-save-btn" onclick="serverSave()">☁ Speichern</button>
+      <button class="t-btn" id="es-cloud-load-btn" onclick="serverLoad()">☁ Laden</button>
       <button class="t-btn" onclick="exportPNG()">🖼 PNG</button>
       <div class="t-sep"></div>
       <button class="t-btn" id="btn-sim" onclick="toggleSim()">⚡ Simulation</button>
@@ -4456,7 +4475,15 @@ let _asTimer = null;
 function scheduleAutoSave() {
   clearTimeout(_asTimer);
   _asTimer = setTimeout(() => {
-    try { localStorage.setItem('elektroplan_v1', JSON.stringify(buildSaveData())); } catch(e) {}
+    const data = buildSaveData();
+    try { localStorage.setItem('elektroplan_v1', JSON.stringify(data)); } catch(e) {}
+    // Ist gerade ein lokal gespeichertes Projekt geöffnet, dessen Stand mitziehen —
+    // sonst gehen Änderungen verloren, wenn man vergisst, erneut "Speichern" zu klicken.
+    if (OFFLINE_APP && window._esCurId && typeof getLocalProjects === 'function') {
+      const list = getLocalProjects();
+      const idx = list.findIndex(p => p.id === window._esCurId);
+      if (idx >= 0) { list[idx].data = data; list[idx].updatedAt = Date.now(); setLocalProjects(list); }
+    }
   }, 800);
 }
 
@@ -4975,10 +5002,23 @@ function openLogoEditor(comp) {
   if (!comp.state) comp.state = {};
   if (!comp.program || Array.isArray(comp.program)) comp.program = { blocks:[], conns:[] };
   try { localStorage.setItem('logo-prog-'+comp.id, JSON.stringify(comp.program)); } catch(e){}
-  const win = window.open('logo-editor?id=' + comp.id, 'logo-editor-' + comp.id);
-  if (win) win.focus();
+  // Overlay statt eigenem Tab/Fenster: funktioniert zuverlässig auch dort, wo window.open()
+  // blockiert wird oder keine echten Popup-Fenster verfügbar sind (mobile Browser, WebViews
+  // der Offline-App). BroadcastChannel funktioniert zwischen Elternseite und Iframe genauso
+  // wie zwischen zwei Tabs, der Rest der Logik bleibt unverändert.
+  const overlay = document.getElementById('logo-editor-overlay');
+  const frame = document.getElementById('logo-editor-frame');
+  // Offline-App bündelt echte Dateien ohne den .html-losen Cloudflare-Rewrite der
+  // Live-Seite — dort braucht es die Endung, online bleibt die kanonische URL.
+  frame.src = (OFFLINE_APP ? 'logo-editor.html' : 'logo-editor') + '?id=' + comp.id;
+  overlay.style.display = 'flex';
   setupLogoChannel(comp);
   startLogoSimBroadcast();
+}
+
+function closeLogoEditorOverlay() {
+  document.getElementById('logo-editor-overlay').style.display = 'none';
+  document.getElementById('logo-editor-frame').src = 'about:blank';
 }
 
 function setupLogoChannel(comp) {
@@ -5791,6 +5831,15 @@ global.ElektroSim={simulate, sprReading, ANY_L, POT_N:N, POT_PE:PE, POT_L1:L1, P
 })(window);
 </script>
 
+<!-- ── SPS-Editor Overlay (statt eigenem Tab/Fenster — funktioniert auch in
+     WebViews ohne Popup-Unterstützung, z.B. in der Offline-App) ───────────── -->
+<div id="logo-editor-overlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:9500;flex-direction:column">
+  <div style="height:36px;flex-shrink:0;background:#1a365d;display:flex;align-items:center;padding:0 10px;box-shadow:0 2px 8px #0005">
+    <button onclick="closeLogoEditorOverlay()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px">← Zurück zum Plan</button>
+  </div>
+  <iframe id="logo-editor-frame" style="flex:1;border:none;width:100%"></iframe>
+</div>
+
 <!-- ── Server Save/Load Modal ─────────────────────────────────────── -->
 <div id="es-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:10px;width:460px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4)">
@@ -5903,6 +5952,94 @@ async function deleteCircuit(id,row){
     if(r.ok) row.remove();
     else alert('Fehler beim Löschen');
   }catch(e){ alert('Netzwerkfehler'); }
+}
+
+// ── Lokale Projektverwaltung (Offline-App: kein Server, mehrere benannte
+// Projekte direkt im Gerätespeicher) — spiegelt serverSave/serverLoad, nutzt
+// aber localStorage statt /api/circuits.php.
+function getLocalProjects(){
+  try { return JSON.parse(localStorage.getItem('elektroplan_local_projects')||'[]'); } catch(e){ return []; }
+}
+function setLocalProjects(list){
+  try { localStorage.setItem('elektroplan_local_projects', JSON.stringify(list)); } catch(e){}
+}
+
+function localProjectSave(){
+  const curName = window._esCurName||'';
+  openEsModal('Projekt speichern',`
+    <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Name</label>
+    <input id="es-save-name" value="${escHtml(curName)}" placeholder="z.B. Wohnzimmer Licht"
+      style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:7px;font-size:14px;outline:none;margin-bottom:14px">
+    <div style="display:flex;gap:8px">
+      <button onclick="doLocalProjectSave()" style="flex:1;padding:10px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer">📁 Speichern</button>
+    </div>
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
+      <button onclick="savePlanOrig()" style="width:100%;padding:8px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:7px;font-size:13px;cursor:pointer">💾 Als JSON-Datei herunterladen</button>
+    </div>
+    <div id="es-save-err" style="color:#dc2626;font-size:13px;margin-top:8px"></div>
+  `);
+  setTimeout(()=>{ const n=document.getElementById('es-save-name'); if(n){n.focus();n.select();} },50);
+}
+
+function doLocalProjectSave(){
+  const nameEl=document.getElementById('es-save-name');
+  const errEl=document.getElementById('es-save-err');
+  const name=(nameEl?.value||'').trim();
+  if(!name){ if(errEl) errEl.textContent='Bitte einen Namen eingeben'; return; }
+  const list=getLocalProjects();
+  const id=window._esCurId||('p'+Date.now());
+  const data=buildSaveData();
+  const idx=list.findIndex(p=>p.id===id);
+  const entry={id,name,updatedAt:Date.now(),data};
+  if(idx>=0) list[idx]=entry; else list.push(entry);
+  setLocalProjects(list);
+  window._esCurId=id; window._esCurName=name;
+  closeEsModal();
+  showSaveIndicator('✓ Gespeichert: '+name);
+}
+
+function localProjectLoad(){
+  const list=getLocalProjects().slice().sort((a,b)=>b.updatedAt-a.updatedAt);
+  if(!list.length){
+    openEsModal('Projekte',`
+      <div style="text-align:center;padding:20px;color:#6b7280">
+        <div style="font-size:32px;margin-bottom:8px">📁</div>
+        <p>Noch keine Projekte gespeichert</p>
+        <button onclick="closeEsModal();localProjectSave()" style="margin-top:12px;padding:8px 18px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer">Jetzt speichern</button>
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb">
+        <button onclick="loadPlanOrig()" style="width:100%;padding:8px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:7px;font-size:13px;cursor:pointer">📂 JSON-Datei öffnen</button>
+      </div>`);
+    return;
+  }
+  const rows=list.map(p=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #f3f4f6">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name)}</div>
+        <div style="font-size:11px;color:#9ca3af">${fmtDate(Math.floor(p.updatedAt/1000))}</div>
+      </div>
+      <button onclick="loadLocalProject('${p.id}')" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap">Laden</button>
+      <button onclick="deleteLocalProject('${p.id}',this.closest('div[style*=border-bottom]'))" style="padding:6px 10px;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:13px;cursor:pointer">✕</button>
+    </div>`).join('');
+  openEsModal('Projekte', rows+`
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid #e5e7eb">
+      <button onclick="loadPlanOrig()" style="width:100%;padding:8px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:7px;font-size:13px;cursor:pointer">📂 JSON-Datei öffnen</button>
+    </div>`);
+}
+
+function loadLocalProject(id){
+  const list=getLocalProjects();
+  const p=list.find(x=>x.id===id);
+  if(!p) return;
+  closeEsModal();
+  importPlan(p.data);
+  window._esCurId=id; window._esCurName=p.name;
+}
+
+function deleteLocalProject(id,row){
+  if(!confirm('Projekt löschen?')) return;
+  setLocalProjects(getLocalProjects().filter(p=>p.id!==id));
+  if(row) row.remove();
 }
 
 async function doLogout(){

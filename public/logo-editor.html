@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <title>SPS FBD Programmiereditor</title>
 <script>
+// Wird beim Bauen der Offline-APK auf true gesetzt (siehe index.html).
+const OFFLINE_APP = false;
+</script>
+<script>
 (function(){
   document.documentElement.style.visibility='hidden';
   function proceed(user){
@@ -12,8 +16,16 @@
     document.addEventListener('DOMContentLoaded',()=>{
       const el=document.getElementById('es-username');
       if(el) el.textContent=user.username;
+      if(OFFLINE_APP){
+        if(el) el.style.display='none';
+        const logoutBtn=document.getElementById('fbd-logout-btn');
+        if(logoutBtn) logoutBtn.style.display='none';
+        const cloudGroup=document.getElementById('fbd-cloud-group');
+        if(cloudGroup) cloudGroup.style.display='none';
+      }
     });
   }
+  if (OFFLINE_APP) { proceed({username:''}); return; }
   fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
     if(!d.user){ localStorage.removeItem('elektroplan_user'); location.href='/login.html'; return; }
     localStorage.setItem('elektroplan_user', JSON.stringify(d.user));
@@ -132,7 +144,7 @@ svg#cv{width:100%;height:100%;display:block}
   <div class="tb-group">
     <span class="tb-info" id="tb-comp-label">SPS FBD Editor</span>
   </div>
-  <div class="tb-group">
+  <div class="tb-group" id="fbd-cloud-group">
     <button class="tb-btn" onclick="serverSaveFbd()">☁ Speichern</button>
     <button class="tb-btn" onclick="serverLoadFbd()">☁ Laden</button>
   </div>
@@ -141,7 +153,7 @@ svg#cv{width:100%;height:100%;display:block}
   </div>
   <div class="tb-group" style="margin-left:auto">
     <span id="es-username" style="font-size:11px;color:#9ca3af;padding:0 4px"></span>
-    <button class="tb-btn" onclick="doLogout()" style="color:#f87171">⏻</button>
+    <button class="tb-btn" id="fbd-logout-btn" onclick="doLogout()" style="color:#f87171">⏻</button>
   </div>
 </div>
 
