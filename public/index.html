@@ -145,6 +145,18 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
 @keyframes motor-spin-ccw { from{transform:rotate(0deg)}  to{transform:rotate(-360deg)} }
 .mcw  { animation: motor-spin-cw  0.7s linear infinite; transform-origin:0px 0px; }
 .mccw { animation: motor-spin-ccw 0.7s linear infinite; transform-origin:0px 0px; }
+@keyframes fire-flicker {
+  0%   { opacity:0.65; transform:scale(0.9) translateY(0); }
+  35%  { opacity:1;    transform:scale(1.08) translateY(-1px); }
+  60%  { opacity:0.8;  transform:scale(0.96) translateY(0); }
+  100% { opacity:1;    transform:scale(1.05) translateY(-1px); }
+}
+@keyframes fire-wire-pulse {
+  0%,100% { opacity:0.55; }
+  50%     { opacity:0.95; }
+}
+.fire-flicker { animation:fire-flicker 0.45s ease-in-out infinite alternate; transform-box:fill-box; transform-origin:center; }
+.fire-wire { animation:fire-wire-pulse 0.4s ease-in-out infinite alternate; }
 #tip {
   position:fixed; background:#1a202c; color:#e2e8f0; font-size:11px;
   padding:3px 8px; border-radius:4px; pointer-events:none; display:none; z-index:1000;
@@ -789,7 +801,7 @@ let longPressTimer = null, longPressStartX = 0, longPressStartY = 0, longPressCo
 let mode = 'select', drag = null, wfrom = null;
 let lastClickId = null, lastClickTime = 0; // for double-click detection
 // ── Simulation ────────────────────────────────────────────────────────────────
-let simMode = false, simState = {}, portPotMap = {}, portNodeMap = {}, dcVoltNodeMap = {}, activeWireIds = new Set();
+let simMode = false, simState = {}, portPotMap = {}, portNodeMap = {}, dcVoltNodeMap = {}, activeWireIds = new Set(), fireWireIds = new Set(), fireCompIds = new Set();
 let probeMode = false, probeA = null, probeB = null;
 let wpts = [];   // committed waypoints during wire drawing
 let wHfirst = true; // H-first (true) or V-first (false) for next bend
@@ -3171,6 +3183,14 @@ function render() {
         mk('path',{d,fill:'none',stroke:'rgba(22,163,74,0.2)',
           'stroke-width':sw,'stroke-linecap':'round','stroke-linejoin':'round','pointer-events':'none'},WG);
       }
+      // Kurzschluss ohne Schutzeinrichtung im Strompfad → Leitung "brennt"
+      if (fireWireIds.has(w.id)) {
+        mk('path',{d,fill:'none',stroke:'#f97316','stroke-width':sw+5,'stroke-linecap':'round',
+          'stroke-linejoin':'round','pointer-events':'none',class:'fire-wire'},WG);
+        const [fmx,fmy] = pathMid(w.pts);
+        mk('text',{x:fmx,y:fmy-4,'text-anchor':'middle','font-size':16,class:'fire-flicker',
+          'pointer-events':'none'},WG).textContent='🔥';
+      }
     }
 
     // Hit area — mousedown = select (or start drag if already selected), dblclick = reset
@@ -3432,6 +3452,17 @@ function render() {
       const ss = simState[comp.id] || {};
       const bb = compBBox(comp);
       const cx = (bb.x1+bb.x2)/2, cy = (bb.y1+bb.y2)/2;
+
+      // Kurzschluss ohne Schutzeinrichtung ODER 400V an einem 230V-Verbraucher: Bauteil "brennt"
+      if (fireCompIds.has(comp.id)) {
+        mk('rect',{x:bb.x1-2,y:bb.y1-2,width:bb.x2-bb.x1+4,height:bb.y2-bb.y1+4,rx:4,
+          fill:'rgba(249,115,22,0.18)',stroke:'#f97316','stroke-width':2.5,class:'fire-flicker',
+          'pointer-events':'none'},CG);
+        mk('text',{x:cx,y:bb.y1-8,'text-anchor':'middle','font-size':18,class:'fire-flicker',
+          'pointer-events':'none'},CG).textContent='🔥';
+        mk('text',{x:cx,y:bb.y2+16,'text-anchor':'middle','font-size':8,fill:'#f97316','font-weight':'bold',
+          'pointer-events':'none'},CG).textContent='⚠ Kurzschluss / Überspannung';
+      }
 
       // LS / FI / RCBO: grüner/roter Rahmen + ON/OFF
       if (['ls1','ls3','rcd2','rcd4','rcbo'].includes(comp.type)) {
@@ -4614,6 +4645,8 @@ function toggleSim() {
     portNodeMap = {};
     dcVoltNodeMap = {};
     activeWireIds = new Set();
+    fireWireIds = new Set();
+    fireCompIds = new Set();
     probeMode = false; probeA = null; probeB = null;
     document.getElementById('btn-probe').classList.remove('active');
     // lit-State der Lampen zurücksetzen
@@ -4668,6 +4701,8 @@ function runSim() {
     portNodeMap = res.portNode || {};
     dcVoltNodeMap = res.dcVoltNode || {};
     activeWireIds = new Set(res.activeWires || []);
+    fireWireIds = new Set(res.fireWires || []);
+    fireCompIds = new Set(res.fireComps || []);
 
     // Schutzgeräte auslösen bei Fehlern (LS/FI rausfliegen), defekte Geräte markieren
     if (res.faults && res.faults.length > 0) {
@@ -4689,8 +4724,10 @@ function runSim() {
       portNodeMap = res.portNode || {};
       dcVoltNodeMap = res.dcVoltNode || {};
       activeWireIds = new Set(res.activeWires || []);
+      fireWireIds = new Set(res.fireWires || []);
+      fireCompIds = new Set(res.fireComps || []);
     }
-  } catch(e) { console.error('Sim:', e); portPotMap = {}; portNodeMap = {}; dcVoltNodeMap = {}; activeWireIds = new Set(); }
+  } catch(e) { console.error('Sim:', e); portPotMap = {}; portNodeMap = {}; dcVoltNodeMap = {}; activeWireIds = new Set(); fireWireIds = new Set(); fireCompIds = new Set(); }
   // lit-State in comp.state übernehmen
   comps.forEach(c => {
     const ss = simState[c.id];
@@ -5646,6 +5683,60 @@ function simulate(comps, wires, simSt, _depth){
     }
   }
 
+  // Kurzschluss (L-L, L-N oder L-PE) ohne schützende Sicherung/FI im selben Leitungsknoten
+  // → die betroffene Leitung "brennt" (Animation). Ein LS/FI "schützt" einen Knoten, wenn er
+  // eingeschaltet ist und sein lastseitiger Anschluss zu genau diesem Knoten gehört (dann würde
+  // er über den bestehenden Fehlerauslöse-Mechanismus oben ohnehin auslösen).
+  const protectedRoots=new Set();
+  for(const c of comps){
+    const s=simSt[c.id]||{};
+    if(s.tripped) continue;
+    if(c.type==='ls1' && s.on!==false){ const p=idx[c.id+':1']; if(p!=null) protectedRoots.add(uf.find(p)); }
+    if(c.type==='rcbo' && s.on!==false){
+      const p1=idx[c.id+':1'], p2=idx[c.id+':3'];
+      if(p1!=null) protectedRoots.add(uf.find(p1));
+      if(p2!=null) protectedRoots.add(uf.find(p2));
+    }
+    if(c.type==='ls3' && s.on!==false){
+      for(let i=3;i<=5;i++){ const p=idx[c.id+':'+i]; if(p!=null) protectedRoots.add(uf.find(p)); }
+    }
+    if(c.type==='rcd2' && s.on!==false){
+      const p1=idx[c.id+':2'], p2=idx[c.id+':3'];
+      if(p1!=null) protectedRoots.add(uf.find(p1));
+      if(p2!=null) protectedRoots.add(uf.find(p2));
+    }
+    if(c.type==='rcd4' && s.on!==false){
+      for(let i=4;i<=7;i++){ const p=idx[c.id+':'+i]; if(p!=null) protectedRoots.add(uf.find(p)); }
+    }
+  }
+  const fireRoots=new Set();
+  for(let i=0;i<k;i++){
+    if(uf.find(i)!==i || protectedRoots.has(i)) continue;
+    const dp=pot[i];
+    if(hasLLFault(dp) || ((dp&ANY_L)&&(dp&N)) || ((dp&ANY_L)&&(dp&PE))) fireRoots.add(i);
+  }
+  const fireWires=[];
+  for(const w of wires){
+    const a=idx[w.fid+':'+w.fp];
+    if(a!=null && fireRoots.has(uf.find(a))) fireWires.push(w.id);
+  }
+  const fireCompSet=new Set();
+  for(const c of comps){
+    for(let i=0;i<c.def.ports.length;i++){
+      const p=idx[c.id+':'+i];
+      if(p!=null && fireRoots.has(uf.find(p))){ fireCompSet.add(c.id); break; }
+    }
+  }
+  // 230V-Verbraucher (Lampe etc.) mit 400V statt 230V (zwei verschiedene Außenleiter statt L-N)
+  // → der Verbraucher selbst überlebt die Überspannung nicht, unabhängig von Sicherungen.
+  for(const c of comps){
+    if(c.type==='lampe'||c.type==='spot'||c.type==='kontakt_led'){
+      const l0=gp(c.id,0)&ANY_L, l1=gp(c.id,1)&ANY_L;
+      if(l0 && l1 && l0!==l1) fireCompSet.add(c.id);
+    }
+  }
+  const fireComps=[...fireCompSet];
+
   // Port-Potential-Map + Port-Knoten-Map (für Durchgangsprüfung: echte Knoten-Identität
   // statt nur gleiches Potential — zwei unverbundene, zufällig gleiche Adern sollen nicht
   // fälschlich als Durchgang gelten)
@@ -5657,7 +5748,7 @@ function simulate(comps, wires, simSt, _depth){
       portNode[c.id+':'+i]=p!=null?uf.find(p):null;
     }
 
-  return{state:result, portPot, portNode, dcVoltNode:Object.fromEntries(dcVoltMap), faults, activeWires:[...activeWires]};
+  return{state:result, portPot, portNode, dcVoltNode:Object.fromEntries(dcVoltMap), faults, activeWires:[...activeWires], fireWires, fireComps};
 }
 
 global.ElektroSim={simulate, sprReading, ANY_L, POT_N:N, POT_PE:PE, POT_L1:L1, POT_L2:L2, POT_L3:L3, POT_DCP:DCP, POT_DCN:DCN};
