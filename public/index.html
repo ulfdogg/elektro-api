@@ -5055,7 +5055,7 @@ function buildIdx(comps){
 function lbl(comp,l){return comp.def.ports.findIndex(p=>p.label===l);}
 
 // --- Bauteile verschalten (je nach Zustand) ---
-function connectComponents(comps,wires,simSt,uf,idx,edges){
+function connectComponents(comps,wires,simSt,uf,idx,edges,skipId){
   const G=(id,i)=>idx[id+':'+i]??-1;
   const U=(a,b,wireId)=>{
     if(a<0||b<0) return;
@@ -5069,6 +5069,9 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
   for(const w of wires) U(G(w.fid,w.fp), G(w.tid,w.tp), w.id);
 
   for(const c of comps){
+    // skipId: lässt genau diesen Schalter/Schutzschalter offen — genutzt um zu prüfen,
+    // ob ein Kurzschluss auch OHNE ihn (also vor ihm/versorgungsseitig) bereits besteht.
+    if(c.id===skipId) continue;
     const s=simSt[c.id]||{};
     const P=i=>G(c.id,i);
     switch(c.type){
@@ -5309,17 +5312,15 @@ function zrCompute(c, triggered, delayMs, func){
   return {on:out, waiting};
 }
 
-// --- Hauptfunktion ---
-function simulate(comps, wires, simSt, _depth){
-  const depth=_depth||0;
-  if(depth>8) return{state:simSt,portPot:{},faults:[],activeWires:[]};
-
+// Verkabelung + Potentialausbreitung (Quellen, Frequenzumrichter- und
+// Gleichrichter-Synthese) in einem Aufwasch. skipId lässt optional einen einzelnen
+// Schalter/Schutzschalter offen — genutzt um zu testen, ob eine Spannungslage auch
+// OHNE ihn (also versorgungsseitig vor ihm) schon besteht.
+function computePotentials(comps, wires, simSt, skipId){
   const{idx,k}=buildIdx(comps);
-  if(!k) return{state:simSt,portPot:{},faults:[],activeWires:[]};
-
   const uf=makeUF(k);
   const edges=[];
-  connectComponents(comps,wires,simSt,uf,idx,edges);
+  connectComponents(comps,wires,simSt,uf,idx,edges,skipId);
 
   // Spannungsquellen
   const pot=new Int32Array(k);
@@ -5369,7 +5370,7 @@ function simulate(comps, wires, simSt, _depth){
 
   // Gleichrichter: erzeugt eine galvanisch getrennte, einstellbare Gleichspannung
   // am Ausgang (L+/M), sobald am Eingang L+N (230V AC) anliegen.
-  let grEnabled = new Set();
+  const grEnabled = new Set();
   for(const c of comps){
     if(c.type!=='gleichrichter') continue;
     const enabled = !!((gp(c.id,0)&ANY_L)&&(gp(c.id,1)&N));
@@ -5381,6 +5382,18 @@ function simulate(comps, wires, simSt, _depth){
       if(pM!=null){ pot[uf.find(pM)]|=DCN; }
     }
   }
+
+  return {idx,k,uf,edges,pot,sourceNodes,gp,dcVoltMap,fuOutFreq,grEnabled};
+}
+
+// --- Hauptfunktion ---
+function simulate(comps, wires, simSt, _depth){
+  const depth=_depth||0;
+  if(depth>8) return{state:simSt,portPot:{},faults:[],activeWires:[]};
+
+  const cp0=computePotentials(comps,wires,simSt);
+  if(!cp0.k) return{state:simSt,portPot:{},faults:[],activeWires:[]};
+  const {idx,k,uf,edges,pot,sourceNodes,gp,dcVoltMap,fuOutFreq,grEnabled}=cp0;
 
   // Rückkopplungen (Schütz, Stromstoß)
   const delta={};
@@ -5634,45 +5647,75 @@ function simulate(comps, wires, simSt, _depth){
     if(!faults.some(f=>f.id===id)) faults.push({type,cause,id});
   }
 
+  // Ein LS/FI darf nur auslösen, wenn der Kurzschluss auf SEINER Lastseite liegt. Da ein
+  // geschlossener Schalter Eingang und Ausgang zu ein und demselben Unionfind-Knoten macht,
+  // sieht man den Fehler an Ein- und Ausgang sonst identisch — auch wenn er tatsächlich
+  // versorgungsseitig (vor dem Schalter) entsteht. Prüfung: besteht derselbe Kurzschluss
+  // auch ohne diesen Schalter (also unabhängig von ihm) schon an seinem Eingang?
+  function isSupplySideFault(id, inputPorts){
+    const cp=computePotentials(comps,wires,simSt,id);
+    return inputPorts.some(pi=>{
+      const dp=cp.gp(id,pi);
+      return hasLLFault(dp) || ((dp&ANY_L)&&(dp&N)) || ((dp&ANY_L)&&(dp&PE));
+    });
+  }
+
   for(const c of comps){
     const s=simSt[c.id]||{};
     if(s.tripped) continue;
 
     if(c.type==='ls1' && s.on!==false){
       const dp=gp(c.id,1);
-      if((dp&ANY_L)&&(dp&N))  addFault('ls_trip','L-N Kurzschluss',c.id);
-      if((dp&ANY_L)&&(dp&PE)) addFault('ls_trip','Erdschluss',c.id);
-      if(hasLLFault(dp))      addFault('ls_trip','L-L Kurzschluss',c.id);
+      if((hasLLFault(dp)||(dp&ANY_L)&&(dp&N)||(dp&ANY_L)&&(dp&PE)) && !isSupplySideFault(c.id,[0])){
+        if((dp&ANY_L)&&(dp&N))  addFault('ls_trip','L-N Kurzschluss',c.id);
+        if((dp&ANY_L)&&(dp&PE)) addFault('ls_trip','Erdschluss',c.id);
+        if(hasLLFault(dp))      addFault('ls_trip','L-L Kurzschluss',c.id);
+      }
     }
     if(c.type==='rcbo' && s.on!==false){
       const dpL=gp(c.id,1), dpN=gp(c.id,3);
-      if((dpL&ANY_L)&&(dpL&N))  addFault('ls_trip','L-N Kurzschluss',c.id);
-      if((dpL&ANY_L)&&(dpL&PE)) addFault('ls_trip','Erdschluss',c.id);
-      if(hasLLFault(dpL))       addFault('ls_trip','L-L Kurzschluss',c.id);
-      if((dpN&N)&&(dpN&PE))     addFault('fi_trip','N-PE Verbindung',c.id);
+      const lFault=hasLLFault(dpL)||((dpL&ANY_L)&&(dpL&N))||((dpL&ANY_L)&&(dpL&PE));
+      const nFault=(dpN&N)&&(dpN&PE);
+      if((lFault||nFault) && !isSupplySideFault(c.id,[0,2])){
+        if((dpL&ANY_L)&&(dpL&N))  addFault('ls_trip','L-N Kurzschluss',c.id);
+        if((dpL&ANY_L)&&(dpL&PE)) addFault('ls_trip','Erdschluss',c.id);
+        if(hasLLFault(dpL))       addFault('ls_trip','L-L Kurzschluss',c.id);
+        if(nFault)                addFault('fi_trip','N-PE Verbindung',c.id);
+      }
     }
     if(c.type==='ls3' && s.on!==false){
-      for(let i=3;i<=5;i++){
-        const dp=gp(c.id,i);
-        if((dp&ANY_L)&&(dp&N)) { addFault('ls_trip','L-N Kurzschluss',c.id); break; }
-        if(hasLLFault(dp))     { addFault('ls_trip','L-L Kurzschluss',c.id); break; }
+      let lFault=false;
+      for(let i=3;i<=5;i++){ const dp=gp(c.id,i); if((dp&ANY_L)&&(dp&N) || hasLLFault(dp)){ lFault=true; break; } }
+      if(lFault && !isSupplySideFault(c.id,[0,1,2])){
+        for(let i=3;i<=5;i++){
+          const dp=gp(c.id,i);
+          if((dp&ANY_L)&&(dp&N)) { addFault('ls_trip','L-N Kurzschluss',c.id); break; }
+          if(hasLLFault(dp))     { addFault('ls_trip','L-L Kurzschluss',c.id); break; }
+        }
       }
     }
     if(c.type==='rcd2' && s.on!==false){
       const dpL=gp(c.id,2), dpN=gp(c.id,3);
-      if((dpL&ANY_L)&&(dpL&PE))      addFault('fi_trip','Erdschluss',c.id);
-      else if((dpN&N)&&(dpN&PE))     addFault('fi_trip','N-PE Verbindung',c.id);
-      else if((dpN&ANY_L)&&(dpN&PE)) addFault('fi_trip','Erdschluss',c.id);
-      else if((dpL&ANY_L)&&(dpL&N))  addFault('fi_trip','L-N Kurzschluss',c.id);
+      const anyFault=((dpL&ANY_L)&&(dpL&PE))||((dpN&N)&&(dpN&PE))||((dpN&ANY_L)&&(dpN&PE))||((dpL&ANY_L)&&(dpL&N));
+      if(anyFault && !isSupplySideFault(c.id,[0,1])){
+        if((dpL&ANY_L)&&(dpL&PE))      addFault('fi_trip','Erdschluss',c.id);
+        else if((dpN&N)&&(dpN&PE))     addFault('fi_trip','N-PE Verbindung',c.id);
+        else if((dpN&ANY_L)&&(dpN&PE)) addFault('fi_trip','Erdschluss',c.id);
+        else if((dpL&ANY_L)&&(dpL&N))  addFault('fi_trip','L-N Kurzschluss',c.id);
+      }
     }
     if(c.type==='rcd4' && s.on!==false){
       const dpN=gp(c.id,7);
-      if((dpN&N)&&(dpN&PE)){ addFault('fi_trip','N-PE Verbindung',c.id); }
-      else {
-        for(let i=4;i<=7;i++){
-          const dp=gp(c.id,i);
-          if((dp&ANY_L)&&(dp&PE)){ addFault('fi_trip','Erdschluss',c.id); break; }
-          if((dp&ANY_L)&&(dp&N)) { addFault('fi_trip','L-N Kurzschluss',c.id); break; }
+      let anyFault=(dpN&N)&&(dpN&PE);
+      if(!anyFault) for(let i=4;i<=7;i++){ const dp=gp(c.id,i); if((dp&ANY_L)&&(dp&PE)||(dp&ANY_L)&&(dp&N)){ anyFault=true; break; } }
+      if(anyFault && !isSupplySideFault(c.id,[0,1,2,3])){
+        if((dpN&N)&&(dpN&PE)){ addFault('fi_trip','N-PE Verbindung',c.id); }
+        else {
+          for(let i=4;i<=7;i++){
+            const dp=gp(c.id,i);
+            if((dp&ANY_L)&&(dp&PE)){ addFault('fi_trip','Erdschluss',c.id); break; }
+            if((dp&ANY_L)&&(dp&N)) { addFault('fi_trip','L-N Kurzschluss',c.id); break; }
+          }
         }
       }
     }
@@ -5684,30 +5727,23 @@ function simulate(comps, wires, simSt, _depth){
   }
 
   // Kurzschluss (L-L, L-N oder L-PE) ohne schützende Sicherung/FI im selben Leitungsknoten
-  // → die betroffene Leitung "brennt" (Animation). Ein LS/FI "schützt" einen Knoten, wenn er
-  // eingeschaltet ist und sein lastseitiger Anschluss zu genau diesem Knoten gehört (dann würde
-  // er über den bestehenden Fehlerauslöse-Mechanismus oben ohnehin auslösen).
+  // → die betroffene Leitung "brennt" (Animation). Ein LS/FI "schützt" einen Knoten nur, wenn
+  // der Fehler auf SEINER Lastseite liegt — genau wie beim Auslöse-Mechanismus oben darf ein
+  // Fehler, der schon versorgungsseitig vor ihm besteht, ihn nicht als "geschützt" zählen
+  // (sonst würde ein ungeschützter Kurzschluss vor einem LS fälschlich als sicher gelten).
+  const breakerPorts = {
+    ls1: {in:[0], out:[1]}, rcbo: {in:[0,2], out:[1,3]}, ls3: {in:[0,1,2], out:[3,4,5]},
+    rcd2: {in:[0,1], out:[2,3]}, rcd4: {in:[0,1,2,3], out:[4,5,6,7]},
+  };
   const protectedRoots=new Set();
   for(const c of comps){
     const s=simSt[c.id]||{};
-    if(s.tripped) continue;
-    if(c.type==='ls1' && s.on!==false){ const p=idx[c.id+':1']; if(p!=null) protectedRoots.add(uf.find(p)); }
-    if(c.type==='rcbo' && s.on!==false){
-      const p1=idx[c.id+':1'], p2=idx[c.id+':3'];
-      if(p1!=null) protectedRoots.add(uf.find(p1));
-      if(p2!=null) protectedRoots.add(uf.find(p2));
-    }
-    if(c.type==='ls3' && s.on!==false){
-      for(let i=3;i<=5;i++){ const p=idx[c.id+':'+i]; if(p!=null) protectedRoots.add(uf.find(p)); }
-    }
-    if(c.type==='rcd2' && s.on!==false){
-      const p1=idx[c.id+':2'], p2=idx[c.id+':3'];
-      if(p1!=null) protectedRoots.add(uf.find(p1));
-      if(p2!=null) protectedRoots.add(uf.find(p2));
-    }
-    if(c.type==='rcd4' && s.on!==false){
-      for(let i=4;i<=7;i++){ const p=idx[c.id+':'+i]; if(p!=null) protectedRoots.add(uf.find(p)); }
-    }
+    if(s.tripped || s.on===false) continue;
+    const bp=breakerPorts[c.type];
+    if(!bp) continue;
+    const hasOutFault = bp.out.some(pi=>{ const dp=gp(c.id,pi); return hasLLFault(dp)||((dp&ANY_L)&&(dp&N))||((dp&ANY_L)&&(dp&PE)); });
+    if(!hasOutFault || isSupplySideFault(c.id, bp.in)) continue;
+    for(const pi of bp.out){ const p=idx[c.id+':'+pi]; if(p!=null) protectedRoots.add(uf.find(p)); }
   }
   const fireRoots=new Set();
   for(let i=0;i<k;i++){
