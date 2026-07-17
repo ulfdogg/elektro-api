@@ -369,7 +369,7 @@ function initChannel(cid) {
   };
   // Request current state
   channel.postMessage({ type:'editor-ready', compId:cid });
-  document.getElementById('tb-comp-label').textContent = 'SPS 12/8 230RCE — Komponente #'+cid;
+  document.getElementById('tb-comp-label').textContent = 'SPS 12/8 — Komponente #'+cid;
 }
 
 function broadcastProg() {
@@ -718,7 +718,7 @@ function evalFBD(){
       const iv=inVals[b.id]||[];
       const ic=b.inputCount||BD[b.type]?.ins||1;
 
-      // LOGO! Logic: Unconnected inputs have different defaults based on function type
+      // SPS Logic: Unconnected inputs have different defaults based on function type
       // AND/NAND: unconnected = TRUE (so only connected inputs matter)
       // OR/NOR/XOR: unconnected = FALSE (so only connected inputs can activate)
       const isAndType = ['and','and_edge','nand','nand_edge'].includes(b.type);

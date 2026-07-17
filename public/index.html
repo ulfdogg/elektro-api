@@ -578,6 +578,29 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
         <span class="s-label">Frequenzumrichter</span>
       </div>
 
+      <div class="s-head">Spannungsversorgung</div>
+      <div class="s-item" ondragstart="sbDrag('dcquelle')" draggable="true">
+        <svg width="36" height="46">
+          <rect x="1" y="1" width="34" height="44" fill="#fef2f2" stroke="#991b1b" stroke-width="1.2" rx="3"/>
+          <text x="18" y="13" text-anchor="middle" font-size="7" fill="#991b1b" font-weight="bold">⎓DC</text>
+          <line x1="6" y1="26" x2="30" y2="26" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="20" cy="26" r="3.2" fill="#dc2626" stroke="#7f1d1d" stroke-width="1"/>
+          <text x="10" y="40" text-anchor="middle" font-size="8" fill="#dc2626" font-weight="bold">+</text>
+          <text x="26" y="40" text-anchor="middle" font-size="8" fill="#1f2937" font-weight="bold">–</text>
+        </svg>
+        <span class="s-label">DC-Spannungsquelle (einstellbar)</span>
+      </div>
+      <div class="s-item" ondragstart="sbDrag('gleichrichter')" draggable="true">
+        <svg width="34" height="46">
+          <rect x="1" y="1" width="32" height="44" fill="#fef2f2" stroke="#991b1b" stroke-width="1.2" rx="3"/>
+          <text x="17" y="12" text-anchor="middle" font-size="6" fill="#991b1b" font-weight="bold">AC/DC</text>
+          <line x1="6" y1="26" x2="28" y2="26" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="20" cy="26" r="3.2" fill="#dc2626" stroke="#7f1d1d" stroke-width="1"/>
+          <text x="17" y="38" text-anchor="middle" font-size="6" fill="#7f1d1d" font-weight="bold">V=</text>
+        </svg>
+        <span class="s-label">Gleichrichter 230V→DC (einstellbar, Hutschiene)</span>
+      </div>
+
       <div class="s-head">Steuerung</div>
       <div class="s-item" ondragstart="sbDrag('logo')" draggable="true">
         <svg width="96" height="36">
@@ -587,7 +610,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
           <!-- 12 input screws -->
           <rect x="8" y="7" width="46" height="22" fill="#0f1f3d" rx="1"/>
           <text x="31" y="20" text-anchor="middle" font-size="7" fill="#60a5fa" font-weight="bold" font-family="monospace">SPS</text>
-          <text x="31" y="27" text-anchor="middle" font-size="3.5" fill="#93c5fd" font-family="monospace">12/8 230RCE</text>
+          <text x="31" y="27" text-anchor="middle" font-size="3.5" fill="#93c5fd" font-family="monospace">12/8 230V</text>
           <rect x="58" y="7" width="14" height="22" fill="#374151" rx="1"/>
           <text x="65" y="19" text-anchor="middle" font-size="4.5" fill="#9ca3af" font-weight="bold">12IN</text>
           <text x="65" y="26" text-anchor="middle" font-size="4.5" fill="#f87171" font-weight="bold">8OUT</text>
@@ -595,7 +618,25 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
           <circle cx="4" cy="13" r="2" fill="#7c2d12"/>
           <circle cx="4" cy="22" r="2" fill="#1e3a8a"/>
         </svg>
-        <span class="s-label">SPS 12/8</span>
+        <span class="s-label">SPS 12/8 230V</span>
+      </div>
+      <div class="s-item" ondragstart="sbDrag('logo24')" draggable="true">
+        <svg width="96" height="36">
+          <rect x="0" y="0" width="96" height="36" fill="#e5e7eb" stroke="#6b7280" stroke-width="1" rx="2"/>
+          <rect x="0" y="0" width="96" height="6" fill="#d1d5db" rx="1"/>
+          <rect x="0" y="30" width="96" height="6" fill="#fca5a5" rx="1"/>
+          <!-- 12 input screws -->
+          <rect x="8" y="7" width="46" height="22" fill="#0f1f3d" rx="1"/>
+          <text x="31" y="20" text-anchor="middle" font-size="7" fill="#60a5fa" font-weight="bold" font-family="monospace">SPS</text>
+          <text x="31" y="27" text-anchor="middle" font-size="3.5" fill="#93c5fd" font-family="monospace">12/8 24V</text>
+          <rect x="58" y="7" width="14" height="22" fill="#374151" rx="1"/>
+          <text x="65" y="19" text-anchor="middle" font-size="4.5" fill="#9ca3af" font-weight="bold">12IN</text>
+          <text x="65" y="26" text-anchor="middle" font-size="4.5" fill="#f87171" font-weight="bold">8OUT</text>
+          <rect x="76" y="7" width="18" height="22" fill="#1e3a8a" rx="1"/>
+          <circle cx="4" cy="13" r="2" fill="#dc2626"/>
+          <circle cx="4" cy="22" r="2" fill="#1f2937"/>
+        </svg>
+        <span class="s-label">SPS 12/8 24V DC</span>
       </div>
 
       <div class="s-head">Aufputzgehäuse</div>
@@ -748,7 +789,7 @@ let longPressTimer = null, longPressStartX = 0, longPressStartY = 0, longPressCo
 let mode = 'select', drag = null, wfrom = null;
 let lastClickId = null, lastClickTime = 0; // for double-click detection
 // ── Simulation ────────────────────────────────────────────────────────────────
-let simMode = false, simState = {}, portPotMap = {}, portNodeMap = {}, activeWireIds = new Set();
+let simMode = false, simState = {}, portPotMap = {}, portNodeMap = {}, dcVoltNodeMap = {}, activeWireIds = new Set();
 let probeMode = false, probeA = null, probeB = null;
 let wpts = [];   // committed waypoints during wire drawing
 let wHfirst = true; // H-first (true) or V-first (false) for next bend
@@ -1145,7 +1186,56 @@ const D = {
       {x:0,  y:24, dir:'w',color:'#8B4513',label:'L'},
       {x:0,  y:48, dir:'w',color:'#1a56db',label:'N'},
     ],
-    label:'SPS 12/8 230RCE'
+    label:'SPS 12/8 230V'
+  },
+  logo24: {
+    w:240, h:72, isDINDevice:true, te:12,
+    ports:[
+      // I1–I12 (Ports 0–11, oben)
+      {x:10, y:0,  dir:'n',color:'#374151',label:'I1'},
+      {x:30, y:0,  dir:'n',color:'#374151',label:'I2'},
+      {x:50, y:0,  dir:'n',color:'#374151',label:'I3'},
+      {x:70, y:0,  dir:'n',color:'#374151',label:'I4'},
+      {x:90, y:0,  dir:'n',color:'#374151',label:'I5'},
+      {x:110,y:0,  dir:'n',color:'#374151',label:'I6'},
+      {x:130,y:0,  dir:'n',color:'#374151',label:'I7'},
+      {x:150,y:0,  dir:'n',color:'#374151',label:'I8'},
+      {x:170,y:0,  dir:'n',color:'#374151',label:'I9'},
+      {x:190,y:0,  dir:'n',color:'#374151',label:'I10'},
+      {x:210,y:0,  dir:'n',color:'#374151',label:'I11'},
+      {x:230,y:0,  dir:'n',color:'#374151',label:'I12'},
+      // Q1–Q8 je mit IN (links) und OUT (rechts) — Ports 12–27
+      {x:7,  y:72,dir:'s',color:'#dc2626',label:'Q1'},{x:23, y:72,dir:'s',color:'#991b1b',label:''},
+      {x:37, y:72,dir:'s',color:'#dc2626',label:'Q2'},{x:53, y:72,dir:'s',color:'#991b1b',label:''},
+      {x:67, y:72,dir:'s',color:'#dc2626',label:'Q3'},{x:83, y:72,dir:'s',color:'#991b1b',label:''},
+      {x:97, y:72,dir:'s',color:'#dc2626',label:'Q4'},{x:113,y:72,dir:'s',color:'#991b1b',label:''},
+      {x:127,y:72,dir:'s',color:'#dc2626',label:'Q5'},{x:143,y:72,dir:'s',color:'#991b1b',label:''},
+      {x:157,y:72,dir:'s',color:'#dc2626',label:'Q6'},{x:173,y:72,dir:'s',color:'#991b1b',label:''},
+      {x:187,y:72,dir:'s',color:'#dc2626',label:'Q7'},{x:203,y:72,dir:'s',color:'#991b1b',label:''},
+      {x:217,y:72,dir:'s',color:'#dc2626',label:'Q8'},{x:233,y:72,dir:'s',color:'#991b1b',label:''},
+      // L+ / M (Ports 28–29) — 24V DC Versorgung
+      {x:0,  y:24, dir:'w',color:'#dc2626',label:'L+'},
+      {x:0,  y:48, dir:'w',color:'#1f2937',label:'M'},
+    ],
+    label:'SPS 12/8 24VDC'
+  },
+  dcquelle: {
+    w:60, h:80,
+    ports:[
+      {x:15,y:80, dir:'s',color:'#dc2626',label:'+'},
+      {x:45,y:80, dir:'s',color:'#1f2937',label:'–'},
+    ],
+    label:'DC-Spannungsquelle (einstellbar)'
+  },
+  gleichrichter: {
+    w:80, h:110, isDINDevice:true, te:4,
+    ports:[
+      {x:20,y:0,   dir:'n',color:'#8B4513',label:'L'},
+      {x:60,y:0,   dir:'n',color:'#1a56db',label:'N'},
+      {x:20,y:110, dir:'s',color:'#dc2626',label:'L+'},
+      {x:60,y:110, dir:'s',color:'#1f2937',label:'M'},
+    ],
+    label:'Gleichrichter 230V AC → DC (einstellbar)'
   },
   // rows = [{actuator:{x,y}, contacts:[{x,y},{x,y},{x,y}]}]
   // actuator center at x=35; contact centers at x=115 (right edge = housing.x+130)
@@ -2449,9 +2539,11 @@ function drawBewegungsmelder(g) {
   mk('text',{x:W/2,y:H-3,'text-anchor':'middle','font-size':5,fill:'#15803d','font-weight':'bold'},g).textContent='PIR';
 }
 
-function drawLogo(g) {
+function drawLogo(g, comp) {
   const W=240, H=72;
-  mk('rect',{x:0,y:0,width:W,height:H,fill:'#e5e7eb',stroke:'#6b7280','stroke-width':1.5,rx:3,filter:'url(#shadow)'},g);
+  const is24 = comp && comp.type === 'logo24';
+  const broken = is24 && comp.state && comp.state.broken;
+  mk('rect',{x:0,y:0,width:W,height:H,fill:broken?'#374151':'#e5e7eb',stroke:broken?'#991b1b':'#6b7280','stroke-width':1.5,rx:3,filter:'url(#shadow)'},g);
   mk('rect',{x:1,y:1,width:W-2,height:H-2,fill:'#f3f4f6',stroke:'#9ca3af','stroke-width':0.5,rx:2.5},g);
   // Top terminal strip (12 inputs)
   mk('rect',{x:0,y:0,width:W,height:11,fill:'#d1d5db',stroke:'#9ca3af','stroke-width':0.5,rx:2},g);
@@ -2477,15 +2569,20 @@ function drawLogo(g) {
   }
   // L/N side terminals
   mk('rect',{x:0,y:14,width:12,height:22,fill:'#d1d5db',stroke:'#9ca3af','stroke-width':0.5,rx:1},g);
-  mk('circle',{cx:6,cy:21,r:3,fill:'#7c2d12'},g);
-  mk('circle',{cx:6,cy:31,r:3,fill:'#1e3a8a'},g);
-  mk('text',{x:11,y:22,'font-size':4.5,fill:'#374151'},g).textContent='L';
-  mk('text',{x:11,y:32,'font-size':4.5,fill:'#374151'},g).textContent='N';
+  mk('circle',{cx:6,cy:21,r:3,fill:is24?'#dc2626':'#7c2d12'},g);
+  mk('circle',{cx:6,cy:31,r:3,fill:is24?'#1f2937':'#1e3a8a'},g);
+  mk('text',{x:11,y:22,'font-size':4.5,fill:'#374151'},g).textContent=is24?'L+':'L';
+  mk('text',{x:11,y:32,'font-size':4.5,fill:'#374151'},g).textContent=is24?'M':'N';
   // LCD
-  mk('rect',{x:14,y:13,width:102,height:46,fill:'#0f1f3d',stroke:'#374151','stroke-width':1,rx:2},g);
-  mk('rect',{x:16,y:15,width:98,height:42,fill:'#152b52',rx:1},g);
-  mk('text',{x:65,y:32,'text-anchor':'middle','font-size':13,fill:'#60a5fa','font-weight':'bold','font-family':'monospace'},g).textContent='SPS';
-  mk('text',{x:65,y:44,'text-anchor':'middle','font-size':6,fill:'#93c5fd','font-family':'monospace'},g).textContent='12/8 230RCE';
+  mk('rect',{x:14,y:13,width:102,height:46,fill:broken?'#1f2937':'#0f1f3d',stroke:'#374151','stroke-width':1,rx:2},g);
+  mk('rect',{x:16,y:15,width:98,height:42,fill:broken?'#111827':'#152b52',rx:1},g);
+  if (broken) {
+    mk('text',{x:65,y:30,'text-anchor':'middle','font-size':11,fill:'#f87171','font-weight':'bold','font-family':'monospace'},g).textContent='⚠ DEFEKT';
+    mk('text',{x:65,y:44,'text-anchor':'middle','font-size':5.5,fill:'#fca5a5','font-family':'monospace'},g).textContent='Überspannung 230V AC';
+  } else {
+    mk('text',{x:65,y:32,'text-anchor':'middle','font-size':13,fill:'#60a5fa','font-weight':'bold','font-family':'monospace'},g).textContent='SPS';
+    mk('text',{x:65,y:44,'text-anchor':'middle','font-size':6,fill:'#93c5fd','font-family':'monospace'},g).textContent=is24?'12/8 24V DC':'12/8 230V AC';
+  }
   // Navigation wheel
   mk('rect',{x:121,y:14,width:30,height:44,fill:'#d1d5db',stroke:'#9ca3af','stroke-width':0.5,rx:2},g);
   mk('circle',{cx:136,cy:36,r:10,fill:'#9ca3af',stroke:'#6b7280','stroke-width':1},g);
@@ -2499,11 +2596,53 @@ function drawLogo(g) {
   mk('rect',{x:156,y:14,width:42,height:44,fill:'#374151',rx:2},g);
   mk('text',{x:177,y:26,'text-anchor':'middle','font-size':6,fill:'#9ca3af','font-weight':'bold'},g).textContent='12 IN';
   mk('text',{x:177,y:36,'text-anchor':'middle','font-size':6,fill:'#f87171','font-weight':'bold'},g).textContent='8 OUT';
-  mk('text',{x:177,y:45,'text-anchor':'middle','font-size':4,fill:'#6b7280'},g).textContent='230V AC';
+  mk('text',{x:177,y:45,'text-anchor':'middle','font-size':4,fill:'#6b7280'},g).textContent=is24?'24V DC':'230V AC';
   mk('text',{x:177,y:53,'text-anchor':'middle','font-size':4,fill:'#6b7280'},g).textContent='24V DC';
-  // Siemens branding
-  mk('rect',{x:202,y:14,width:36,height:44,fill:'#1e3a8a',rx:2},g);
-  mk('text',{x:220,y:38,'text-anchor':'middle','font-size':5,fill:'#fff','font-weight':'bold','writing-mode':'tb'},g).textContent='SIEMENS';
+  // Typenschild (generisch, kein Fremdhersteller-Logo)
+  mk('rect',{x:202,y:14,width:36,height:44,fill:broken?'#4b5563':'#1e3a8a',rx:2},g);
+  mk('text',{x:220,y:38,'text-anchor':'middle','font-size':5,fill:'#fff','font-weight':'bold','writing-mode':'tb'},g).textContent='ELEKTROSIM';
+  if (broken) {
+    mk('text',{x:6,y:-4,'font-size':11,'pointer-events':'none'},g).textContent='💨';
+    mk('text',{x:W/2,y:H+11,'text-anchor':'middle','font-size':6.5,fill:'#dc2626','font-weight':'bold','pointer-events':'none'},g).textContent='⚠ Falsche Spannung — Modul defekt (24V DC erforderlich)';
+  }
+}
+
+function drawDcquelle(g, comp) {
+  const W=60, H=80;
+  const state = comp.state || {};
+  const volt = state.dcVoltage!=null ? state.dcVoltage : 24;
+  mk('rect',{x:0,y:0,width:W,height:H,fill:'#fef2f2',stroke:'#991b1b','stroke-width':1.5,rx:4,filter:'url(#shadow)'},g);
+  mk('text',{x:W/2,y:13,'text-anchor':'middle','font-size':9,fill:'#991b1b','font-weight':'bold','pointer-events':'none'},g).textContent='⎓ DC';
+  mk('text',{x:W/2,y:23,'text-anchor':'middle','font-size':5.5,fill:'#b91c1c','pointer-events':'none'},g).textContent='Spannungsquelle';
+  // Schieberegler für Sollspannung (0–48V)
+  const tx1=8, tx2=W-8, ty=45;
+  mk('line',{x1:tx1,y1:ty,x2:tx2,y2:ty,stroke:'#94a3b8','stroke-width':3,'stroke-linecap':'round','pointer-events':'none'},g);
+  mk('text',{x:tx1,y:ty-6,'font-size':5,fill:'#94a3b8','pointer-events':'none'},g).textContent='0';
+  mk('text',{x:tx2,y:ty-6,'text-anchor':'end','font-size':5,fill:'#94a3b8','pointer-events':'none'},g).textContent='48';
+  const knobX = tx1 + (tx2-tx1) * Math.max(0,Math.min(48,volt))/48;
+  mk('circle',{cx:knobX,cy:ty,r:6.5,fill:'#dc2626',stroke:'#7f1d1d','stroke-width':1.5,cursor:'ew-resize',class:'dc-knob'},g);
+  mk('text',{x:W/2,y:ty+16,'text-anchor':'middle','font-size':10,fill:'#7f1d1d','font-weight':'bold','pointer-events':'none'},g).textContent=Math.round(volt)+' V';
+  mk('text',{x:15,y:H-4,'text-anchor':'middle','font-size':8,fill:'#dc2626','font-weight':'bold','pointer-events':'none'},g).textContent='+';
+  mk('text',{x:45,y:H-4,'text-anchor':'middle','font-size':8,fill:'#1f2937','font-weight':'bold','pointer-events':'none'},g).textContent='–';
+}
+
+function drawGleichrichter(g, comp) {
+  const W=80, H=110;
+  const state = comp.state || {};
+  const volt = state.dcVoltage!=null ? state.dcVoltage : 24;
+  const enabled = !!state._enabled;
+  mk('rect',{x:0,y:0,width:W,height:H,fill:'#fef2f2',stroke:'#991b1b','stroke-width':1.5,rx:4,filter:'url(#shadow)'},g);
+  mk('text',{x:W/2,y:15,'text-anchor':'middle','font-size':10,fill:'#991b1b','font-weight':'bold','pointer-events':'none'},g).textContent='AC/DC';
+  mk('text',{x:W/2,y:25,'text-anchor':'middle','font-size':6,fill:'#b91c1c','pointer-events':'none'},g).textContent='Gleichrichter einstellbar';
+  mk('circle',{cx:W-10,cy:10,r:3.5,fill:enabled?'#22c55e':'#94a3b8','pointer-events':'none'},g);
+  // Schieberegler für Ausgangsspannung (0–48V)
+  const tx1=10, tx2=W-10, ty=58;
+  mk('line',{x1:tx1,y1:ty,x2:tx2,y2:ty,stroke:'#94a3b8','stroke-width':3,'stroke-linecap':'round','pointer-events':'none'},g);
+  mk('text',{x:tx1,y:ty-8,'font-size':6,fill:'#94a3b8','pointer-events':'none'},g).textContent='0';
+  mk('text',{x:tx2,y:ty-8,'text-anchor':'end','font-size':6,fill:'#94a3b8','pointer-events':'none'},g).textContent='48';
+  const knobX = tx1 + (tx2-tx1) * Math.max(0,Math.min(48,volt))/48;
+  mk('circle',{cx:knobX,cy:ty,r:7,fill:'#dc2626',stroke:'#7f1d1d','stroke-width':1.5,cursor:'ew-resize',class:'gr-knob'},g);
+  mk('text',{x:W/2,y:ty+20,'text-anchor':'middle','font-size':11,fill:'#7f1d1d','font-weight':'bold','pointer-events':'none'},g).textContent=Math.round(volt)+' V=';
 }
 
 function drawAufputzgehaeuse(g, comp) {
@@ -2761,7 +2900,9 @@ function drawComp(g, comp) {
     case 'stromstoss':      drawStromstoss(g, comp.state); break;
     case 'zeitrelais':      drawZeitrelais(g, comp); break;
     case 'bewegungsmelder': drawBewegungsmelder(g); break;
-    case 'logo':             drawLogo(g); break;
+    case 'logo': case 'logo24': drawLogo(g, comp); break;
+    case 'dcquelle':         drawDcquelle(g, comp); break;
+    case 'gleichrichter':    drawGleichrichter(g, comp); break;
     case 'aufputzgehaeuse1':
     case 'aufputzgehaeuse2':
     case 'aufputzgehaeuse3': drawAufputzgehaeuse(g, comp); break;
@@ -3118,6 +3259,19 @@ function render() {
         });
       }
     }
+    // DC-Spannungsquelle / Gleichrichter: Schieberegler-Knopf ziehbar machen
+    if (comp.type === 'dcquelle' || comp.type === 'gleichrichter') {
+      const knob = g.querySelector(comp.type === 'dcquelle' ? '.dc-knob' : '.gr-knob');
+      if (knob) {
+        knob.addEventListener('pointerdown', e => {
+          e.stopPropagation();
+          if (e.pointerType !== 'mouse') SVG.setPointerCapture(e.pointerId);
+          if (!comp.state) comp.state = {};
+          const p = svgPt(e);
+          drag = { dcComp: comp, startX: p.x, startVoltage: comp.state.dcVoltage != null ? comp.state.dcVoltage : 24 };
+        });
+      }
+    }
     // Label — draggable + dblclick-editable with overlap avoidance
     const hasCustomLabel = comp.label && comp.label !== comp.def.label;
     const isSel = sel===comp.id;
@@ -3217,7 +3371,7 @@ function render() {
       // Double-click detection via timing (browser dblclick breaks after render())
       if (!isPort && !comp.def.isCable && now - lastClickTime < 350 && lastClickId === comp.id) {
         lastClickTime = 0; lastClickId = null;
-        if (comp.type === 'logo') { openLogoEditor(comp); return; }
+        if (comp.type === 'logo' || comp.type === 'logo24') { openLogoEditor(comp); return; }
         const v = prompt('Beschriftung:', comp.label || comp.def.label);
         if (v !== null) { comp.label = v; render(); }
         return;
@@ -3413,13 +3567,14 @@ function render() {
         }
       }
 
-      // LOGO!: I/O-LED-Anzeige auf dem LCD
-      if (comp.type === 'logo') {
+      // SPS: I/O-LED-Anzeige auf dem LCD
+      if ((comp.type === 'logo' || comp.type === 'logo24') && !(comp.state && comp.state.broken)) {
         const prog = comp.program || [];
+        const livePot = ElektroSim.ANY_L | ElektroSim.POT_DCP;
         // I1–I12 als kleine LEDs oben auf dem Gerät
         for (let ii = 0; ii < 12; ii++) {
           const pot = portPotMap[comp.id+':'+ii] || 0;
-          const on = !!(pot & ElektroSim.ANY_L);
+          const on = !!(pot & livePot);
           mk('circle',{cx:bb.x1+10+ii*20,cy:bb.y1+6,r:3,
             fill:on?'#22c55e':'#374151',opacity:on?1:0.4,
             'pointer-events':'none'},CG);
@@ -3474,7 +3629,8 @@ function render() {
       const pn1=portNodeMap[probeA.id+':'+probeA.p], pn2=portNodeMap[probeB.id+':'+probeB.p];
       const pp1=portPotMap[probeA.id+':'+probeA.p]||0, pp2=portPotMap[probeB.id+':'+probeB.p]||0;
       const continuity = pn1!=null && pn1===pn2;
-      const reading = window.ElektroSim ? ElektroSim.sprReading(pp1, pp2, continuity) : '?';
+      const dcVolt1 = pn1!=null ? dcVoltNodeMap[pn1] : undefined, dcVolt2 = pn2!=null ? dcVoltNodeMap[pn2] : undefined;
+      const reading = window.ElektroSim ? ElektroSim.sprReading(pp1, pp2, continuity, dcVolt1, dcVolt2) : '?';
       const rw = reading.length*6.2+16;
       mk('rect',{x:mx-rw/2,y:my-19,width:rw,height:16,rx:3,fill:'#111827',stroke:'#f59e0b','stroke-width':1,'pointer-events':'none'},CG);
       mk('text',{x:mx,y:my-7,'text-anchor':'middle','font-size':9,'font-weight':'bold','font-family':'monospace',
@@ -3804,6 +3960,14 @@ SVG.addEventListener('pointermove', e=>{
       if (!c.state) c.state = {};
       const df = p.x - drag.startX;
       c.state.freq = Math.max(0, Math.min(100, Math.round(drag.startFreq + df*(100/60))));
+      if (simMode) runSim(); else render();
+      return;
+    }
+    if (drag.dcComp) {
+      const c = drag.dcComp;
+      if (!c.state) c.state = {};
+      const df = p.x - drag.startX;
+      c.state.dcVoltage = Math.max(0, Math.min(48, Math.round(drag.startVoltage + df*(48/60))));
       if (simMode) runSim(); else render();
       return;
     }
@@ -4225,7 +4389,7 @@ function buildSaveData() {
       if (c.labelDy) o.labelDy = c.labelDy;
       if (c.portLabels && Object.keys(c.portLabels).length) o.portLabels = c.portLabels;
       if (c.state && Object.keys(c.state).length) o.state = c.state;
-      if (c.program) o.program = c.program;  // LOGO! FBD program
+      if (c.program) o.program = c.program;  // SPS FBD program
       if (c.railId != null) o.railId = c.railId;
       if (c.tePos  != null) o.tePos  = c.tePos;
       if (c.uvId   != null) o.uvId   = c.uvId;
@@ -4448,11 +4612,12 @@ function toggleSim() {
   } else {
     portPotMap = {};
     portNodeMap = {};
+    dcVoltNodeMap = {};
     activeWireIds = new Set();
     probeMode = false; probeA = null; probeB = null;
     document.getElementById('btn-probe').classList.remove('active');
     // lit-State der Lampen zurücksetzen
-    comps.forEach(c => { if (c.state) { delete c.state.lit; delete c.state.running; delete c.state.direction; delete c.state.connection; delete c.state.speed; delete c.state.coilOn; delete c.state._on; delete c.state._tripped; delete c.state._zrOn; delete c.state._zrWaiting; delete c.state._latched; } c._zr = null; });
+    comps.forEach(c => { if (c.state) { delete c.state.lit; delete c.state.running; delete c.state.direction; delete c.state.connection; delete c.state.speed; delete c.state.coilOn; delete c.state._on; delete c.state._tripped; delete c.state._zrOn; delete c.state._zrWaiting; delete c.state._latched; delete c.state._enabled; delete c.state.broken; } c._zr = null; });
     render();
   }
 }
@@ -4488,6 +4653,7 @@ function initSimState() {
       case 'schuetz': d.coilOn = false; break;
       case 'taster': d.pressed = false; break;
       case 'bewegungsmelder': d.triggered = false; break;
+      case 'logo24': d.broken = false; break;
     }
     simState[c.id] = d;
   });
@@ -4500,25 +4666,31 @@ function runSim() {
     simState = res.state;
     portPotMap = res.portPot || {};
     portNodeMap = res.portNode || {};
+    dcVoltNodeMap = res.dcVoltNode || {};
     activeWireIds = new Set(res.activeWires || []);
 
-    // Schutzgeräte auslösen bei Fehlern (LS/FI rausfliegen)
+    // Schutzgeräte auslösen bei Fehlern (LS/FI rausfliegen), defekte Geräte markieren
     if (res.faults && res.faults.length > 0) {
       const seen = new Set();
       res.faults.forEach(f => {
         if (!seen.has(f.id)) {
           seen.add(f.id);
-          simState[f.id] = { ...(simState[f.id]||{}), on: false, tripped: true, tripCause: f.cause };
+          if (f.type === 'logo24_burn') {
+            simState[f.id] = { ...(simState[f.id]||{}), broken: true };
+          } else {
+            simState[f.id] = { ...(simState[f.id]||{}), on: false, tripped: true, tripCause: f.cause };
+          }
         }
       });
-      // Nochmals simulieren mit ausgelösten Geräten
+      // Nochmals simulieren mit ausgelösten/defekten Geräten
       res = ElektroSim.simulate(comps, wires, simState);
       simState = res.state;
       portPotMap = res.portPot || {};
       portNodeMap = res.portNode || {};
+      dcVoltNodeMap = res.dcVoltNode || {};
       activeWireIds = new Set(res.activeWires || []);
     }
-  } catch(e) { console.error('Sim:', e); portPotMap = {}; portNodeMap = {}; activeWireIds = new Set(); }
+  } catch(e) { console.error('Sim:', e); portPotMap = {}; portNodeMap = {}; dcVoltNodeMap = {}; activeWireIds = new Set(); }
   // lit-State in comp.state übernehmen
   comps.forEach(c => {
     const ss = simState[c.id];
@@ -4532,7 +4704,7 @@ function runSim() {
       c.state.freqHz = ss.freqHz || null;
     }
     if (c.type === 'schuetz') c.state.coilOn = !!ss.coilOn;
-    if (c.type === 'frequenzumrichter') c.state._enabled = !!ss.enabled;
+    if (c.type === 'frequenzumrichter' || c.type === 'gleichrichter') c.state._enabled = !!ss.enabled;
     if (['ls1','ls3','rcbo','rcd2','rcd4'].includes(c.type)) {
       c.state._on = ss.on !== false && !ss.tripped;
       c.state._tripped = !!ss.tripped;
@@ -4541,9 +4713,10 @@ function runSim() {
     if (c.type === 'zeitrelais') { c.state._zrOn = !!ss.on; c.state._zrWaiting = !!ss.waiting; }
     if (c.type === 'notaus') c.state._latched = !!ss.latched;
     if (c.type === 'serienschalter') { c.state._on1 = ss.on1 !== false; c.state._on2 = ss.on2 !== false; }
-    if (c.type === 'logo') {
+    if (c.type === 'logo' || c.type === 'logo24') {
       for (let qi = 1; qi <= 8; qi++) c.state['q'+qi] = !!ss['q'+qi];
     }
+    if (c.type === 'logo24') c.state.broken = !!ss.broken;
   });
   render();
 }
@@ -4569,6 +4742,11 @@ function handleSimClick(comp) {
       simState[comp.id] = { ...s, crossed: !s.crossed }; break;
     case 'bewegungsmelder':
       simState[comp.id] = { ...s, triggered: !s.triggered }; break;
+    case 'logo24':
+      // Defekt (falsche Spannung) → per Klick "austauschen" (Reset)
+      if (s.broken) simState[comp.id] = { ...s, broken: false };
+      else return;
+      break;
     default: return; // Kein Klickhandler für diesen Typ
   }
   runSim();
@@ -4754,8 +4932,8 @@ SVG.addEventListener('touchcancel', ()=>{
   touchDragComp=null; touchPinch=null; drag=null; panDrag=null;
 }, {passive:true});
 
-// ── LOGO! FUB Programmiereditor ─────────────────────────────────────────────
-// ── LOGO! FBD Editor — neuer Tab + BroadcastChannel ──────────────────────────
+// ── SPS FUB Programmiereditor ─────────────────────────────────────────────
+// ── SPS FBD Editor — neuer Tab + BroadcastChannel ──────────────────────────
 function openLogoEditor(comp) {
   if (!comp.state) comp.state = {};
   if (!comp.program || Array.isArray(comp.program)) comp.program = { blocks:[], conns:[] };
@@ -4791,7 +4969,7 @@ function broadcastLogoSim(cid) {
   const iActive = [];
   for (let ii = 0; ii < 12; ii++) {
     const pot = (portPotMap && portPotMap[comp.id+':'+ii]) || 0;
-    iActive.push(!!(pot & (window.ElektroSim ? ElektroSim.ANY_L : 28)));
+    iActive.push(!!(pot & (window.ElektroSim ? (ElektroSim.ANY_L | ElektroSim.POT_DCP) : 60)));
   }
   const ss = simState[comp.id] || {};
   const qActive = [1,2,3,4,5,6,7,8].map(q => !!ss['q'+q]);
@@ -4815,6 +4993,7 @@ const _origRunSim = typeof runSim !== 'undefined' ? runSim : null;
 (function(global){
 
 const PE=1, N=2, L1=4, L2=8, L3=16, ANY_L=4|8|16;
+const DCP=32, DCN=64; // DC+ / DC- — galvanisch von AC getrennte Kleinspannung
 
 // Mehr als 1 Phase im selben Knoten → Phasenkurzschluss
 const hasLLFault = dp => { const p=dp&ANY_L; return !!(p&(p-1)); };
@@ -4931,10 +5110,11 @@ function connectComponents(comps,wires,simSt,uf,idx,edges){
       case'nblock': case'peblock':
       case'wago2': case'wago3': case'wago5':
         for(let i=1;i<c.def.ports.length;i++) U(P(0),P(i)); break;
-      case'logo': {
+      case'logo': case'logo24': {
         // Relay-Ausgänge: wenn Qx aktiv → Q_IN (Port 12+qi*2) mit Q_OUT (Port 13+qi*2) verbinden
+        // (defekte 24V-SPS mit AC am Eingang: alle Ausgänge tot)
         const s=simSt[c.id]||{};
-        for(let qi=0;qi<8;qi++){ if(s['q'+(qi+1)]) U(P(12+qi*2),P(13+qi*2)); }
+        if(!s.broken) for(let qi=0;qi<8;qi++){ if(s['q'+(qi+1)]) U(P(12+qi*2),P(13+qi*2)); }
         break;
       }
     }
@@ -4980,13 +5160,20 @@ function motorConn(rootU1,rootV1,rootW1,rootU2,rootV2,rootW2){
 // Knoten-Identität (uf-Root) geprüft, nicht nur über gleiches Potential — zwei
 // getrennte, zufällig gleich benannte Adern (z.B. zwei unverbundene L1-Enden)
 // zeigen daher richtigerweise "0V" statt fälschlich "Durchgang".
-function sprReading(pot1, pot2, sameNode){
-  const name = b => (b&1)?'PE' : (b&2)?'N' : (b&4)?'L1' : (b&8)?'L2' : (b&16)?'L3' : null;
+function sprReading(pot1, pot2, sameNode, dcVolt1, dcVolt2){
+  const name = b => (b&1)?'PE' : (b&2)?'N' : (b&4)?'L1' : (b&8)?'L2' : (b&16)?'L3' : (b&32)?'DC+' : (b&64)?'DC-' : null;
   const n1=name(pot1), n2=name(pot2);
   const isL = n => n && n[0]==='L';
+  const isDC = n => n==='DC+'||n==='DC-';
   let volt;
   if(!n1 && !n2) volt='0V';
   else if(n1===n2) volt='0V';
+  else if(isDC(n1) || isDC(n2)){
+    if((n1==='DC+'&&n2==='DC-')||(n1==='DC-'&&n2==='DC+')){
+      const v = dcVolt1!=null?dcVolt1:(dcVolt2!=null?dcVolt2:24);
+      volt = Math.round(v)+'V=';
+    } else volt = 'AC/DC?'; // AC und DC gemischt bzw. nicht eindeutig zuordenbar
+  }
   else if(isL(n1) && isL(n2)) volt='400V~';
   else if((n1==='N'&&n2==='PE')||(n1==='PE'&&n2==='N')) volt='0V';
   else volt='230V~';
@@ -5108,9 +5295,23 @@ function simulate(comps, wires, simSt, _depth){
         if(p!=null){ pot[uf.find(p)]|=pm[i]; sourceNodes.add(p); }
       }
     }
+    if(c.type==='dcquelle'){
+      const pP=idx[c.id+':0'], pM=idx[c.id+':1'];
+      if(pP!=null){ pot[uf.find(pP)]|=DCP; sourceNodes.add(pP); }
+      if(pM!=null){ pot[uf.find(pM)]|=DCN; sourceNodes.add(pM); }
+    }
   }
 
   const gp=(id,pi)=>{const p=idx[id+':'+pi];return p!=null?pot[uf.find(p)]:0;};
+
+  // Spannungswert pro Knoten (für die Anzeige, z.B. am Spannungsprüfer) — nur für
+  // einstellbare DC-Quellen relevant, AC ist im TN-C-S-Netz fest bei 230/400V.
+  const dcVoltMap = new Map();
+  for(const c of comps){
+    if(c.type!=='dcquelle') continue;
+    const pP=idx[c.id+':0'];
+    if(pP!=null) dcVoltMap.set(uf.find(pP), (c.state&&c.state.dcVoltage!=null)?c.state.dcVoltage:24);
+  }
 
   // Frequenzumrichter: synthetisiert ein 3-Phasen-Ersatzfeld am Ausgang (U/V/W),
   // sobald am Eingang alle 3 Phasen anliegen. Galvanisch getrennt vom Eingang
@@ -5126,6 +5327,21 @@ function simulate(comps, wires, simSt, _depth){
         const p=idx[c.id+':'+pi];
         if(p!=null){ const r=uf.find(p); pot[r]|=bit; fuOutFreq.set(r,freq); }
       }
+    }
+  }
+
+  // Gleichrichter: erzeugt eine galvanisch getrennte, einstellbare Gleichspannung
+  // am Ausgang (L+/M), sobald am Eingang L+N (230V AC) anliegen.
+  let grEnabled = new Set();
+  for(const c of comps){
+    if(c.type!=='gleichrichter') continue;
+    const enabled = !!((gp(c.id,0)&ANY_L)&&(gp(c.id,1)&N));
+    const volt = (c.state && c.state.dcVoltage!=null) ? c.state.dcVoltage : 24;
+    if(enabled){
+      grEnabled.add(c.id);
+      const pP=idx[c.id+':2'], pM=idx[c.id+':3'];
+      if(pP!=null){ const r=uf.find(pP); pot[r]|=DCP; dcVoltMap.set(r,volt); }
+      if(pM!=null){ pot[uf.find(pM)]|=DCN; }
     }
   }
 
@@ -5155,11 +5371,12 @@ function simulate(comps, wires, simSt, _depth){
       const r=zrCompute(c, triggered, delayMs, func);
       if(r.on!==!!s.on || r.waiting!==!!s.waiting) delta[c.id]={...s,on:r.on,waiting:r.waiting};
     }
-    // LOGO! FBD-Programm: Eingänge lesen → FBD auswerten → Ausgänge
-    if(c.type==='logo' && c.program && c.program.blocks && c.program.blocks.length){
+    // SPS FBD-Programm: Eingänge lesen → FBD auswerten → Ausgänge
+    // (defekte 24V-SPS mit AC am Eingang wertet nicht mehr aus, Ausgänge bleiben aus)
+    if((c.type==='logo'||c.type==='logo24') && !s.broken && c.program && c.program.blocks && c.program.blocks.length){
       const prog=c.program;
       const iActive=[];
-      for(let ii=0;ii<12;ii++) iActive.push(!!(gp(c.id,ii)&ANY_L));
+      for(let ii=0;ii<12;ii++) iActive.push(!!(gp(c.id,ii)&(ANY_L|DCP)));
       const vals={};
       // Seed input blocks
       for(const b of prog.blocks){
@@ -5178,7 +5395,7 @@ function simulate(comps, wires, simSt, _depth){
         for(const b of prog.blocks){
           if(b.type==='input'||b.type==='output') continue;
           const iv=inVals[b.id]||[], ic=b.inputCount||2;
-          // LOGO! Logic: Unconnected inputs default based on function type
+          // SPS Logic: Unconnected inputs default based on function type
           const isAndType = ['and','and_edge','nand','nand_edge'].includes(b.type);
           const defaultVal = isAndType ? true : false;
           const arr=Array.from({length:ic},(_,i)=>iv[i]??defaultVal);
@@ -5264,6 +5481,10 @@ function simulate(comps, wires, simSt, _depth){
       const changed2=outVals.some((v,i)=>v!==!!(s['q'+(i+1)]));
       if(changed2) delta[c.id]={...s,q1:outVals[0],q2:outVals[1],q3:outVals[2],q4:outVals[3],q5:outVals[4],q6:outVals[5],q7:outVals[6],q8:outVals[7]};
     }
+    if(c.type==='logo24' && s.broken){
+      const hasQ=[1,2,3,4,5,6,7,8].some(qi=>s['q'+qi]);
+      if(hasQ) delta[c.id]={...s,q1:false,q2:false,q3:false,q4:false,q5:false,q6:false,q7:false,q8:false};
+    }
   }
 
   if(Object.keys(delta).length)
@@ -5294,6 +5515,9 @@ function simulate(comps, wires, simSt, _depth){
       const freq=(c.state&&c.state.freq!=null)?c.state.freq:50;
       result[c.id]={...s,enabled,freq};
     }
+    if(c.type==='gleichrichter'){
+      result[c.id]={...s,enabled:grEnabled.has(c.id)};
+    }
     if(c.type==='dahlander'){
       const root=pi=>{ const p=idx[c.id+':'+pi]; return p!=null?uf.find(p):null; };
       const rootU1=root(0),rootV1=root(1),rootW1=root(2);
@@ -5322,11 +5546,18 @@ function simulate(comps, wires, simSt, _depth){
       activeLoadPorts.push(idx[c.id+':'+a1]); activeLoadPorts.push(idx[c.id+':'+a2]);
     }
     if(c.type==='logo'){
-      // LOGO! braucht Spannung an L (28) und N (29) um zu laufen
+      // SPS braucht Spannung an L (28) und N (29) um zu laufen
       const pL=gp(c.id,28), pN=gp(c.id,29);
       const powered=!!((pL&ANY_L)&&(pN&N));
       result[c.id]={...s, powered};
       if(powered){ activeLoadPorts.push(idx[c.id+':28']); activeLoadPorts.push(idx[c.id+':29']); }
+    }
+    if(c.type==='logo24'){
+      // 24V-SPS braucht Gleichspannung an L+ (28) und M (29) um zu laufen
+      const pLplus=gp(c.id,28), pM=gp(c.id,29);
+      const powered=!s.broken && !!((pLplus&DCP)&&(pM&DCN));
+      result[c.id]={...s, powered};
+      if(powered || s.broken){ activeLoadPorts.push(idx[c.id+':28']); activeLoadPorts.push(idx[c.id+':29']); }
     }
   }
 
@@ -5408,6 +5639,11 @@ function simulate(comps, wires, simSt, _depth){
         }
       }
     }
+    // 24V-SPS: AC (230V) am DC-Versorgungseingang (L+/M) → Modul defekt
+    if(c.type==='logo24' && !s.broken){
+      const pLplus=gp(c.id,28), pM=gp(c.id,29);
+      if((pLplus&ANY_L)||(pLplus&N)||(pM&ANY_L)) addFault('logo24_burn','230V AC am 24V-DC-Eingang',c.id);
+    }
   }
 
   // Port-Potential-Map + Port-Knoten-Map (für Durchgangsprüfung: echte Knoten-Identität
@@ -5421,10 +5657,10 @@ function simulate(comps, wires, simSt, _depth){
       portNode[c.id+':'+i]=p!=null?uf.find(p):null;
     }
 
-  return{state:result, portPot, portNode, faults, activeWires:[...activeWires]};
+  return{state:result, portPot, portNode, dcVoltNode:Object.fromEntries(dcVoltMap), faults, activeWires:[...activeWires]};
 }
 
-global.ElektroSim={simulate, sprReading, ANY_L, POT_N:N, POT_PE:PE, POT_L1:L1, POT_L2:L2, POT_L3:L3};
+global.ElektroSim={simulate, sprReading, ANY_L, POT_N:N, POT_PE:PE, POT_L1:L1, POT_L2:L2, POT_L3:L3, POT_DCP:DCP, POT_DCN:DCN};
 })(window);
 </script>
 
