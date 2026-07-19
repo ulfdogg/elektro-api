@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ElektroSim</string>
+    <string name="title_activity_main">ElektroSim</string>
+    <string name="package_name">de.elektrosimulator.app</string>
+    <string name="custom_url_scheme">de.elektrosimulator.app</string>
+</resources>

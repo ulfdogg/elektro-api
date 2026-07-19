@@ -1,0 +1,21 @@
+{
+  "appId": "de.elektrosimulator.app",
+  "appName": "ElektroSim",
+  "webDir": "www",
+  "android": {
+    "minWebViewVersion": 55,
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#e8edf2",
+      "showSpinner": false
+    }
+  }
+}

@@ -1,0 +1,83 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'public/**'
+      - 'android-app/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Capacitor dependencies
+        working-directory: android-app
+        run: npm ci
+
+      - name: Prepare web assets (OFFLINE_APP=true)
+        working-directory: android-app
+        run: bash build-web.sh
+
+      - name: Sync Capacitor
+        working-directory: android-app
+        run: npx cap sync android
+
+      - name: Make Gradle executable
+        working-directory: android-app/android
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        working-directory: android-app/android
+        run: ./gradlew assembleDebug --no-daemon
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+
+      - name: Rename APK
+        run: |
+          APK_SRC="android-app/android/app/build/outputs/apk/debug/app-debug.apk"
+          APK_DST="ElektroSim-debug.apk"
+          cp "$APK_SRC" "$APK_DST"
+          echo "APK_PATH=$APK_DST" >> $GITHUB_ENV
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ElektroSim-APK
+          path: ElektroSim-debug.apk
+          retention-days: 30
+
+      - name: Create Release on version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ElektroSim-debug.apk
+          name: "ElektroSim ${{ github.ref_name }}"
+          body: |
+            Android APK für ElektroSim – Elektroinstallations-Planer
+
+            **Installation:**
+            1. APK auf das Android-Gerät kopieren
+            2. Unter Einstellungen → Sicherheit → "Unbekannte Quellen" erlauben
+            3. APK antippen und installieren
+
+            Kompatibel mit Android 5.1+ (API 22)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
