@@ -4239,6 +4239,71 @@ document.getElementById('sidebar').addEventListener('click', e => {
   if (m) sbTap(m[1]);
 });
 
+// ── Touch-Drag aus Sidebar ────────────────────────────────────────────────────
+let sbTouchDrag = null;
+
+document.getElementById('sidebar').addEventListener('touchstart', e => {
+  const item = e.target.closest('.s-item');
+  if (!item) return;
+  const m = /'(\w+)'/.exec(item.getAttribute('ondragstart') || '');
+  if (!m) return;
+  const t = e.touches[0];
+  sbTouchDrag = { type: m[1], startX: t.clientX, startY: t.clientY, ghost: null, active: false };
+}, { passive: true });
+
+document.addEventListener('touchmove', e => {
+  if (!sbTouchDrag) return;
+  const t = e.touches[0];
+  const dx = t.clientX - sbTouchDrag.startX;
+  const dy = t.clientY - sbTouchDrag.startY;
+  if (!sbTouchDrag.active) {
+    if (Math.hypot(dx, dy) < 10) return;
+    sbTouchDrag.active = true;
+    const d = D[sbTouchDrag.type];
+    const ghost = document.createElement('div');
+    ghost.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;background:#ebf8ff;border:2px solid #3b82f6;border-radius:6px;padding:6px 14px;font-size:13px;color:#1e3a5f;white-space:nowrap;box-shadow:0 4px 16px #0003;transform:translate(-50%,-50%);';
+    ghost.textContent = d ? d.label : sbTouchDrag.type;
+    document.body.appendChild(ghost);
+    sbTouchDrag.ghost = ghost;
+  }
+  e.preventDefault();
+  const ghost = sbTouchDrag.ghost;
+  if (ghost) { ghost.style.left = t.clientX + 'px'; ghost.style.top = t.clientY + 'px'; }
+  const r = document.getElementById('canvas-wrap').getBoundingClientRect();
+  const over = t.clientX >= r.left && t.clientX <= r.right && t.clientY >= r.top && t.clientY <= r.bottom;
+  document.getElementById('canvas-wrap').style.outline = over ? '3px solid #3b82f6' : '';
+}, { passive: false });
+
+document.addEventListener('touchend', e => {
+  if (!sbTouchDrag) return;
+  const { type, ghost, active } = sbTouchDrag;
+  sbTouchDrag = null;
+  if (ghost) ghost.remove();
+  document.getElementById('canvas-wrap').style.outline = '';
+  if (!active) return; // kein Drag → normaler Tap, sbTap übernimmt
+  const t = e.changedTouches[0];
+  const r = document.getElementById('canvas-wrap').getBoundingClientRect();
+  if (t.clientX < r.left || t.clientX > r.right || t.clientY < r.top || t.clientY > r.bottom) return;
+  const p = svgPt({ clientX: t.clientX, clientY: t.clientY });
+  const d = D[type];
+  if (!d) return;
+  pushHistory();
+  if (d.isKanal) {
+    comps.push({id:++cid,type,def:d,x:snp(p.x-100),y:snp(p.y),ex:snp(p.x+100),ey:snp(p.y),label:d.label,state:{},kanalW:60});
+  } else if (d.isCable) {
+    comps.push({id:++cid,type,def:d,x:snp(p.x-105),y:snp(p.y),ex:snp(p.x+105),ey:snp(p.y),label:d.label,state:{}});
+  } else {
+    comps.push({id:++cid,type,def:d,x:snp(p.x-d.w/2),y:snp(p.y-d.h/2),label:d.label,state:{}});
+    const c = comps[comps.length-1];
+    if (d.isActuator||d.isContact) snapToHousing(c);
+    else if (d.isDINDevice) snapToDINRail(c);
+    else if (d.isDINRail) snapRailToUV(c);
+  }
+  sbType = null;
+  if (window.innerWidth <= 767) toggleSidebar();
+  render();
+}, { passive: true });
+
 // Snap an insert to the nearest free slot in any housing
 function snapToHousing(comp) {
   if (!comp.def.isActuator && !comp.def.isContact) return;
