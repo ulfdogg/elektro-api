@@ -5,7 +5,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 var CORS_HEADERS = {
   "Access-Control-Allow-Credentials": "true",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
+  "Access-Control-Allow-Headers": "Content-Type, Authorization"
 };
 function corsHeaders(request) {
   const origin = request.headers.get("Origin") || "*";
@@ -59,7 +59,12 @@ function sessionCookieHeader(token, expires) {
 }
 __name(sessionCookieHeader, "sessionCookieHeader");
 async function getCurrentUser(request, db) {
-  const token = getSessionToken(request);
+  let token = getSessionToken(request);
+  if (!token) {
+    const auth = request.headers.get("Authorization") || "";
+    const m = auth.match(/^Bearer ([a-f0-9]{64})$/i);
+    if (m) token = m[1];
+  }
   if (!token) return null;
   const row = await db.prepare(`
     SELECT u.id, u.username, u.is_admin, u.is_demo
@@ -83,7 +88,7 @@ async function handleLogin(request, db) {
   const exp = Math.floor(Date.now() / 1e3) + 60 * 60 * 24 * 30;
   await db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)").bind(token, row.id, exp).run();
   const headers = { ...corsHeaders(request), "Set-Cookie": sessionCookieHeader(token, exp), "Content-Type": "application/json" };
-  return new Response(JSON.stringify({ user: { id: row.id, username } }), { status: 200, headers });
+  return new Response(JSON.stringify({ user: { id: row.id, username }, token }), { status: 200, headers });
 }
 __name(handleLogin, "handleLogin");
 async function handleLogout(request, db) {
@@ -172,6 +177,8 @@ async function handleCircuits(request, db) {
       if (result.meta.changes === 0) return json({ error: "Nicht gefunden oder kein Zugriff" }, 404, request);
       return json({ id: parseInt(id), name }, 200, request);
     } else {
+      const count = await db.prepare("SELECT COUNT(*) as n FROM circuits WHERE user_id = ?").bind(user.id).first();
+      if (count.n >= 50) return json({ error: "Maximale Projektanzahl (50) erreicht. Bitte ein Projekt löschen." }, 400, request);
       const result = await db.prepare("INSERT INTO circuits (user_id, name, type, data, updated_at) VALUES (?, ?, ?, ?, ?)").bind(user.id, name, type, dataJson, now).run();
       return json({ id: result.meta.last_row_id, name }, 201, request);
     }
