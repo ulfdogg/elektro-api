@@ -47,8 +47,6 @@ jobs:
       - name: Build Debug APK
         working-directory: android-app/android
         run: ./gradlew assembleDebug --no-daemon
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
       - name: Rename APK
         run: |
