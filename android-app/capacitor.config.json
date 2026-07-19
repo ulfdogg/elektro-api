@@ -8,6 +8,11 @@
     "captureInput": true,
     "webContentsDebuggingEnabled": false
   },
+  "ios": {
+    "contentInset": "always",
+    "scrollEnabled": true,
+    "limitsNavigationsToAppBoundDomains": true
+  },
   "server": {
     "androidScheme": "https"
   },
