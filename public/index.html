@@ -5021,6 +5021,12 @@ SVG.addEventListener('touchmove', e=>{
     render(); return;
   }
 
+  // Frame/text mode: always drive via mousemove, never pan
+  if (mode==='frame'||mode==='text') {
+    SVG.dispatchEvent(new MouseEvent('mousemove',{clientX:t.clientX,clientY:t.clientY,bubbles:true}));
+    return;
+  }
+
   // Background pan
   if (panDrag) {
     vpX=panDrag.vx+(t.clientX-panDrag.sx);
