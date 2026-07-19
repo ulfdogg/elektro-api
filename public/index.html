@@ -46,6 +46,10 @@ if (!OFFLINE_APP && 'serviceWorker' in navigator) {
         if(saveBtn){ saveBtn.textContent='📁 Projekt speichern'; saveBtn.setAttribute('onclick','localProjectSave()'); }
         const loadBtn=document.getElementById('es-cloud-load-btn');
         if(loadBtn){ loadBtn.textContent='📁 Projekte'; loadBtn.setAttribute('onclick','localProjectLoad()'); }
+        const jsonSave=document.getElementById('btn-json-save');
+        if(jsonSave) jsonSave.style.display='none';
+        const jsonLoad=document.getElementById('btn-json-load');
+        if(jsonLoad) jsonLoad.style.display='none';
       }
     };
     if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',applyUser);
@@ -206,8 +210,8 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <button class="t-btn" id="es-logout-btn" onclick="doLogout()" style="color:#f87171;margin-left:4px">⏻ Abmelden</button>
     </div>
     <div class="tb-row">
-      <button class="t-btn" onclick="savePlan()">💾 Datei</button>
-      <button class="t-btn" onclick="loadPlan()">📂 Datei</button>
+      <button class="t-btn" id="btn-json-save" onclick="savePlan()">💾 Datei</button>
+      <button class="t-btn" id="btn-json-load" onclick="loadPlan()">📂 Datei</button>
       <button class="t-btn" id="es-cloud-save-btn" onclick="serverSave()">☁ Speichern</button>
       <button class="t-btn" id="es-cloud-load-btn" onclick="serverLoad()">☁ Laden</button>
       <button class="t-btn" onclick="exportPNG()">🖼 PNG</button>
