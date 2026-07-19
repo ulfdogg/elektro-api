@@ -361,7 +361,7 @@ let blkCtr = 0;
 function initChannel(cid) {
   compId = cid;
   if(channel) channel.close();
-  channel = new BroadcastChannel('logo-editor-'+cid);
+  channel = new BroadcastChannel('sps-editor-'+cid);
   channel.onmessage = e => {
     const msg = e.data;
     if(msg.type==='sim-state') {
@@ -388,7 +388,7 @@ function broadcastProg() {
   if(!channel) return;
   channel.postMessage({ type:'prog-update', compId, prog });
   // Also save to localStorage as backup
-  try { localStorage.setItem('logo-prog-'+compId, JSON.stringify(prog)); } catch(e){}
+  try { localStorage.setItem('sps-prog-'+compId, JSON.stringify(prog)); } catch(e){}
 }
 
 // ── Sidebar init ──────────────────────────────────────────────────────────────
@@ -669,7 +669,7 @@ function drawBlock(b){
       const ii=parseInt(b.port.slice(1))-1;
       testInputs[ii]=!testInputs[ii];
       _evalCache=null;
-      updateLogoLive();
+      updateSpslive();
     });
   }
 
@@ -750,7 +750,7 @@ function evalFBD(){
         case'ton': {
           const en=iv[0]??false, ms=timerMs(b);
           if(!en){ b._timerStart=undefined; out=false; }
-          else if(b._timerStart===undefined){ b._timerStart=Date.now(); out=false; setTimeout(()=>{ _evalCache=null; updateLogoLive(); },ms+20); }
+          else if(b._timerStart===undefined){ b._timerStart=Date.now(); out=false; setTimeout(()=>{ _evalCache=null; updateSpslive(); },ms+20); }
           else { out=Date.now()-b._timerStart>=ms; }
           break;
         }
@@ -758,7 +758,7 @@ function evalFBD(){
           const en=iv[0]??false, ms=timerMs(b);
           if(en){ b._timerStart=null; out=true; }
           else if(b._timerStart===undefined){ out=false; }
-          else if(b._timerStart===null){ b._timerStart=Date.now(); out=true; setTimeout(()=>{ _evalCache=null; updateLogoLive(); },ms+20); }
+          else if(b._timerStart===null){ b._timerStart=Date.now(); out=true; setTimeout(()=>{ _evalCache=null; updateSpslive(); },ms+20); }
           else if(Date.now()-b._timerStart<ms){ out=true; }
           else { b._timerStart=undefined; out=false; }
           break;
@@ -767,11 +767,11 @@ function evalFBD(){
           const en=iv[0]??false, msTH=timerMs(b,false), msTL=timerMs(b,true);
           if(en){
             b._timerOff=undefined;
-            if(b._timerOn===undefined){ b._timerOn=Date.now(); setTimeout(()=>{ _evalCache=null; updateLogoLive(); },msTH+20); }
+            if(b._timerOn===undefined){ b._timerOn=Date.now(); setTimeout(()=>{ _evalCache=null; updateSpslive(); },msTH+20); }
             out=!!(b._timerOn!==undefined && Date.now()-b._timerOn>=msTH);
           } else {
             b._timerOn=undefined;
-            if(b._timerOff===undefined && b._prevOut){ b._timerOff=Date.now(); setTimeout(()=>{ _evalCache=null; updateLogoLive(); },msTL+20); }
+            if(b._timerOff===undefined && b._prevOut){ b._timerOff=Date.now(); setTimeout(()=>{ _evalCache=null; updateSpslive(); },msTL+20); }
             if(b._timerOff!==undefined){ out=Date.now()-b._timerOff<msTL; if(!out) b._timerOff=undefined; }
             else { out=false; }
           }
@@ -787,7 +787,7 @@ function evalFBD(){
             b._acc=Math.min((b._acc||0)+(now-b._lastT), ms+1);
             b._lastT=now;
             const rem=ms-(b._acc||0);
-            if(rem>0) setTimeout(()=>{ _evalCache=null; updateLogoLive(); },rem+20);
+            if(rem>0) setTimeout(()=>{ _evalCache=null; updateSpslive(); },rem+20);
           } else {
             b._lastT=null;
           }
@@ -827,7 +827,7 @@ function connSimVal(c){
   if(!_evalCache) return null;
   return _evalCache[c.fromId]??null;
 }
-function updateLogoLive(){
+function updateSpslive(){
   _evalCache=null;
   // Redraw connection colors
   gConns.innerHTML='';
@@ -1163,7 +1163,7 @@ if(cid){
   initChannel(cid);
   // Try to load from localStorage while waiting for main window
   try {
-    const saved=localStorage.getItem('logo-prog-'+cid);
+    const saved=localStorage.getItem('sps-prog-'+cid);
     if(saved){ prog=JSON.parse(saved); let max=0; prog.blocks.forEach(b=>{const n=parseInt((b.label||'').replace(/\D/g,'')); if(n>max) max=n;}); blkCtr=max; render(); zoomFit(); }
   } catch(e){}
 } else {
@@ -1202,7 +1202,7 @@ function getProgData(){ return JSON.stringify({blocks:prog.blocks,conns:prog.con
 function setProgData(data){
   const d=typeof data==='string'?JSON.parse(data):data;
   prog.blocks=d.blocks||[]; prog.conns=d.conns||[];
-  render(); updateLogoLive();
+  render(); updateSpslive();
 }
 
 async function serverSaveFbd(){

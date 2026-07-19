@@ -633,7 +633,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       </div>
 
       <div class="s-head">Steuerung</div>
-      <div class="s-item" ondragstart="sbDrag('logo')" draggable="true">
+      <div class="s-item" ondragstart="sbDrag('sps')" draggable="true">
         <svg width="96" height="36">
           <rect x="0" y="0" width="96" height="36" fill="#e5e7eb" stroke="#6b7280" stroke-width="1" rx="2"/>
           <rect x="0" y="0" width="96" height="6" fill="#d1d5db" rx="1"/>
@@ -651,7 +651,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
         </svg>
         <span class="s-label">SPS 12/8 230V</span>
       </div>
-      <div class="s-item" ondragstart="sbDrag('logo24')" draggable="true">
+      <div class="s-item" ondragstart="sbDrag('sps24')" draggable="true">
         <svg width="96" height="36">
           <rect x="0" y="0" width="96" height="36" fill="#e5e7eb" stroke="#6b7280" stroke-width="1" rx="2"/>
           <rect x="0" y="0" width="96" height="6" fill="#d1d5db" rx="1"/>
@@ -809,7 +809,7 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let comps = [], wires = [], cid = 0, wid = 0;
-let logoChannels = {}, logoSimTimer = null; // compId → { ch, comp } — SPS-Editor-Verknüpfungen
+let spsChannels = {}, spsSimTimer = null; // compId → { ch, comp } — SPS-Editor-Verknüpfungen
 let frames = [], texts = [], frid = 0, txid = 0;
 let sel = null, selFrame = null, selText = null, selWire = null;
 let selSet = new Set(), selBox = null;
@@ -1188,7 +1188,7 @@ const D = {
     ],
     label:'Bewegungsmelder'
   },
-  logo: {
+  sps: {
     w:240, h:72, isDINDevice:true, te:12,
     ports:[
       // I1–I12 (Ports 0–11, oben)
@@ -1219,7 +1219,7 @@ const D = {
     ],
     label:'SPS 12/8 230V'
   },
-  logo24: {
+  sps24: {
     w:240, h:72, isDINDevice:true, te:12,
     ports:[
       // I1–I12 (Ports 0–11, oben)
@@ -2570,9 +2570,9 @@ function drawBewegungsmelder(g) {
   mk('text',{x:W/2,y:H-3,'text-anchor':'middle','font-size':5,fill:'#15803d','font-weight':'bold'},g).textContent='PIR';
 }
 
-function drawLogo(g, comp) {
+function drawSps(g, comp) {
   const W=240, H=72;
-  const is24 = comp && comp.type === 'logo24';
+  const is24 = comp && comp.type === 'sps24';
   const broken = is24 && comp.state && comp.state.broken;
   mk('rect',{x:0,y:0,width:W,height:H,fill:broken?'#374151':'#e5e7eb',stroke:broken?'#991b1b':'#6b7280','stroke-width':1.5,rx:3,filter:'url(#shadow)'},g);
   mk('rect',{x:1,y:1,width:W-2,height:H-2,fill:'#f3f4f6',stroke:'#9ca3af','stroke-width':0.5,rx:2.5},g);
@@ -2931,7 +2931,7 @@ function drawComp(g, comp) {
     case 'stromstoss':      drawStromstoss(g, comp.state); break;
     case 'zeitrelais':      drawZeitrelais(g, comp); break;
     case 'bewegungsmelder': drawBewegungsmelder(g); break;
-    case 'logo': case 'logo24': drawLogo(g, comp); break;
+    case 'sps': case 'sps24': drawSps(g, comp); break;
     case 'dcquelle':         drawDcquelle(g, comp); break;
     case 'gleichrichter':    drawGleichrichter(g, comp); break;
     case 'aufputzgehaeuse1':
@@ -3410,7 +3410,7 @@ function render() {
       // Double-click detection via timing (browser dblclick breaks after render())
       if (!isPort && !comp.def.isCable && now - lastClickTime < 350 && lastClickId === comp.id) {
         lastClickTime = 0; lastClickId = null;
-        if (comp.type === 'logo' || comp.type === 'logo24') { openLogoEditor(comp); return; }
+        if (comp.type === 'sps' || comp.type === 'sps24') { openSpsEditor(comp); return; }
         const v = prompt('Beschriftung:', comp.label || comp.def.label);
         if (v !== null) { comp.label = v; render(); }
         return;
@@ -3618,7 +3618,7 @@ function render() {
       }
 
       // SPS: I/O-LED-Anzeige auf dem LCD
-      if ((comp.type === 'logo' || comp.type === 'logo24') && !(comp.state && comp.state.broken)) {
+      if ((comp.type === 'sps' || comp.type === 'sps24') && !(comp.state && comp.state.broken)) {
         const prog = comp.program || [];
         const livePot = ElektroSim.ANY_L | ElektroSim.POT_DCP;
         // I1–I12 als kleine LEDs oben auf dem Gerät
@@ -4615,8 +4615,10 @@ function importPlan(data) {
   // Plans. Ohne das würde ein neu geladener Plan mit zufällig gleicher Bauteil-ID
   // (IDs starten in jedem Plan wieder bei 1) den Editor am FALSCHEN, längst nicht mehr
   // existierenden Bauteil-Objekt hängen lassen.
-  for (const lcId of Object.keys(logoChannels)) { try { logoChannels[lcId].ch.close(); } catch(e){} delete logoChannels[lcId]; }
+  for (const lcId of Object.keys(spsChannels)) { try { spsChannels[lcId].ch.close(); } catch(e){} delete spsChannels[lcId]; }
   comps = (data.comps||[]).map(c=>{
+    if (c.type==='logo') c.type='sps';
+    else if (c.type==='logo24') c.type='sps24';
     const def = D[c.type]; if (!def) return null;
     return {...c, def, state:c.state||{}};
   }).filter(Boolean);
@@ -4778,7 +4780,7 @@ function initSimState() {
       case 'schuetz': d.coilOn = false; break;
       case 'taster': d.pressed = false; break;
       case 'bewegungsmelder': d.triggered = false; break;
-      case 'logo24': d.broken = false; break;
+      case 'sps24': d.broken = false; break;
     }
     simState[c.id] = d;
   });
@@ -4802,7 +4804,7 @@ function runSim() {
       res.faults.forEach(f => {
         if (!seen.has(f.id)) {
           seen.add(f.id);
-          if (f.type === 'logo24_burn') {
+          if (f.type === 'sps24_burn') {
             simState[f.id] = { ...(simState[f.id]||{}), broken: true };
           } else {
             simState[f.id] = { ...(simState[f.id]||{}), on: false, tripped: true, tripCause: f.cause };
@@ -4842,10 +4844,10 @@ function runSim() {
     if (c.type === 'zeitrelais') { c.state._zrOn = !!ss.on; c.state._zrWaiting = !!ss.waiting; }
     if (c.type === 'notaus') c.state._latched = !!ss.latched;
     if (c.type === 'serienschalter') { c.state._on1 = ss.on1 !== false; c.state._on2 = ss.on2 !== false; }
-    if (c.type === 'logo' || c.type === 'logo24') {
+    if (c.type === 'sps' || c.type === 'sps24') {
       for (let qi = 1; qi <= 8; qi++) c.state['q'+qi] = !!ss['q'+qi];
     }
-    if (c.type === 'logo24') c.state.broken = !!ss.broken;
+    if (c.type === 'sps24') c.state.broken = !!ss.broken;
   });
   render();
 }
@@ -4871,7 +4873,7 @@ function handleSimClick(comp) {
       simState[comp.id] = { ...s, crossed: !s.crossed }; break;
     case 'bewegungsmelder':
       simState[comp.id] = { ...s, triggered: !s.triggered }; break;
-    case 'logo24':
+    case 'sps24':
       // Defekt (falsche Spannung) → per Klick "austauschen" (Reset)
       if (s.broken) simState[comp.id] = { ...s, broken: false };
       else return;
@@ -5063,50 +5065,50 @@ SVG.addEventListener('touchcancel', ()=>{
 
 // ── SPS FUB Programmiereditor ─────────────────────────────────────────────
 // ── SPS FBD Editor — neuer Tab + BroadcastChannel ──────────────────────────
-function openLogoEditor(comp) {
+function openSpsEditor(comp) {
   if (!comp.state) comp.state = {};
   if (!comp.program || Array.isArray(comp.program)) comp.program = { blocks:[], conns:[] };
-  try { localStorage.setItem('logo-prog-'+comp.id, JSON.stringify(comp.program)); } catch(e){}
+  try { localStorage.setItem('sps-prog-'+comp.id, JSON.stringify(comp.program)); } catch(e){}
   // Overlay statt eigenem Tab/Fenster: funktioniert zuverlässig auch dort, wo window.open()
   // blockiert wird oder keine echten Popup-Fenster verfügbar sind (mobile Browser, WebViews
   // der Offline-App). BroadcastChannel funktioniert zwischen Elternseite und Iframe genauso
   // wie zwischen zwei Tabs, der Rest der Logik bleibt unverändert.
-  const overlay = document.getElementById('logo-editor-overlay');
-  const frame = document.getElementById('logo-editor-frame');
+  const overlay = document.getElementById('sps-editor-overlay');
+  const frame = document.getElementById('sps-editor-frame');
   // Offline-App bündelt echte Dateien ohne den .html-losen Cloudflare-Rewrite der
   // Live-Seite — dort braucht es die Endung, online bleibt die kanonische URL.
-  frame.src = (OFFLINE_APP ? 'logo-editor.html' : 'logo-editor') + '?id=' + comp.id;
+  frame.src = (OFFLINE_APP ? 'sps-editor.html' : 'sps-editor') + '?id=' + comp.id;
   overlay.style.display = 'flex';
-  setupLogoChannel(comp);
-  startLogoSimBroadcast();
+  setupSpsChannel(comp);
+  startSpsSimBroadcast();
 }
 
-function closeLogoEditorOverlay() {
-  document.getElementById('logo-editor-overlay').style.display = 'none';
-  document.getElementById('logo-editor-frame').src = 'about:blank';
+function closeSpsEditorOverlay() {
+  document.getElementById('sps-editor-overlay').style.display = 'none';
+  document.getElementById('sps-editor-frame').src = 'about:blank';
 }
 
-function setupLogoChannel(comp) {
+function setupSpsChannel(comp) {
   const cid = comp.id;
-  if (logoChannels[cid]) return;  // already set up
-  const ch = new BroadcastChannel('logo-editor-' + cid);
-  logoChannels[cid] = { ch, comp };
+  if (spsChannels[cid]) return;  // already set up
+  const ch = new BroadcastChannel('sps-editor-' + cid);
+  spsChannels[cid] = { ch, comp };
   ch.onmessage = e => {
     const msg = e.data;
     if (msg.type === 'editor-ready') {
       ch.postMessage({ type:'load-prog', prog: comp.program });
-      broadcastLogoSim(cid);
+      broadcastSpsSim(cid);
     }
     if (msg.type === 'prog-update' && msg.compId == cid) {
       comp.program = msg.prog || { blocks:[], conns:[] };
-      try { localStorage.setItem('logo-prog-'+cid, JSON.stringify(comp.program)); } catch(e){}
+      try { localStorage.setItem('sps-prog-'+cid, JSON.stringify(comp.program)); } catch(e){}
       if (simMode) runSim(); else render();
     }
   };
 }
 
-function broadcastLogoSim(cid) {
-  const entry = logoChannels[cid]; if (!entry) return;
+function broadcastSpsSim(cid) {
+  const entry = spsChannels[cid]; if (!entry) return;
   const comp = entry.comp;
   const iActive = [];
   for (let ii = 0; ii < 12; ii++) {
@@ -5118,10 +5120,10 @@ function broadcastLogoSim(cid) {
   entry.ch.postMessage({ type:'sim-state', simMode, i:iActive, q:qActive });
 }
 
-function startLogoSimBroadcast() {
-  if (logoSimTimer) return;
-  logoSimTimer = setInterval(() => {
-    for (const cid of Object.keys(logoChannels)) broadcastLogoSim(parseInt(cid));
+function startSpsSimBroadcast() {
+  if (spsSimTimer) return;
+  spsSimTimer = setInterval(() => {
+    for (const cid of Object.keys(spsChannels)) broadcastSpsSim(parseInt(cid));
   }, 150);
 }
 
@@ -5255,7 +5257,7 @@ function connectComponents(comps,wires,simSt,uf,idx,edges,skipId){
       case'nblock': case'peblock':
       case'wago2': case'wago3': case'wago5':
         for(let i=1;i<c.def.ports.length;i++) U(P(0),P(i)); break;
-      case'logo': case'logo24': {
+      case'sps': case'sps24': {
         // Relay-Ausgänge: wenn Qx aktiv → Q_IN (Port 12+qi*2) mit Q_OUT (Port 13+qi*2) verbinden
         // (defekte 24V-SPS mit AC am Eingang: alle Ausgänge tot)
         const s=simSt[c.id]||{};
@@ -5528,7 +5530,7 @@ function simulate(comps, wires, simSt, _depth){
     }
     // SPS FBD-Programm: Eingänge lesen → FBD auswerten → Ausgänge
     // (defekte 24V-SPS mit AC am Eingang wertet nicht mehr aus, Ausgänge bleiben aus)
-    if((c.type==='logo'||c.type==='logo24') && !s.broken && c.program && c.program.blocks && c.program.blocks.length){
+    if((c.type==='sps'||c.type==='sps24') && !s.broken && c.program && c.program.blocks && c.program.blocks.length){
       const prog=c.program;
       const iActive=[];
       for(let ii=0;ii<12;ii++) iActive.push(!!(gp(c.id,ii)&(ANY_L|DCP)));
@@ -5636,7 +5638,7 @@ function simulate(comps, wires, simSt, _depth){
       const changed2=outVals.some((v,i)=>v!==!!(s['q'+(i+1)]));
       if(changed2) delta[c.id]={...s,q1:outVals[0],q2:outVals[1],q3:outVals[2],q4:outVals[3],q5:outVals[4],q6:outVals[5],q7:outVals[6],q8:outVals[7]};
     }
-    if(c.type==='logo24' && s.broken){
+    if(c.type==='sps24' && s.broken){
       const hasQ=[1,2,3,4,5,6,7,8].some(qi=>s['q'+qi]);
       if(hasQ) delta[c.id]={...s,q1:false,q2:false,q3:false,q4:false,q5:false,q6:false,q7:false,q8:false};
     }
@@ -5700,14 +5702,14 @@ function simulate(comps, wires, simSt, _depth){
       const a1=lbl(c,'A1'), a2=lbl(c,'A2');
       activeLoadPorts.push(idx[c.id+':'+a1]); activeLoadPorts.push(idx[c.id+':'+a2]);
     }
-    if(c.type==='logo'){
+    if(c.type==='sps'){
       // SPS braucht Spannung an L (28) und N (29) um zu laufen
       const pL=gp(c.id,28), pN=gp(c.id,29);
       const powered=!!((pL&ANY_L)&&(pN&N));
       result[c.id]={...s, powered};
       if(powered){ activeLoadPorts.push(idx[c.id+':28']); activeLoadPorts.push(idx[c.id+':29']); }
     }
-    if(c.type==='logo24'){
+    if(c.type==='sps24'){
       // 24V-SPS braucht Gleichspannung an L+ (28) und M (29) um zu laufen
       const pLplus=gp(c.id,28), pM=gp(c.id,29);
       const powered=!s.broken && !!((pLplus&DCP)&&(pM&DCN));
@@ -5825,9 +5827,9 @@ function simulate(comps, wires, simSt, _depth){
       }
     }
     // 24V-SPS: AC (230V) am DC-Versorgungseingang (L+/M) → Modul defekt
-    if(c.type==='logo24' && !s.broken){
+    if(c.type==='sps24' && !s.broken){
       const pLplus=gp(c.id,28), pM=gp(c.id,29);
-      if((pLplus&ANY_L)||(pLplus&N)||(pM&ANY_L)) addFault('logo24_burn','230V AC am 24V-DC-Eingang',c.id);
+      if((pLplus&ANY_L)||(pLplus&N)||(pM&ANY_L)) addFault('sps24_burn','230V AC am 24V-DC-Eingang',c.id);
     }
   }
 
@@ -5898,11 +5900,11 @@ global.ElektroSim={simulate, sprReading, ANY_L, POT_N:N, POT_PE:PE, POT_L1:L1, P
 
 <!-- ── SPS-Editor Overlay (statt eigenem Tab/Fenster — funktioniert auch in
      WebViews ohne Popup-Unterstützung, z.B. in der Offline-App) ───────────── -->
-<div id="logo-editor-overlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:9500;flex-direction:column">
+<div id="sps-editor-overlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:9500;flex-direction:column">
   <div style="height:36px;flex-shrink:0;background:#1a365d;display:flex;align-items:center;padding:0 10px;box-shadow:0 2px 8px #0005">
-    <button onclick="closeLogoEditorOverlay()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px">← Zurück zum Plan</button>
+    <button onclick="closeSpsEditorOverlay()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px">← Zurück zum Plan</button>
   </div>
-  <iframe id="logo-editor-frame" style="flex:1;border:none;width:100%"></iframe>
+  <iframe id="sps-editor-frame" style="flex:1;border:none;width:100%"></iframe>
 </div>
 
 <!-- ── Server Save/Load Modal ─────────────────────────────────────── -->
