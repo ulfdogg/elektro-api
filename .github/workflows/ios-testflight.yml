@@ -5,9 +5,9 @@ on:
     branches: [master]
     paths:
       - 'public/**'
-      - 'android-app/ios/**'
       - 'android-app/capacitor.config.json'
       - '.github/workflows/ios-testflight.yml'
+  workflow_dispatch:
 
 jobs:
   build-and-upload:
