@@ -67,20 +67,13 @@ jobs:
           path: ElektroSim-debug.apk
           retention-days: 30
 
-      - name: Create Release on version tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Create or update latest Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: latest
+          name: "ElektroSim (latest)"
+          prerelease: true
           files: ElektroSim-debug.apk
-          name: "ElektroSim ${{ github.ref_name }}"
-          body: |
-            Android APK für ElektroSim – Elektroinstallations-Planer
-
-            **Installation:**
-            1. APK auf das Android-Gerät kopieren
-            2. Unter Einstellungen → Sicherheit → "Unbekannte Quellen" erlauben
-            3. APK antippen und installieren
-
-            Kompatibel mit Android 5.1+ (API 22)
+          body: "Automatischer Build vom ${{ github.sha }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
