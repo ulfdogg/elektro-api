@@ -37,10 +37,11 @@ jobs:
         working-directory: android-app/ios/App
         run: LANG=en_US.UTF-8 pod install
 
-      - name: Import certificate
+      - name: Import certificate & provisioning profile
         env:
           CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
         run: |
           echo "$CERTIFICATE_BASE64" | base64 --decode > /tmp/cert.p12
           security create-keychain -p "" build.keychain
@@ -49,6 +50,8 @@ jobs:
           security default-keychain -s build.keychain
           security unlock-keychain -p "" build.keychain
           security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/ff517007-42ce-44ed-b882-7d8ec833b142.mobileprovision
 
       - name: Setup ASC API Key
         env:
@@ -90,17 +93,20 @@ jobs:
             <string>app-store-connect</string>
             <key>teamID</key>
             <string>PFPJHZQH4E</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>de.elektrosimulator.app</key>
+              <string>ff517007-42ce-44ed-b882-7d8ec833b142</string>
+            </dict>
           </dict>
           </plist>
           EOF
           xcodebuild -exportArchive \
             -archivePath /tmp/ElektroSim.xcarchive \
             -exportPath /tmp/ElektroSimExport \
-            -exportOptionsPlist /tmp/ExportOptions.plist \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.private_keys/AuthKey_${ASC_KEY_ID}.p8 \
-            -authenticationKeyID "${ASC_KEY_ID}" \
-            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+            -exportOptionsPlist /tmp/ExportOptions.plist
 
       - name: Upload to TestFlight
         env:
