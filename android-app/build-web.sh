@@ -11,8 +11,8 @@ rm -rf "$WWW"
 cp -r "$PUBLIC" "$WWW"
 
 echo "→ Setze OFFLINE_APP = true ..."
-sed -i'' 's/const OFFLINE_APP = false/const OFFLINE_APP = true/' "$WWW/index.html"
-sed -i'' 's/const OFFLINE_APP = false/const OFFLINE_APP = true/' "$WWW/sps-editor.html"
+tmp=$(mktemp) && sed 's/const OFFLINE_APP = false/const OFFLINE_APP = true/' "$WWW/index.html" > "$tmp" && mv "$tmp" "$WWW/index.html"
+tmp=$(mktemp) && sed 's/const OFFLINE_APP = false/const OFFLINE_APP = true/' "$WWW/sps-editor.html" > "$tmp" && mv "$tmp" "$WWW/sps-editor.html"
 
 # Capacitor-Bridge einbinden (wird von npx cap sync hinzugefügt,
 # aber wir stellen sicher dass der Platzhalter korrekt ist)
