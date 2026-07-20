@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@capacitor/android": "^5.7.0",
-    "@capacitor/core": "^5.7.0"
+    "@capacitor/core": "^5.7.0",
+    "@capacitor/ios": "^5.7.8"
   },
   "devDependencies": {
     "@capacitor/cli": "^5.7.0"
