@@ -5917,26 +5917,48 @@ async function serverSave(){
   openEsModal('Schaltung speichern',`
     <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Name</label>
     <input id="es-save-name" value="${escHtml(curName)}" placeholder="z.B. Wohnzimmer Licht"
-      style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:7px;font-size:14px;outline:none;margin-bottom:14px">
-    <div style="display:flex;gap:8px">
+      style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:7px;font-size:14px;outline:none;margin-bottom:10px">
+    <div style="display:flex;gap:8px;margin-bottom:10px">
       ${hasId ? `<button onclick="doServerSave(true)" style="flex:1;padding:10px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer">☁ Aktualisieren</button>` : ''}
       <button onclick="doServerSave(false)" style="flex:1;padding:10px;background:${hasId?'#6b7280':'#2563eb'};color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer">☁ Neu speichern</button>
     </div>
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
-      <button onclick="savePlanOrig()" style="width:100%;padding:8px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:7px;font-size:13px;cursor:pointer">💾 Als JSON-Datei herunterladen</button>
+    <div id="es-overwrite-list" style="margin-bottom:10px"></div>
+    <div style="padding-top:10px;border-top:1px solid #e5e7eb">
+      <button onclick="saveAsJsonFromDialog()" style="width:100%;padding:8px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:7px;font-size:13px;cursor:pointer">💾 Als JSON-Datei herunterladen</button>
     </div>
     <div id="es-save-err" style="color:#dc2626;font-size:13px;margin-top:8px"></div>
   `);
   setTimeout(()=>{ const n=document.getElementById('es-save-name'); if(n){n.focus();n.select();} },50);
+  // Bestehende Projekte laden für Überschreiben-Option
+  try{
+    const r=await fetch('/api/circuits.php?type=schematic',{credentials:'include'});
+    const list=await r.json();
+    const el=document.getElementById('es-overwrite-list');
+    if(!el||!list||!list.length) return;
+    el.innerHTML=`<div style="font-size:12px;color:#6b7280;margin-bottom:6px;font-weight:600">Bestehendes überschreiben:</div>`+
+      list.map(c=>`<button onclick="doServerSave(true,${c.id},'${escHtml(c.name)}')"
+        style="display:block;width:100%;text-align:left;padding:6px 10px;margin-bottom:4px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+        title="${escHtml(c.name)}">${escHtml(c.name)}</button>`).join('');
+  }catch(e){}
 }
 
-async function doServerSave(update=false){
+function saveAsJsonFromDialog(){
+  const name=(document.getElementById('es-save-name')?.value||'').trim()||'elektroplan';
+  const blob=new Blob([JSON.stringify(buildSaveData(),null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name+'.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function doServerSave(update=false, overwriteId=null, overwriteName=null){
   const nameEl=document.getElementById('es-save-name');
   const errEl=document.getElementById('es-save-err');
-  const name=(nameEl?.value||'').trim();
+  const name=(overwriteName||nameEl?.value||'').trim();
   if(!name){ if(errEl) errEl.textContent='Bitte einen Namen eingeben'; return; }
   const data=JSON.stringify(buildSaveData());
-  const id=update ? (window._esCurId||null) : null;
+  const id=overwriteId || (update ? (window._esCurId||null) : null);
   const url='/api/circuits.php'+(id?'?id='+id:'');
   try{
     const r=await fetch(url,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type:'schematic',data})});
