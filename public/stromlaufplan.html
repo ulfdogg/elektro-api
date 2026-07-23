@@ -38,6 +38,8 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;ba
 .bar-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:11px;white-space:nowrap}
 .bar-btn:hover{background:rgba(255,255,255,0.18)}
 .bar-btn.danger{color:#fca5a5}
+.bar-btn.active{background:#d97706;border-color:#f59e0b}
+.sim-clickable{cursor:pointer}
 #bar .hint{margin-left:auto;font-size:10px;color:rgba(255,255,255,0.5);white-space:nowrap}
 #main{flex:1;display:flex;overflow:hidden;position:relative}
 #sidebar{width:190px;flex-shrink:0;background:#fff;border-right:1px solid #d1d5db;overflow-y:auto;padding:6px}
@@ -68,7 +70,9 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;ba
     <button class="bar-btn" onclick="doSave()">💾 Datei</button>
     <button class="bar-btn" onclick="doLoad()">📂 Datei</button>
     <button class="bar-btn danger" onclick="doDeleteSel()">✕ Löschen</button>
-    <span class="hint">Symbol ziehen oder antippen = platzieren · Port→Port klicken = verbinden · Doppelklick = beschriften · Entf = löschen</span>
+    <button class="bar-btn" id="btn-sim" onclick="toggleSim()">⚡ Simulation</button>
+    <span class="hint" id="normal-hint">Symbol ziehen oder antippen = platzieren · Port→Port klicken = verbinden · Doppelklick = beschriften · Entf = löschen</span>
+    <span class="hint" id="sim-hint" style="display:none;color:#fbbf24">SIM: Taster/Schalter/Sicherungen anklicken zum Schalten · Spulen-Beschriftung (z.B. "K1") muss mit den zugehörigen Kontakten übereinstimmen</span>
   </div>
   <div id="main">
     <div id="sidebar"></div>
@@ -274,6 +278,200 @@ let sel = null, selWire = null, selRail = null, selRailConn = null;
 let zoom = 1, panX=80, panY=40;
 let wireStart = null; // {instId, portIdx}
 
+// ── Simulation ───────────────────────────────────────────────────────────────
+// Anders als im Aufbauplan sind Spule und zugehörige Kontakte hier UNABHÄNGIGE Symbole,
+// die nur über eine identische Beschriftung (z.B. "K1") zusammengehören — das ist die
+// reale Konvention in einem Stromlaufplan. Die Engine gruppiert also über Labels statt
+// über feste Bauteil-Ports.
+const POT = { L1:4, L2:8, L3:16, N:2, PE:1 };
+const ANY_L = POT.L1|POT.L2|POT.L3;
+const POLE_PAIRS = { ls1:[[0,1]], ls3:[[0,3],[1,4],[2,5]], rcd2:[[0,2],[1,3]], rcd4:[[0,4],[1,5],[2,6],[3,7]], rcbo:[[0,1],[2,3]] };
+
+let simMode = false, simState = {};
+let simPortPot = {}, simPortNode = {};
+
+function normLabel(l){ return (l||'').trim().toLowerCase(); }
+function coilOnForLabel(label){
+  const nl = normLabel(label);
+  if (!nl) return false;
+  const coil = insts.find(i=>(i.type==='coil'||i.type==='coil_delay') && normLabel(i.label)===nl);
+  return coil ? !!(simState[coil.id]||{}).on : false;
+}
+
+function initSimState(){
+  simState = {};
+  insts.forEach(inst=>{
+    const d = {};
+    switch(inst.type){
+      case 'taster_no': case 'taster_nc': d.pressed=false; break;
+      case 'schalter': d.closed=true; break;
+      case 'wechselschalter': d.pos=1; break;
+      case 'kreuzschalter': d.crossed=false; break;
+      case 'notaus': d.latched=false; break;
+      case 'ls1': case 'ls3': case 'rcbo': d.on=true; break;
+      case 'rcd2': case 'rcd4': d.on=true; d.tripped=false; break;
+    }
+    simState[inst.id] = d;
+  });
+}
+
+// Eine Simulationsrunde: Potentiale über Union-Find ausbreiten (Schienen = Quellen,
+// geschlossene Kontakte/Schalter verbinden), Spulen-Zustand daraus ableiten. Da ein
+// Kontakt vom Zustand SEINER Spule abhängt (und der wiederum vom Potential, das durch
+// andere Kontakte fließt), wird iteriert bis sich nichts mehr ändert — wie im Aufbauplan.
+function computeSimOnce(){
+  const idx = {}; let k=0;
+  insts.forEach(inst=>{ SYM[inst.type].ports.forEach((p,pi)=>{ idx[inst.id+':'+pi]=k++; }); });
+  rails.forEach(r=>{ idx['rail:'+r.id]=k++; });
+  const parent = new Int32Array(k); for(let i=0;i<k;i++) parent[i]=i;
+  const find = x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  const union = (a,b)=>{ if(a==null||b==null) return; a=find(a); b=find(b); if(a!==b) parent[b]=a; };
+
+  wires.forEach(w=> union(idx[w.fid+':'+w.fp], idx[w.tid+':'+w.tp]));
+  railConns.forEach(rc=> union(idx[rc.fid+':'+rc.fp], idx['rail:'+rc.rail]));
+
+  insts.forEach(inst=>{
+    const s = simState[inst.id]||{};
+    const P = pi=>idx[inst.id+':'+pi];
+    switch(inst.type){
+      case 'contact_no': if (coilOnForLabel(inst.label)) union(P(0),P(1)); break;
+      case 'contact_nc': if (!coilOnForLabel(inst.label)) union(P(0),P(1)); break;
+      case 'contact_co': { const on=coilOnForLabel(inst.label); if(on) union(P(0),P(1)); else union(P(0),P(2)); break; }
+      case 'taster_no': if (s.pressed) union(P(0),P(1)); break;
+      case 'taster_nc': if (!s.pressed) union(P(0),P(1)); break;
+      case 'schalter': if (s.closed!==false) union(P(0),P(1)); break;
+      case 'wechselschalter': union(P(0), P(s.pos===2?2:1)); break;
+      case 'kreuzschalter':
+        if (!s.crossed) { union(P(0),P(2)); union(P(1),P(3)); }
+        else { union(P(0),P(3)); union(P(1),P(2)); }
+        break;
+      case 'notaus': if (!s.latched) union(P(0),P(1)); break;
+      case 'ls1': case 'ls3': case 'rcbo':
+        if (s.on!==false && !s.tripped) (POLE_PAIRS[inst.type]||[]).forEach(([a,b])=>union(P(a),P(b)));
+        break;
+      case 'rcd2': case 'rcd4':
+        if (s.on!==false && !s.tripped) (POLE_PAIRS[inst.type]||[]).forEach(([a,b])=>union(P(a),P(b)));
+        break;
+    }
+  });
+
+  const pot = new Int32Array(k);
+  rails.forEach(r=>{ const n=find(idx['rail:'+r.id]); pot[n] |= POT[r.type]; });
+
+  const gp = (id,pi)=>{ const p=idx[id+':'+pi]; return p!=null?pot[find(p)]:0; };
+  return { idx, find, pot, gp };
+}
+
+function runSim(depth){
+  depth = depth||0;
+  const { idx, find, pot, gp } = computeSimOnce();
+
+  let changed = false;
+  insts.forEach(inst=>{
+    if (inst.type!=='coil' && inst.type!=='coil_delay') return;
+    const p0=gp(inst.id,0), p1=gp(inst.id,1);
+    const on = !!((p0&ANY_L)&&(p1&POT.N) || (p1&ANY_L)&&(p0&POT.N));
+    const s = simState[inst.id]||{};
+    if (!!s.on !== on) { simState[inst.id]={...s, on}; changed=true; }
+  });
+  if (changed && depth<10) { runSim(depth+1); return; }
+
+  // Fehlererkennung: Kurzschluss an einem eingeschalteten LS/FI -> auslösen
+  let tripped=false;
+  insts.forEach(inst=>{
+    const s = simState[inst.id]||{};
+    if (s.tripped || s.on===false) return;
+    const pairs = POLE_PAIRS[inst.type];
+    if (!pairs) return;
+    for (const [,b] of pairs) {
+      const dp = gp(inst.id,b);
+      const llFault = !!(dp&ANY_L && (dp&ANY_L)&(( dp&ANY_L)-1));
+      if (llFault || ((dp&ANY_L)&&(dp&POT.N)) || ((dp&ANY_L)&&(dp&POT.PE))) {
+        simState[inst.id] = {...s, tripped:true, on:false};
+        tripped = true; break;
+      }
+    }
+  });
+  if (tripped && depth<10) { runSim(depth+1); return; }
+
+  // Port-Potentiale + Knoten für die Anzeige (Leitungsfarbe, Lampen/Motor-Zustand) merken
+  simPortPot = {}; simPortNode = {};
+  insts.forEach(inst=>{
+    SYM[inst.type].ports.forEach((p,pi)=>{
+      const key = inst.id+':'+pi;
+      const node = idx[key];
+      simPortPot[key] = node!=null ? pot[find(node)] : 0;
+      simPortNode[key] = node!=null ? find(node) : null;
+    });
+  });
+  rails.forEach(r=>{
+    const node = idx['rail:'+r.id];
+    simPortPot['rail:'+r.id] = node!=null ? pot[find(node)] : 0;
+  });
+  render();
+}
+
+function toggleSim(){
+  simMode = !simMode;
+  document.getElementById('btn-sim').classList.toggle('active', simMode);
+  document.getElementById('normal-hint').style.display = simMode?'none':'inline';
+  document.getElementById('sim-hint').style.display = simMode?'inline':'none';
+  if (simMode) { initSimState(); runSim(); }
+  else { simState={}; simPortPot={}; simPortNode={}; render(); }
+}
+
+function simInstClick(inst){
+  const s = simState[inst.id]||{};
+  switch(inst.type){
+    case 'schalter': simState[inst.id]={...s, closed: s.closed===false}; break;
+    case 'wechselschalter': simState[inst.id]={...s, pos: s.pos===1?2:1}; break;
+    case 'kreuzschalter': simState[inst.id]={...s, crossed: !s.crossed}; break;
+    case 'notaus': simState[inst.id]={...s, latched: !s.latched}; break;
+    case 'ls1': case 'ls3': case 'rcbo':
+      simState[inst.id] = s.tripped ? {...s, on:true, tripped:false} : {...s, on: s.on===false}; break;
+    case 'rcd2': case 'rcd4':
+      simState[inst.id] = s.tripped ? {...s, on:true, tripped:false} : {...s, on: s.on===false}; break;
+    default: return false;
+  }
+  runSim();
+  return true;
+}
+
+// Leiterfarbe nach Potential (gleiche Konvention wie im Aufbauplan: L1 braun, L2 schwarz,
+// L3 grau, N blau, PE grün — Priorität bei mehreren Bits auf einem Knoten = Fehlerfall).
+function potColor(pot){
+  if (!pot) return null;
+  if (pot & POT.L1) return '#8B4513';
+  if (pot & POT.L2) return '#1f2937';
+  if (pot & POT.L3) return '#6b7280';
+  if (pot & POT.N) return '#1a56db';
+  if (pot & POT.PE) return '#16a34a';
+  return null;
+}
+
+// Ob ein Bauteil während der Simulation "aktiv" ist (Kontakt geschlossen, Spule
+// angezogen, Verbraucher unter Spannung) — für die grüne Hervorhebung im Plan.
+function isInstActive(inst){
+  if (!simMode) return false;
+  const s = simState[inst.id]||{};
+  const gp = pi => simPortPot[inst.id+':'+pi] || 0;
+  switch(inst.type){
+    case 'coil': case 'coil_delay': return !!s.on;
+    case 'contact_no': return coilOnForLabel(inst.label);
+    case 'contact_nc': return !coilOnForLabel(inst.label);
+    case 'taster_no': return !!s.pressed;
+    case 'taster_nc': return !s.pressed;
+    case 'schalter': return s.closed!==false;
+    case 'notaus': return !s.latched;
+    case 'lampe': case 'spot': case 'steckdose': case 'motor1': {
+      const p0=gp(0), p1=gp(1);
+      return !!((p0&ANY_L)&&(p1&POT.N) || (p1&ANY_L)&&(p0&POT.N));
+    }
+    case 'motor': { const pu=gp(0),pv=gp(1),pw=gp(2); return !!((pu&ANY_L)&&(pv&ANY_L)&&(pw&ANY_L)); }
+    default: return false;
+  }
+}
+
 function svgPt(clientX, clientY){
   const r = document.getElementById('canvasWrap').getBoundingClientRect();
   return { x:(clientX-r.left-panX)/zoom, y:(clientY-r.top-panY)/zoom };
@@ -478,9 +676,14 @@ function render(){
     const [ax,ay] = portWorld(fi,w.fp), [bx,by] = portWorld(ti,w.tp);
     const midY = (ay+by)/2;
     const d = Math.abs(ax-bx)<2 ? `M${ax},${ay} L${bx},${by}` : `M${ax},${ay} L${ax},${midY} L${bx},${midY} L${bx},${by}`;
-    mk('path',{d,fill:'none',stroke: selWire===w.id?'#2563eb':'#374151','stroke-width':selWire===w.id?2.4:1.8},svg);
+    let stroke = selWire===w.id?'#2563eb':'#374151', sw = selWire===w.id?2.4:1.8;
+    if (simMode) {
+      const pc = potColor(simPortPot[w.fid+':'+w.fp] || simPortPot[w.tid+':'+w.tp] || 0);
+      if (pc) { stroke = pc; sw = 2.6; }
+    }
+    mk('path',{d,fill:'none',stroke,'stroke-width':sw},svg);
     const hit = mk('path',{d,fill:'none',stroke:'transparent','stroke-width':12,cursor:'pointer'},svg);
-    hit.addEventListener('pointerdown',e=>{ e.stopPropagation(); sel=null; selWire=w.id; selRail=null; selRailConn=null; render(); });
+    hit.addEventListener('pointerdown',e=>{ e.stopPropagation(); if(simMode) return; sel=null; selWire=w.id; selRail=null; selRailConn=null; render(); });
   });
 
   // Symbole
@@ -488,15 +691,35 @@ function render(){
     const s = SYM[inst.type];
     const g = mk('g',{transform:`translate(${inst.x},${inst.y})`},svg);
     if (sel===inst.id) mk('rect',{x:-6,y:-6,width:s.w+12,height:s.h+12,rx:5,fill:'rgba(37,99,235,0.08)',stroke:'#2563eb','stroke-width':1.3,'stroke-dasharray':'3,2'},g);
+    if (simMode) {
+      const simSt = simState[inst.id]||{};
+      if (simSt.tripped) mk('rect',{x:-6,y:-6,width:s.w+12,height:s.h+12,rx:5,fill:'rgba(249,115,22,0.15)',stroke:'#f97316','stroke-width':1.6},g);
+      else if (isInstActive(inst)) mk('rect',{x:-6,y:-6,width:s.w+12,height:s.h+12,rx:5,fill:'rgba(34,197,94,0.15)',stroke:'#22c55e','stroke-width':1.6},g);
+    }
     s.draw(g);
     const lbl = inst.label || '';
     if (lbl) mk('text',{x:s.w/2,y:-8,'text-anchor':'middle','font-size':10,'font-weight':'bold',fill:'#111'},g).textContent=lbl;
     // Body-Drag zum Verschieben + Auswahl + Doppelklick=Beschriften (VOR den Ports einfügen,
     // damit die Port-Kreise beim Klicken obenauf liegen und nicht von der Drag-Hitbox verdeckt werden)
-    const hitBox = mk('rect',{x:-4,y:-4,width:s.w+8,height:s.h+8,fill:'transparent',cursor:'grab'},g);
+    const hitBox = mk('rect',{x:-4,y:-4,width:s.w+8,height:s.h+8,fill:'transparent',cursor: simMode?'pointer':'grab'},g);
     let lastClick=0;
     hitBox.addEventListener('pointerdown', e=>{
       e.stopPropagation();
+      if (simMode) {
+        if (inst.type==='taster_no' || inst.type==='taster_nc') {
+          simState[inst.id] = { ...(simState[inst.id]||{}), pressed:true };
+          runSim();
+          const onUp = () => {
+            simState[inst.id] = { ...(simState[inst.id]||{}), pressed:false };
+            runSim();
+            document.removeEventListener('pointerup', onUp);
+          };
+          document.addEventListener('pointerup', onUp);
+        } else {
+          simInstClick(inst);
+        }
+        return;
+      }
       if (wireStart) return;
       sel = inst.id; selWire=null; selRail=null; selRailConn=null; render();
       const now = Date.now();
