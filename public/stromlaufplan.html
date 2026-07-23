@@ -68,7 +68,7 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;ba
     <button class="bar-btn" onclick="doSave()">💾 Datei</button>
     <button class="bar-btn" onclick="doLoad()">📂 Datei</button>
     <button class="bar-btn danger" onclick="doDeleteSel()">✕ Löschen</button>
-    <span class="hint">Symbol ziehen = platzieren · Port→Port klicken = verbinden · Doppelklick = beschriften · Entf = löschen</span>
+    <span class="hint">Symbol ziehen oder antippen = platzieren · Port→Port klicken = verbinden · Doppelklick = beschriften · Entf = löschen</span>
   </div>
   <div id="main">
     <div id="sidebar"></div>
@@ -266,6 +266,7 @@ function buildSidebar(){
     it.appendChild(svg);
     const lbl = document.createElement('span'); lbl.textContent=r.label+' (Sammelschiene)'; it.appendChild(lbl);
     it.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain', 'rail:'+key); });
+    it.addEventListener('click',()=>placeAtViewCenter('rail:'+key));
     sb.appendChild(it);
   });
   CATS.forEach(cat=>{
@@ -279,32 +280,44 @@ function buildSidebar(){
       it.appendChild(svg);
       const lbl = document.createElement('span'); lbl.textContent=s.label; it.appendChild(lbl);
       it.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain', key); });
+      it.addEventListener('click',()=>placeAtViewCenter(key));
       sb.appendChild(it);
     });
   });
 }
 
-// ── Platzieren per Drag&Drop ─────────────────────────────────────────────────
+// ── Platzieren: Drag&Drop (Desktop-Maus) + Klick-Fallback (Touch/Tablet, wo
+// natives HTML5-Drag&Drop grundsätzlich nicht funktioniert) ────────────────────
+function placeAt(type, wx, wy){
+  if (type.startsWith('rail:')) {
+    const rtype = type.slice(5);
+    if (!RAIL_TYPES[rtype]) return;
+    const y = Math.round(wy/10)*10;
+    rails.push({ id:rid++, type:rtype, y, x1:Math.round((wx-300)/10)*10, x2:Math.round((wx+300)/10)*10 });
+    selRail = rails[rails.length-1].id; sel=null; selWire=null; selRailConn=null;
+    render(); scheduleAutoSave();
+    return;
+  }
+  if (!SYM[type]) return;
+  insts.push({ id:iid++, type, x:Math.round(wx/10)*10, y:Math.round(wy/10)*10, label:'' });
+  sel = insts[insts.length-1].id; selWire=null; selRail=null; selRailConn=null;
+  render(); scheduleAutoSave();
+}
 const canvasWrap = document.getElementById('canvasWrap');
 canvasWrap.addEventListener('dragover', e=>e.preventDefault());
 canvasWrap.addEventListener('drop', e=>{
   e.preventDefault();
   const type = e.dataTransfer.getData('text/plain');
   const p = svgPt(e.clientX, e.clientY);
-  if (type.startsWith('rail:')) {
-    const rtype = type.slice(5);
-    if (!RAIL_TYPES[rtype]) return;
-    const y = Math.round(p.y/10)*10;
-    rails.push({ id:rid++, type:rtype, y, x1:Math.round((p.x-300)/10)*10, x2:Math.round((p.x+300)/10)*10 });
-    selRail = rails[rails.length-1].id; sel=null; selWire=null; selRailConn=null;
-    render(); scheduleAutoSave();
-    return;
-  }
-  if (!SYM[type]) return;
-  insts.push({ id:iid++, type, x:Math.round(p.x/10)*10, y:Math.round(p.y/10)*10, label:'' });
-  sel = insts[insts.length-1].id; selWire=null; selRail=null; selRailConn=null;
-  render(); scheduleAutoSave();
+  placeAt(type, p.x, p.y);
 });
+// Klick auf ein Palette-Element: an der Bildschirmmitte der aktuellen Ansicht platzieren
+// (mit kleinem Zufalls-Versatz, damit mehrfaches Klicken nicht exakt übereinander landet).
+function placeAtViewCenter(type){
+  const rect = canvasWrap.getBoundingClientRect();
+  const p = svgPt(rect.left + rect.width/2 + (Math.random()*60-30), rect.top + rect.height/2 + (Math.random()*60-30));
+  placeAt(type, p.x, p.y);
+}
 
 // ── Pan & Zoom ───────────────────────────────────────────────────────────────
 let panDrag = null;
