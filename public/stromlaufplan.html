@@ -3,36 +3,89 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stromlaufplan (aufgelöst)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Stromlaufplan-Editor</title>
+<script>
+// Wird beim Bauen der Offline-APK auf true gesetzt (siehe index.html) — schaltet den
+// Login-Check ab. Diese Seite ist bewusst NICHT von der Startseite aus verlinkt
+// (nur per Direktlink erreichbar), solange sie in Arbeit ist.
+const OFFLINE_APP = false;
+</script>
 <script>
 (function(){
+  if (OFFLINE_APP) return;
+  document.documentElement.style.visibility='hidden';
   fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
+    document.documentElement.style.visibility='';
     if(!d.user){ location.href='/login.html'; }
-  }).catch(()=>{ location.href='/login.html'; });
+  }).catch(()=>{
+    let cached=null;
+    try { cached=JSON.parse(localStorage.getItem('elektroplan_user')||'null'); } catch(e){}
+    document.documentElement.style.visibility='';
+    if (!cached) location.href='/login.html';
+  });
 })();
 </script>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',Arial,sans-serif;background:#e8edf2;color:#1f2937}
-  #bar{background:#1a365d;color:#fff;padding:0 16px;height:48px;display:flex;align-items:center;gap:16px;
-    box-shadow:0 2px 8px #0005;position:sticky;top:0;z-index:10}
-  #bar a{color:#90cdf4;text-decoration:none;font-size:13px;white-space:nowrap}
-  #bar a:hover{text-decoration:underline}
-  #bar h1{font-size:14px;font-weight:600;white-space:nowrap}
-  #bar .hint{font-size:11px;color:rgba(255,255,255,0.55);margin-left:auto;white-space:nowrap}
-  #wrap{overflow:auto;width:100%;height:calc(100vh - 48px)}
-  #empty{padding:60px 20px;text-align:center;color:#64748b;font-size:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;background:#e8edf2;color:#1f2937;user-select:none}
+#app{display:flex;flex-direction:column;height:100vh}
+#bar{background:#1a365d;color:#fff;display:flex;align-items:center;gap:8px;padding:0 10px;height:44px;flex-shrink:0;box-shadow:0 2px 8px #0005;z-index:20}
+#bar a{color:#90cdf4;text-decoration:none;font-size:12px;white-space:nowrap}
+#bar a:hover{text-decoration:underline}
+#bar h1{font-size:13px;font-weight:700;white-space:nowrap;margin-right:6px}
+#bar .sep{width:1px;height:22px;background:rgba(255,255,255,0.15)}
+.bar-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:11px;white-space:nowrap}
+.bar-btn:hover{background:rgba(255,255,255,0.18)}
+.bar-btn.danger{color:#fca5a5}
+#bar .hint{margin-left:auto;font-size:10px;color:rgba(255,255,255,0.5);white-space:nowrap}
+#main{flex:1;display:flex;overflow:hidden;position:relative}
+#sidebar{width:190px;flex-shrink:0;background:#fff;border-right:1px solid #d1d5db;overflow-y:auto;padding:6px}
+.sb-head{font-size:10px;font-weight:700;letter-spacing:.4px;color:#64748b;text-transform:uppercase;padding:10px 6px 4px}
+.sb-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:grab;font-size:11.5px;color:#374151}
+.sb-item:hover{background:#eef2ff}
+.sb-item svg{flex-shrink:0}
+#canvasWrap{flex:1;overflow:hidden;position:relative;background:
+  linear-gradient(#dbe2ea 1px,transparent 1px),linear-gradient(90deg,#dbe2ea 1px,transparent 1px);
+  background-size:20px 20px;background-color:#eef1f5;cursor:default}
+#svg{position:absolute;top:0;left:0}
+.port-hit{cursor:crosshair}
+.port-hit:hover circle{stroke:#2563eb!important;stroke-width:2.5!important}
+#tip{position:fixed;background:#1a202c;color:#e2e8f0;font-size:11px;padding:3px 8px;border-radius:4px;pointer-events:none;display:none;z-index:1000}
+#zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:4px;z-index:15}
+#zoom button{width:30px;height:30px;border-radius:6px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:15px;box-shadow:0 1px 3px #0002}
+@media (max-width:767px){ #sidebar{position:absolute;left:0;top:0;bottom:0;z-index:30;transform:translateX(-100%);transition:transform .2s;box-shadow:2px 0 8px #0003} #sidebar.open{transform:translateX(0)} }
 </style>
 </head>
 <body>
-<div id="bar">
-  <a href="/">← Zurück zum Aufbauplan</a>
-  <h1>⚡ Stromlaufplan — aufgelöste Darstellung</h1>
-  <span class="hint">automatisch erzeugt · schreibgeschützt</span>
+<div id="app">
+  <div id="bar">
+    <button class="bar-btn" id="btn-ham" onclick="toggleSidebar()" style="display:none">☰</button>
+    <a href="/">← Zurück</a>
+    <div class="sep"></div>
+    <h1>⚡ Stromlaufplan-Editor</h1>
+    <button class="bar-btn" onclick="doNew()">🗑 Neu</button>
+    <button class="bar-btn" onclick="doSave()">💾 Datei</button>
+    <button class="bar-btn" onclick="doLoad()">📂 Datei</button>
+    <button class="bar-btn danger" onclick="doDeleteSel()">✕ Löschen</button>
+    <span class="hint">Symbol ziehen = platzieren · Port→Port klicken = verbinden · Doppelklick = beschriften · Entf = löschen</span>
+  </div>
+  <div id="main">
+    <div id="sidebar"></div>
+    <div id="canvasWrap">
+      <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="zoom">
+        <button onclick="setZoom(zoom*1.2)">+</button>
+        <button onclick="setZoom(zoom/1.2)">−</button>
+        <button onclick="resetView()" title="Ansicht zurücksetzen">⤢</button>
+      </div>
+    </div>
+  </div>
 </div>
-<div id="wrap"><div id="empty" style="display:none">Kein Aufbau gefunden. Öffne zuerst den Aufbauplan und baue eine Schaltung.</div><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+<div id="tip"></div>
+
 <script>
+'use strict';
 const NS='http://www.w3.org/2000/svg';
 function mk(tag,attrs,parent){
   const el=document.createElementNS(NS,tag);
@@ -41,428 +94,343 @@ function mk(tag,attrs,parent){
   return el;
 }
 
-// Nicht elektrisch relevant für die aufgelöste Darstellung: Strukturteile + reine Durchgangsklemmen/-schienen
-const SKIP_TYPES = new Set([
-  'uv','uv2','uv3','hutschiene','aufputzgehaeuse1','aufputzgehaeuse2','aufputzgehaeuse3','kabelkanal',
-  'cee16_kupplung',
-  'nblock','peblock','klemme','klemme25','klemme25_twin','knotenpunkt','wago2','wago3','wago5',
-  'drucktaster', // hat selbst keine Anschlüsse — wirkt nur über NC/NO/LED-Kontakte im selben Gehäuse
-]);
+// ── Symbolbibliothek (IEC 60617 / DIN EN 60617 angelehnt) ──────────────────────
+// Jedes Symbol: w,h (Bounding-Box), ports:[{x,y,label}] (Anschlusspunkte, oben=Versorgung
+// Richtung), draw(g, stroke) zeichnet das reine Symbol bei (0,0) — wird per <g transform>
+// an die Instanzposition verschoben.
+function line(g,x1,y1,x2,y2,s,w){ mk('line',{x1,y1,x2,y2,stroke:s||'#1f2937','stroke-width':w||1.6,'stroke-linecap':'round'},g); }
+function dot(g,x,y,s){ mk('circle',{cx:x,cy:y,r:2.2,fill:s||'#1f2937'},g); }
 
-const TOP_RAILS = ['L1','L2','L3'];
-const BOT_RAILS = ['N','PE'];
-// CEE-Kupplung Portindex → Sammelschiene (fest, siehe Bauteil-Definition in der Haupt-App)
-const CEE_PORT_RAIL = ['L1','L2','L3','N','PE'];
-// Reine Durchgangs-/Sammel-Bauteile: Schienen-Zugehörigkeit wird durch sie hindurch weitergereicht
-const PASSTHROUGH_TYPES = new Set(['nblock','peblock','klemme','klemme25','klemme25_twin','knotenpunkt','wago2','wago3','wago5']);
+function contactGlyph(g, nc, actuated){
+  const cx=14, h=44, gapTop=16, gapBot=28;
+  line(g,cx,0,cx,gapTop);
+  line(g,cx,gapBot,cx,h);
+  dot(g,cx,gapTop); dot(g,cx,gapBot);
+  line(g,cx-2,gapBot,cx+8,gapTop-7,'#1f2937',1.8);
+  if (nc) line(g,cx+3,gapTop-3,cx+10,gapTop-11,'#1f2937',1.4);
+  if (actuated) { // Betätigungspfeil (Taster) bzw. Symbol darüber
+    line(g,cx+8,gapTop-7,cx+8,gapTop-16,'#1f2937',1.4);
+    line(g,cx+4,gapTop-16,cx+12,gapTop-16,'#1f2937',1.4);
+  }
+}
+function coilGlyph(g, delay){
+  const cx=17,w=28,h=20,top=8,bot=36;
+  line(g,cx,0,cx,top);
+  line(g,cx,bot,cx,44);
+  mk('rect',{x:cx-w/2,y:top,width:w,height:h,fill:'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+  if (delay) {
+    // Zeitverzögerungs-Symbol: kleiner Bogen im Spulenkasten
+    mk('path',{d:`M${cx-7},${top+14} q7,6 14,0`,fill:'none',stroke:'#1f2937','stroke-width':1.3},g);
+  }
+}
+function breakerPole(g, ox){
+  const cx=ox+11, top=0, mid=17, bot=40;
+  line(g,cx,top,cx,mid-3);
+  line(g,cx,mid+11,cx,bot);
+  dot(g,cx,mid-3); dot(g,cx,mid+11);
+  line(g,cx,mid-3,cx+11,mid-14,'#1f2937',1.8);
+}
+function rcdMark(g,cx,y){
+  mk('circle',{cx,cy:y,r:6,fill:'none',stroke:'#1f2937','stroke-width':1.2},g);
+  mk('text',{x:cx,y:y+3,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='Δ';
+}
 
-// Polpaare (Eingang→Ausgang) für mehrpolige Schutzorgane — aus der Simulationslogik der Haupt-App übernommen
-const POLE_PAIRS = {
-  ls1:  [[0,1]],
-  ls3:  [[0,3],[1,4],[2,5]],
-  rcd2: [[0,2],[1,3]],
-  rcd4: [[0,4],[1,5],[2,6],[3,7]],
-  rcbo: [[0,1],[2,3]],
+const SYM = {
+  contact_no:{cat:'Kontakte',label:'Schließer (NO)',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
+    draw:g=>contactGlyph(g,false,false)},
+  contact_nc:{cat:'Kontakte',label:'Öffner (NC)',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
+    draw:g=>contactGlyph(g,true,false)},
+  contact_co:{cat:'Kontakte',label:'Wechsler',w:40,h:44,ports:[{x:14,y:0},{x:14,y:44,l:'NO'},{x:34,y:44,l:'NC'}],
+    draw:g=>{ contactGlyph(g,false,false); line(g,28,28,34,28); line(g,34,28,34,44); dot(g,34,28); }},
+  taster_no:{cat:'Taster/Schalter',label:'Taster Schließer',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
+    draw:g=>contactGlyph(g,false,true)},
+  taster_nc:{cat:'Taster/Schalter',label:'Taster Öffner',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
+    draw:g=>contactGlyph(g,true,true)},
+  schalter:{cat:'Taster/Schalter',label:'Schalter',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
+    draw:g=>contactGlyph(g,false,false)},
+  notaus:{cat:'Taster/Schalter',label:'Not-Aus',w:32,h:48,ports:[{x:16,y:4},{x:16,y:48}],
+    draw:g=>{ contactGlyph(g,true,false); mk('circle',{cx:16,cy:-4,r:7,fill:'#fff',stroke:'#dc2626','stroke-width':2},g);
+      mk('circle',{cx:16,cy:-4,r:3.5,fill:'#dc2626'},g); }},
+  coil:{cat:'Spulen',label:'Schütz-/Relaisspule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
+    draw:g=>coilGlyph(g,false)},
+  coil_delay:{cat:'Spulen',label:'Zeitrelais-Spule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
+    draw:g=>coilGlyph(g,true)},
+  ls1:{cat:'Schutzorgane',label:'LS 1-polig',w:22,h:40,ports:[{x:11,y:0},{x:11,y:40}],
+    draw:g=>breakerPole(g,0)},
+  ls3:{cat:'Schutzorgane',label:'LS 3-polig',w:66,h:40,ports:[{x:11,y:0},{x:33,y:0},{x:55,y:0},{x:11,y:40},{x:33,y:40},{x:55,y:40}],
+    draw:g=>{ breakerPole(g,0); breakerPole(g,22); breakerPole(g,44); }},
+  rcd2:{cat:'Schutzorgane',label:'FI/RCD 2-polig',w:44,h:40,ports:[{x:11,y:0},{x:33,y:0},{x:11,y:40},{x:33,y:40}],
+    draw:g=>{ breakerPole(g,0); breakerPole(g,22); rcdMark(g,22,-10); }},
+  rcd4:{cat:'Schutzorgane',label:'FI/RCD 4-polig',w:88,h:40,ports:[{x:11,y:0},{x:33,y:0},{x:55,y:0},{x:77,y:0},{x:11,y:40},{x:33,y:40},{x:55,y:40},{x:77,y:40}],
+    draw:g=>{ [0,22,44,66].forEach(o=>breakerPole(g,o)); rcdMark(g,44,-10); }},
+  rcbo:{cat:'Schutzorgane',label:'RCBO (LS+FI)',w:44,h:40,ports:[{x:11,y:0},{x:33,y:0},{x:11,y:40},{x:33,y:40}],
+    draw:g=>{ breakerPole(g,0); breakerPole(g,22); rcdMark(g,22,-10); mk('text',{x:22,y:52,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='B16'; }},
+  lampe:{cat:'Verbraucher',label:'Lampe/Leuchte',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
+    draw:g=>{ line(g,14,0,14,9); line(g,14,35,14,44); mk('circle',{cx:14,cy:22,r:13,fill:'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+      line(g,6,14,22,30); line(g,6,30,22,14); }},
+  motor:{cat:'Verbraucher',label:'Motor 3~',w:34,h:44,ports:[{x:17,y:0},{x:17,y:44}],
+    draw:g=>{ line(g,17,0,17,9); line(g,17,35,17,44); mk('circle',{cx:17,cy:22,r:15,fill:'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+      mk('text',{x:17,y:26,'text-anchor':'middle','font-size':13,fill:'#1f2937','font-weight':'bold'},g).textContent='M';
+      mk('text',{x:17,y:35,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='3~'; }},
+  motor1:{cat:'Verbraucher',label:'Motor 1~',w:34,h:44,ports:[{x:17,y:0},{x:17,y:44}],
+    draw:g=>{ line(g,17,0,17,9); line(g,17,35,17,44); mk('circle',{cx:17,cy:22,r:15,fill:'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+      mk('text',{x:17,y:26,'text-anchor':'middle','font-size':13,fill:'#1f2937','font-weight':'bold'},g).textContent='M';
+      mk('text',{x:17,y:35,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='1~'; }},
+  steckdose:{cat:'Verbraucher',label:'Steckdose',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
+    draw:g=>{ line(g,14,0,14,9); line(g,14,35,14,44); mk('circle',{cx:14,cy:22,r:13,fill:'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+      dot(g,10,22); dot(g,18,22); }},
+  motion:{cat:'Verbraucher',label:'Bewegungsmelder',w:30,h:50,ports:[{x:15,y:6},{x:15,y:50}],
+    draw:g=>{ contactGlyph(g,false,false); mk('path',{d:'M4,15 Q15,4 26,15',fill:'none',stroke:'#1f2937','stroke-width':1.3},g); }},
+  block:{cat:'Geräte',label:'Gerät (SPS/FU/Netzteil …)',w:70,h:50,
+    ports:[{x:10,y:0},{x:35,y:0},{x:60,y:0},{x:10,y:50},{x:35,y:50},{x:60,y:50}],
+    draw:g=>{ mk('rect',{x:0,y:0,width:70,height:50,fill:'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+      [10,35,60].forEach(x=>{ line(g,x,-6,x,0); line(g,x,50,x,56); }); }},
+  gleichrichter:{cat:'Geräte',label:'Gleichrichter',w:40,h:40,ports:[{x:20,y:0},{x:0,y:20},{x:20,y:40},{x:40,y:20}],
+    draw:g=>{ mk('circle',{cx:20,cy:20,r:19,fill:'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+      line(g,8,8,32,32); line(g,8,32,32,8);
+      mk('polygon',{points:'12,12 12,28 26,20',fill:'#1f2937'},g); }},
+  junction:{cat:'Verbindungen',label:'Verbindungspunkt',w:10,h:10,ports:[{x:5,y:5}],
+    draw:g=>{ dot(g,5,5,'#1f2937'); }},
+  pe:{cat:'Verbindungen',label:'Schutzerde (PE)',w:20,h:26,ports:[{x:10,y:0}],
+    draw:g=>{ line(g,10,0,10,14); line(g,2,14,18,14); line(g,5,18,15,18); line(g,8,22,12,22); }},
 };
+const CATS = ['Schutzorgane','Kontakte','Taster/Schalter','Spulen','Verbraucher','Geräte','Verbindungen'];
 
-// Bauteile mit Kontakt+Spule-Kombination: werden in einzelne, unabhängig platzierte
-// Schaltzeichen aufgelöst (Kontakte dahin wo sie gebraucht werden, Spule separat) — statt EINER Box.
-const SPLIT_ELEMENTS = {
-  schuetz: [
-    {suffix:'p1',  ports:[0,3],  sym:'contact_no', tag:'1-2'},
-    {suffix:'p2',  ports:[1,4],  sym:'contact_no', tag:'3-4'},
-    {suffix:'p3',  ports:[2,5],  sym:'contact_no', tag:'5-6'},
-    {suffix:'no1', ports:[6,7],  sym:'contact_no', tag:'13-14'},
-    {suffix:'nc1', ports:[8,9],  sym:'contact_nc', tag:'21-22'},
-    {suffix:'nc2', ports:[10,11],sym:'contact_nc', tag:'31-32'},
-    {suffix:'no2', ports:[12,13],sym:'contact_no', tag:'43-44'},
-    {suffix:'coil',ports:[14,15],sym:'coil',       tag:'A1-A2'},
-  ],
-  stromstoss: [
-    {suffix:'no1', ports:[1,4], sym:'contact_no', tag:'13-14'},
-    {suffix:'no2', ports:[2,5], sym:'contact_no', tag:'21-22'},
-    {suffix:'coil',ports:[0,3], sym:'coil',       tag:'A1-A2'},
-  ],
-};
+// ── State ────────────────────────────────────────────────────────────────────
+let insts = [], wires = [], iid=1, wid=1;
+let sel = null, selWire = null;
+let zoom = 1, panX=80, panY=40;
+let wireStart = null; // {instId, portIdx}
 
-function symbolFor(type) {
-  if (['schalter','taster','wechsel','kreuzschalter','kontakt_no','kontakt_led'].includes(type)) return 'contact_no';
-  if (type==='kontakt_nc') return 'contact_nc';
-  if (POLE_PAIRS[type]) return 'breaker';
-  if (type==='bewegungsmelder') return 'motion';
-  if (type==='lampe' || type==='spot') return 'lamp';
-  if (type==='motor' || type==='dahlander') return 'motor';
-  if (type==='steckdose') return 'socket';
-  return null;
+function svgPt(clientX, clientY){
+  const r = document.getElementById('canvasWrap').getBoundingClientRect();
+  return { x:(clientX-r.left-panX)/zoom, y:(clientY-r.top-panY)/zoom };
+}
+function portWorld(inst, pi){
+  const s = SYM[inst.type], p = s.ports[pi];
+  return [inst.x+p.x, inst.y+p.y];
 }
 
-function drawSymbol(svg, sym, x, y, w, h, label, compType) {
-  const cx=x+w/2, cy=y+h/2;
-  const stroke = '#1f2937';
-  mk('text',{x:cx, y:y-8, 'text-anchor':'middle', 'font-size':9, fill:stroke, 'font-weight':'bold'},svg).textContent=label;
-
-  function contactGlyph(gx, gy, gw, gh, nc){
-    const p1x=gx, p2x=gx+gw, midy=gy+gh/2;
-    mk('line',{x1:p1x,y1:gy,x2:p1x,y2:midy,stroke,'stroke-width':1.4},svg);
-    mk('line',{x1:p2x,y1:midy,x2:p2x,y2:gy+gh,stroke,'stroke-width':1.4},svg);
-    mk('line',{x1:p1x,y1:midy,x2:p2x-3,y2:midy-gh*0.32,stroke,'stroke-width':1.6,'stroke-linecap':'round'},svg);
-    mk('circle',{cx:p1x,cy:midy,r:1.6,fill:stroke},svg);
-    mk('circle',{cx:p2x,cy:midy,r:1.6,fill:stroke},svg);
-    if (nc) mk('line',{x1:p2x-7,y1:midy-gh*0.44,x2:p2x-1,y2:midy-gh*0.2,stroke,'stroke-width':1.3},svg);
-  }
-  // Trenn-/Leistungsschalter nach DIN EN 60617-7: einfacher Schalterstrich, kein Zusatzsymbol
-  function breakerGlyph(gx, gy, gw, gh){
-    const px=gx+gw/2, midy=gy+gh/2;
-    mk('line',{x1:px,y1:gy,x2:px,y2:midy-2,stroke,'stroke-width':1.4},svg);
-    mk('line',{x1:px,y1:midy+11,x2:px,y2:gy+gh,stroke,'stroke-width':1.4},svg);
-    mk('line',{x1:px,y1:midy-2,x2:px+11,y2:midy-13,stroke,'stroke-width':1.6,'stroke-linecap':'round'},svg);
-    mk('circle',{cx:px,cy:midy-2,r:1.6,fill:stroke},svg);
-    mk('circle',{cx:px,cy:midy+11,r:1.6,fill:stroke},svg);
-  }
-
-  switch(sym){
-    case 'contact_no': contactGlyph(x+13, y, w-26, h, false); break;
-    case 'contact_nc': contactGlyph(x+13, y, w-26, h, true); break;
-    case 'coil': {
-      const cw=Math.min(w-16,30), ch=Math.min(h-14,22);
-      mk('rect',{x:cx-cw/2,y:cy-ch/2,width:cw,height:ch,fill:'#fff',stroke,'stroke-width':1.5},svg);
-      mk('line',{x1:cx,y1:y,x2:cx,y2:cy-ch/2,stroke,'stroke-width':1.4},svg);
-      mk('line',{x1:cx,y1:cy+ch/2,x2:cx,y2:y+h,stroke,'stroke-width':1.4},svg);
-      break;
-    }
-    case 'breaker': {
-      const poles = POLE_PAIRS[compType] || [[0,1]];
-      const gw = Math.min(30, (w-16)/poles.length);
-      poles.forEach((_,i)=>{
-        const gx = x + 8 + i*((w-16)/poles.length) + ((w-16)/poles.length-gw)/2;
-        breakerGlyph(gx, y, gw, h);
-      });
-      break;
-    }
-    case 'motion': {
-      contactGlyph(x+13, y+10, w-26, h-10, false);
-      mk('path',{d:`M${cx-11},${y+9} Q${cx},${y-2} ${cx+11},${y+9}`,fill:'none',stroke,'stroke-width':1.3},svg);
-      break;
-    }
-    case 'lamp': {
-      mk('circle',{cx,cy,r:13,fill:'#fff',stroke,'stroke-width':1.5},svg);
-      mk('line',{x1:cx-8,y1:cy-8,x2:cx+8,y2:cy+8,stroke,'stroke-width':1.2},svg);
-      mk('line',{x1:cx-8,y1:cy+8,x2:cx+8,y2:cy-8,stroke,'stroke-width':1.2},svg);
-      mk('line',{x1:cx,y1:y,x2:cx,y2:cy-13,stroke,'stroke-width':1.5},svg);
-      mk('line',{x1:cx,y1:cy+13,x2:cx,y2:y+h,stroke,'stroke-width':1.5},svg);
-      break;
-    }
-    case 'motor': {
-      mk('circle',{cx,cy,r:15,fill:'#fff',stroke,'stroke-width':1.5},svg);
-      mk('text',{x:cx,y:cy+4,'text-anchor':'middle','font-size':11,fill:stroke,'font-weight':'bold'},svg).textContent='M';
-      mk('line',{x1:cx,y1:y,x2:cx,y2:cy-15,stroke,'stroke-width':1.5},svg);
-      break;
-    }
-    case 'socket': {
-      mk('circle',{cx,cy,r:13,fill:'#fff',stroke,'stroke-width':1.5},svg);
-      mk('circle',{cx:cx-4,cy,r:1.6,fill:stroke},svg);
-      mk('circle',{cx:cx+4,cy,r:1.6,fill:stroke},svg);
-      mk('line',{x1:cx,y1:y,x2:cx,y2:cy-13,stroke,'stroke-width':1.5},svg);
-      break;
-    }
-    default:
-      mk('rect',{x,y,width:w,height:h,rx:4,fill:'#fff',stroke:'#334155','stroke-width':1.5},svg);
-  }
-}
-
-let allComps = [], comps = [], wires = [];
-
-function loadAndRender(){
-  let data = {comps:[], wires:[]};
-  try {
-    const raw = localStorage.getItem('elektroplan_v1');
-    if (raw) data = JSON.parse(raw);
-  } catch(e) {}
-  allComps = data.comps || [];
-  comps = allComps.filter(c=>!SKIP_TYPES.has(c.type));
-  wires = data.wires || [];
-
-  const svgEl = document.getElementById('svg');
-  while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
-
-  if (!comps.length) {
-    document.getElementById('empty').style.display='';
-  } else {
-    document.getElementById('empty').style.display='none';
-    render();
-  }
-}
-loadAndRender();
-window.addEventListener('storage', e=>{ if (e.key==='elektroplan_v1') loadAndRender(); });
-let _lastRaw = localStorage.getItem('elektroplan_v1');
-setInterval(()=>{
-  const cur = localStorage.getItem('elektroplan_v1');
-  if (cur !== _lastRaw) { _lastRaw = cur; loadAndRender(); }
-}, 1500);
-
-// Für einen Anschluss (compId,portIdx) den Graph-Knoten bestimmen: bei aufgelösten
-// Bauteilen (Schütz, Stromstoß) das jeweilige Einzelelement, sonst das ganze Bauteil.
-function nodeIdForPort(compById, cid, pi){
-  const c = compById[cid];
-  if (!c) return cid+':main';
-  const split = SPLIT_ELEMENTS[c.type];
-  if (!split) return cid+':main';
-  const el = split.find(e=>e.ports.includes(pi));
-  return el ? cid+':'+el.suffix : cid+':main';
-}
-
-// Für die TIEFE brauchen wir feinere Granularität als nodeIdForPort: bei einem normalen
-// Mehrport-Bauteil (Motor, mehrpolige Sicherung, ...) ist der PE/N-Anschluss oft kurz zur
-// Quelle verdrahtet, während die Leistungs-Adern einen langen Weg über Schütze gehen —
-// wenn alle Ports EIN Knoten wären, würde das kürzeste Signal das ganze Bauteil nach oben
-// ziehen. Also: jeder Port sein eigener Tiefen-Knoten, außer bei echten Durchgangs-Bauteilen
-// (Klemmen) und bei den definierten Kontakt-Paaren (Schütz-Polen).
-function depthNodeId(compById, cid, pi){
-  const c = compById[cid];
-  if (!c) return cid+':'+pi;
-  if (PASSTHROUGH_TYPES.has(c.type)) return cid+':bus';
-  const split = SPLIT_ELEMENTS[c.type];
-  if (split) {
-    const el = split.find(e=>e.ports.includes(pi));
-    return el ? cid+':'+el.suffix : cid+':'+pi;
-  }
-  return cid+':'+pi;
-}
-
-function isPassthrough(compById, cid){
-  const c = compById[cid];
-  return !!(c && PASSTHROUGH_TYPES.has(c.type));
-}
-
-// Für die Schienen-Zugehörigkeit brauchen wir FEINERE Granularität als für die Tiefe:
-// bei einem Durchgangs-Bauteil (Klemme etc.) sind alle Ports EIN Knoten (wirklich intern
-// verbunden), bei jedem anderen Bauteil (auch mehrpolige Sicherungen etc.) bleibt jeder
-// Port sein eigener Knoten — sonst würde z.B. der Ausgang einer Sicherung fälschlich auch
-// als "direkt an der Schiene" gelten, nur weil ihr Eingang es ist.
-function railNodeId(compById, cid, pi){
-  return isPassthrough(compById, cid) ? cid+':bus' : cid+':'+pi;
-}
-
-// Berechnet aus der ECHTEN Verdrahtung (nicht aus Aderfarbe geraten):
-//  - depth: Hop-Abstand jedes (Element-)Knotens von der CEE-Kupplung (für die Zeilen-Reihenfolge)
-//  - railOf: nur für PORTS, die AUSSCHLIESSLICH über Durchgangs-Bauteile (Klemmen, Sammelschienen)
-//    mit einem CEE-Pol verbunden sind — die bekommen einen direkten Schienen-Stub statt einer
-//    normalen Verbindungslinie. Sobald ein "echtes" Bauteil (Sicherung, Schütz, ...) dazwischen
-//    liegt, endet die Schienen-Zugehörigkeit dort (genau wie in einem echten Stromlaufplan).
-function computeTopology(compById){
-  const depthAdj = {};
-  const addDepthEdge = (a,b)=>{ (depthAdj[a]||(depthAdj[a]=[])).push(b); (depthAdj[b]||(depthAdj[b]=[])).push(a); };
-  wires.forEach(w=> addDepthEdge(depthNodeId(compById,w.fid,w.fp), depthNodeId(compById,w.tid,w.tp)));
-
-  const railAdj = {};
-  const addRailEdge = (a,b)=>{ (railAdj[a]||(railAdj[a]=[])).push(b); (railAdj[b]||(railAdj[b]=[])).push(a); };
-  wires.forEach(w=> addRailEdge(railNodeId(compById,w.fid,w.fp), railNodeId(compById,w.tid,w.tp)));
-
-  const cee = Object.values(compById).find(c=>c.type==='cee16_kupplung');
-
-  const depth = {};
-  const dq = [];
-  const railOf = {};
-  const rq = [];
-  if (cee) {
-    wires.forEach(w=>{
-      let otherD=null, otherR=null, ceePort=null;
-      if (w.fid===cee.id) { otherD=depthNodeId(compById,w.tid,w.tp); otherR=railNodeId(compById,w.tid,w.tp); ceePort=w.fp; }
-      else if (w.tid===cee.id) { otherD=depthNodeId(compById,w.fid,w.fp); otherR=railNodeId(compById,w.fid,w.fp); ceePort=w.tp; }
-      if (otherD==null) return;
-      if (depth[otherD]===undefined) { depth[otherD]=0; dq.push(otherD); }
-      const rail = CEE_PORT_RAIL[ceePort];
-      if (rail && railOf[otherR]===undefined) { railOf[otherR]=rail; rq.push(otherR); }
+// ── Sidebar aufbauen ─────────────────────────────────────────────────────────
+function buildSidebar(){
+  const sb = document.getElementById('sidebar');
+  sb.innerHTML='';
+  CATS.forEach(cat=>{
+    const h = document.createElement('div'); h.className='sb-head'; h.textContent=cat; sb.appendChild(h);
+    Object.entries(SYM).filter(([k,s])=>s.cat===cat).forEach(([key,s])=>{
+      const it = document.createElement('div'); it.className='sb-item'; it.draggable=true;
+      const svg = document.createElementNS(NS,'svg');
+      svg.setAttribute('width',34); svg.setAttribute('height',34);
+      svg.setAttribute('viewBox',`-6 -6 ${Math.max(s.w,20)+12} ${Math.max(s.h,20)+12}`);
+      const g = mk('g',{},svg); s.draw(g);
+      it.appendChild(svg);
+      const lbl = document.createElement('span'); lbl.textContent=s.label; it.appendChild(lbl);
+      it.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain', key); });
+      sb.appendChild(it);
     });
-  }
-  let dqi=0;
-  while (dqi<dq.length) {
-    const cur=dq[dqi++];
-    (depthAdj[cur]||[]).forEach(to=>{
-      if (depth[to]===undefined) { depth[to]=depth[cur]+1; dq.push(to); }
-    });
-  }
-  let rqi=0;
-  while (rqi<rq.length) {
-    const cur=rq[rqi++];
-    if (!isPassthrough(compById, cur.split(':')[0])) continue; // nur durch Durchgangs-Bauteile weiterreichen
-    (railAdj[cur]||[]).forEach(to=>{
-      if (railOf[to]===undefined) { railOf[to]=railOf[cur]; rq.push(to); }
-    });
-  }
-  return {depth, railOf};
-}
-
-// NC/NO/LED-Kontakte, die im selben Gehäuse wie ein (nicht gezeichneter) Drucktaster sitzen,
-// übernehmen dessen Bezeichnung (z.B. "S1") — so sind sie über die Bezeichnung verknüpft,
-// auch wenn sie an ganz anderer Stelle im Plan stehen.
-function labelFor(c){
-  if (['kontakt_no','kontakt_nc','kontakt_led'].includes(c.type) && c.housingId!=null) {
-    const btn = allComps.find(a=>a.type==='drucktaster' && a.housingId===c.housingId && a.rowIdx===c.rowIdx);
-    if (btn && btn.label && btn.label!==btn.type && btn.label!=='Drucktaster') return btn.label;
-  }
-  return c.label || c.type;
-}
-
-// Aus den (nicht übersprungenen) Bauteilen die zu zeichnenden Elemente bauen — bei Schütz/
-// Stromstoß mehrere unabhängige Elemente statt einem.
-function buildElements(usedPorts){
-  const elements = [];
-  comps.forEach(c=>{
-    const allPorts = [...(usedPorts[c.id]||[])];
-    const split = SPLIT_ELEMENTS[c.type];
-    if (split) {
-      split.forEach(el=>{
-        const ports = allPorts.filter(pi=>el.ports.includes(pi)).sort((a,b)=>a-b);
-        if (!ports.length) return; // unbenutzte Kontakte/Spule des Bauteils ausblenden, kein Ballast
-        elements.push({
-          nodeId: c.id+':'+el.suffix,
-          label: labelFor(c) + (el.tag ? (' '+el.tag) : ''),
-          sym: el.sym, compType: c.type, ports, x: c.x,
-        });
-      });
-    } else {
-      elements.push({
-        nodeId: c.id+':main',
-        label: labelFor(c),
-        sym: symbolFor(c.type), compType: c.type,
-        ports: allPorts.sort((a,b)=>a-b), x: c.x,
-      });
-    }
   });
-  return elements;
 }
 
+// ── Platzieren per Drag&Drop ─────────────────────────────────────────────────
+const canvasWrap = document.getElementById('canvasWrap');
+canvasWrap.addEventListener('dragover', e=>e.preventDefault());
+canvasWrap.addEventListener('drop', e=>{
+  e.preventDefault();
+  const type = e.dataTransfer.getData('text/plain');
+  if (!SYM[type]) return;
+  const p = svgPt(e.clientX, e.clientY);
+  insts.push({ id:iid++, type, x:Math.round(p.x/10)*10, y:Math.round(p.y/10)*10, label:'' });
+  sel = insts[insts.length-1].id; selWire=null;
+  render(); scheduleAutoSave();
+});
+
+// ── Pan & Zoom ───────────────────────────────────────────────────────────────
+let panDrag = null;
+canvasWrap.addEventListener('pointerdown', e=>{
+  if (e.target === canvasWrap || e.target.id==='svg') {
+    panDrag = {x:e.clientX,y:e.clientY,px:panX,py:panY};
+    sel=null; selWire=null; wireStart=null; render();
+  }
+});
+window.addEventListener('pointermove', e=>{
+  if (panDrag){ panX = panDrag.px + (e.clientX-panDrag.x); panY = panDrag.py + (e.clientY-panDrag.y); applyTransform(); }
+});
+window.addEventListener('pointerup', ()=>{ panDrag=null; });
+canvasWrap.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const factor = e.deltaY<0 ? 1.1 : 1/1.1;
+  setZoom(zoom*factor, e.clientX, e.clientY);
+}, {passive:false});
+function setZoom(z, cx, cy){
+  z = Math.max(0.3, Math.min(3, z));
+  const r = canvasWrap.getBoundingClientRect();
+  const px = cx!=null?cx-r.left:r.width/2, py = cy!=null?cy-r.top:r.height/2;
+  const wx = (px-panX)/zoom, wy=(py-panY)/zoom;
+  zoom = z;
+  panX = px - wx*zoom; panY = py - wy*zoom;
+  applyTransform();
+}
+function resetView(){ zoom=1; panX=80; panY=40; applyTransform(); }
+function applyTransform(){ document.getElementById('svg').setAttribute('transform',`translate(${panX},${panY}) scale(${zoom})`); }
+
+// ── Rendern ──────────────────────────────────────────────────────────────────
 function render(){
-  const usedPorts = {};
-  wires.forEach(w=>{
-    (usedPorts[w.fid]||(usedPorts[w.fid]=new Set())).add(w.fp);
-    (usedPorts[w.tid]||(usedPorts[w.tid]=new Set())).add(w.tp);
-  });
-
-  const compById = {}; allComps.forEach(c=>compById[c.id]=c);
-  const {depth, railOf} = computeTopology(compById);
-  const elements = buildElements(usedPorts);
-
-  // Tiefe pro Element = MAXIMUM über seine eigenen Ports (nicht Minimum!) — ein Bauteil muss
-  // unter ALLEM stehen, was es speist, nicht nur hinter seiner kürzesten (z.B. PE-)Verbindung.
-  elements.forEach(e=>{
-    const [compId] = e.nodeId.split(':');
-    let d;
-    e.ports.forEach(pi=>{
-      const pd = depth[depthNodeId(compById, compId, pi)];
-      if (pd!==undefined && (d===undefined || pd>d)) d = pd;
-    });
-    e.elDepth = d;
-  });
-
-  const maxKnownDepth = Math.max(0, ...elements.map(e=>e.elDepth).filter(d=>d!==undefined));
-  const fallbackDepth = maxKnownDepth + 1;
-
-  const BOXH=52, PORTGAP=26, BOXMINW=68, HGAP=30, MARGIN=50;
-  const TOPRAIL_GAP=20, BANDH=100, RAILSPACE=90;
-
-  const items = elements.slice().sort((a,b)=>{
-    const da = a.elDepth!==undefined?a.elDepth:fallbackDepth;
-    const db = b.elDepth!==undefined?b.elDepth:fallbackDepth;
-    return da-db || a.x-b.x;
-  });
-  const nBands = fallbackDepth+1;
-  const bandItems = Array.from({length:nBands},()=>[]);
-  items.forEach(e=>{
-    const d = e.elDepth!==undefined?e.elDepth:fallbackDepth;
-    bandItems[d].push(e);
-  });
-
-  const boxes = [];
-  const portPos = {};
-  let maxRowW = 0;
-  const topRailsH = MARGIN + (TOP_RAILS.length-1)*TOPRAIL_GAP + 10;
-
-  bandItems.forEach((list, bi) => {
-    let x = MARGIN;
-    const y = topRailsH + RAILSPACE + bi*BANDH;
-    list.forEach(e=>{
-      const w = Math.max(BOXMINW, e.ports.length*PORTGAP + 14);
-      boxes.push({e,x,y,w,h:BOXH});
-      const [compId] = e.nodeId.split(':');
-      e.ports.forEach((pi,i)=>{
-        const px = x + 10 + i*PORTGAP + PORTGAP/2 - 13;
-        portPos[compId+':'+pi] = {x:px, y};
-      });
-      x += w + HGAP;
-    });
-    if (x > maxRowW) maxRowW = x;
-  });
-
-  const totalW = Math.max(700, maxRowW + MARGIN);
-  const botRailsY = topRailsH + RAILSPACE + nBands*BANDH + 20;
-  const totalH = botRailsY + (BOT_RAILS.length-1)*TOPRAIL_GAP + 40;
-
   const svg = document.getElementById('svg');
-  svg.setAttribute('width', totalW);
-  svg.setAttribute('height', totalH);
-  svg.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+  svg.innerHTML='';
+  svg.setAttribute('width', 4000); svg.setAttribute('height', 3000);
+  applyTransform();
 
-  const railY = {};
-  TOP_RAILS.forEach((r,i)=>{ railY[r] = MARGIN + i*TOPRAIL_GAP; });
-  BOT_RAILS.forEach((r,i)=>{ railY[r] = botRailsY + i*TOPRAIL_GAP; });
-  [...TOP_RAILS, ...BOT_RAILS].forEach(r=>{
-    const y = railY[r];
-    const col = r==='L1'?'#8B4513':r==='L2'?'#222':r==='L3'?'#6b7280':r==='N'?'#1a56db':'#16a34a';
-    mk('line',{x1:MARGIN-10,y1:y,x2:totalW-MARGIN+10,y2:y,stroke:col,'stroke-width':2.5},svg);
-    mk('text',{x:14,y:y+4,'font-size':11,fill:col,'font-weight':'bold'},svg).textContent=r;
-  });
-
-  const stubbed = new Set();
-  const usedRailStub = key=>{ if(stubbed.has(key)) return true; stubbed.add(key); return false; };
-
+  // Leitungen
   wires.forEach(w=>{
-    // Pro Ader beide Enden UNABHÄNGIG prüfen: nur wer wirklich (über Klemmen) an einem
-    // CEE-Pol hängt, bekommt einen Schienen-Stub — nicht die ganze Ader automatisch.
-    let stubbedAny = false;
-    [[w.fid,w.fp],[w.tid,w.tp]].forEach(([cid,pi])=>{
-      const rail = railOf[railNodeId(compById,cid,pi)];
-      if (!rail) return;
-      const p = portPos[cid+':'+pi];
-      if (!p) return;
-      stubbedAny = true;
-      const key = cid+':'+pi+':'+rail;
-      if (usedRailStub(key)) return;
-      mk('line',{x1:p.x,y1:p.y,x2:p.x,y2:railY[rail],stroke:w.color||'#6b7280','stroke-width':1.8,opacity:0.85},svg);
-      mk('circle',{cx:p.x,cy:railY[rail],r:2.5,fill:w.color||'#6b7280'},svg);
-    });
-    if (stubbedAny) return;
-    const a = portPos[w.fid+':'+w.fp], b = portPos[w.tid+':'+w.tp];
-    if (!a || !b) return;
-    const midY = (a.y+b.y)/2;
-    const d = `M${a.x},${a.y} L${a.x},${midY} L${b.x},${midY} L${b.x},${b.y}`;
-    mk('path',{d,fill:'none',stroke:w.color||'#6b7280','stroke-width':1.8,opacity:0.85},svg);
-    if (w.label) {
-      const mx=(a.x+b.x)/2;
-      mk('rect',{x:mx-14,y:midY-8,width:28,height:11,fill:'#fff',opacity:0.85,rx:2},svg);
-      mk('text',{x:mx,y:midY+1,'text-anchor':'middle','font-size':8,fill:'#374151','font-weight':'bold'},svg).textContent=w.label;
-    }
+    const fi = insts.find(i=>i.id===w.fid), ti = insts.find(i=>i.id===w.tid);
+    if (!fi||!ti) return;
+    const [ax,ay] = portWorld(fi,w.fp), [bx,by] = portWorld(ti,w.tp);
+    const midY = (ay+by)/2;
+    const d = Math.abs(ax-bx)<2 ? `M${ax},${ay} L${bx},${by}` : `M${ax},${ay} L${ax},${midY} L${bx},${midY} L${bx},${by}`;
+    mk('path',{d,fill:'none',stroke: selWire===w.id?'#2563eb':'#374151','stroke-width':selWire===w.id?2.4:1.8},svg);
+    const hit = mk('path',{d,fill:'none',stroke:'transparent','stroke-width':12,cursor:'pointer'},svg);
+    hit.addEventListener('pointerdown',e=>{ e.stopPropagation(); sel=null; selWire=w.id; render(); });
   });
 
-  boxes.forEach(({e,x,y,w,h})=>{
-    const connected = e.ports.length>0;
-    const hasSymbol = !!e.sym;
-    const [compId] = e.nodeId.split(':');
-    if (hasSymbol) drawSymbol(svg, e.sym, x, y, w, h, e.label, e.compType);
-    else drawSymbol(svg, null, x, y, w, h, e.label, e.compType);
-    mk('text',{x:x+w/2,y:y+h+14,'text-anchor':'middle','font-size':8,fill:'#94a3b8'},svg)
-      .textContent = '#'+compId;
-    e.ports.forEach((pi,i)=>{
-      const px = x+10+i*PORTGAP+PORTGAP/2-13, py=y;
-      mk('circle',{cx:px,cy:py,r:3.5,fill:'#fff',stroke:'#374151','stroke-width':1.5},svg);
-      if (!hasSymbol) mk('text',{x:px,y:py-6,'text-anchor':'middle','font-size':7,fill:'#64748b'},svg).textContent=pi;
+  // Symbole
+  insts.forEach(inst=>{
+    const s = SYM[inst.type];
+    const g = mk('g',{transform:`translate(${inst.x},${inst.y})`},svg);
+    if (sel===inst.id) mk('rect',{x:-6,y:-6,width:s.w+12,height:s.h+12,rx:5,fill:'rgba(37,99,235,0.08)',stroke:'#2563eb','stroke-width':1.3,'stroke-dasharray':'3,2'},g);
+    s.draw(g);
+    const lbl = inst.label || '';
+    if (lbl) mk('text',{x:s.w/2,y:-8,'text-anchor':'middle','font-size':10,'font-weight':'bold',fill:'#111'},g).textContent=lbl;
+    // Body-Drag zum Verschieben + Auswahl + Doppelklick=Beschriften (VOR den Ports einfügen,
+    // damit die Port-Kreise beim Klicken obenauf liegen und nicht von der Drag-Hitbox verdeckt werden)
+    const hitBox = mk('rect',{x:-4,y:-4,width:s.w+8,height:s.h+8,fill:'transparent',cursor:'grab'},g);
+    let lastClick=0;
+    hitBox.addEventListener('pointerdown', e=>{
+      e.stopPropagation();
+      if (wireStart) return;
+      sel = inst.id; selWire=null; render();
+      const now = Date.now();
+      if (now-lastClick<350) { renameInst(inst); lastClick=0; return; }
+      lastClick = now;
+      const start = svgPt(e.clientX,e.clientY);
+      const ox = start.x-inst.x, oy = start.y-inst.y;
+      const onMove = ev=>{
+        const p = svgPt(ev.clientX,ev.clientY);
+        inst.x = Math.round((p.x-ox)/10)*10; inst.y = Math.round((p.y-oy)/10)*10;
+        render();
+      };
+      const onUp = ()=>{ window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); scheduleAutoSave(); };
+      window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp);
     });
-    if (!connected) {
-      mk('text',{x:x+w/2,y:y+h/2+4,'text-anchor':'middle','font-size':7,fill:'#94a3b8'},svg).textContent='(nicht verdrahtet)';
-    }
+    // Ports (nach der Drag-Hitbox eingefügt, damit sie im SVG-Malreihenfolge obenauf liegen)
+    s.ports.forEach((p,pi)=>{
+      const port = mk('g',{class:'port-hit',transform:`translate(${p.x},${p.y})`},g);
+      mk('circle',{r:4,fill:'#fff',stroke:'#6b7280','stroke-width':1.3},port);
+      port.addEventListener('pointerdown', e=>{
+        e.stopPropagation();
+        if (!wireStart){ wireStart = {instId:inst.id, portIdx:pi}; render(); }
+        else {
+          if (!(wireStart.instId===inst.id && wireStart.portIdx===pi)) {
+            wires.push({id:wid++, fid:wireStart.instId, fp:wireStart.portIdx, tid:inst.id, tp:pi});
+            scheduleAutoSave();
+          }
+          wireStart = null; render();
+        }
+      });
+    });
   });
+
+  // Laufende Leitung beim Verbinden
+  if (wireStart) {
+    const fi = insts.find(i=>i.id===wireStart.instId);
+    if (fi) {
+      const [ax,ay] = portWorld(fi, wireStart.portIdx);
+      mk('circle',{cx:ax,cy:ay,r:6,fill:'none',stroke:'#2563eb','stroke-width':2,opacity:0.6},svg);
+    }
+  }
 }
+document.addEventListener('pointermove', e=>{
+  if (!wireStart) return;
+  // Vorschau-Linie zum Cursor
+  let prev = document.getElementById('wire-preview');
+  const fi = insts.find(i=>i.id===wireStart.instId); if (!fi) return;
+  const [ax,ay] = portWorld(fi, wireStart.portIdx);
+  const p = svgPt(e.clientX,e.clientY);
+  if (!prev) prev = mk('line',{id:'wire-preview',stroke:'#2563eb','stroke-width':1.5,'stroke-dasharray':'4,3','pointer-events':'none'},document.getElementById('svg'));
+  prev.setAttribute('x1',ax); prev.setAttribute('y1',ay); prev.setAttribute('x2',p.x); prev.setAttribute('y2',p.y);
+});
+
+function renameInst(inst){
+  const v = prompt('Beschriftung/Bauteilkennzeichen (z.B. K1, S1, M1):', inst.label||'');
+  if (v!==null){ inst.label=v; render(); scheduleAutoSave(); }
+}
+
+function doDeleteSel(){
+  if (sel!=null){
+    insts = insts.filter(i=>i.id!==sel);
+    wires = wires.filter(w=>w.fid!==sel && w.tid!==sel);
+    sel=null;
+  } else if (selWire!=null){
+    wires = wires.filter(w=>w.id!==selWire);
+    selWire=null;
+  }
+  render(); scheduleAutoSave();
+}
+document.addEventListener('keydown', e=>{
+  if (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+  if (e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); doDeleteSel(); }
+  if (e.key==='Escape'){ wireStart=null; render(); }
+});
+
+function doNew(){
+  if (!insts.length && !wires.length) return;
+  if (!confirm('Zeichnung wirklich leeren?')) return;
+  insts=[]; wires=[]; iid=1; wid=1; sel=null; selWire=null;
+  render(); scheduleAutoSave();
+}
+
+function buildSaveData(){ return { insts, wires, iid, wid }; }
+function doSave(){
+  const blob = new Blob([JSON.stringify(buildSaveData(),null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'stromlaufplan.json'; a.click();
+  URL.revokeObjectURL(a.href);
+}
+function doLoad(){
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange = e=>{
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev=>{ try{ importData(JSON.parse(ev.target.result)); } catch(err){ alert('Ladefehler: '+err.message); } };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+function importData(data){
+  insts = (data.insts||[]).filter(i=>SYM[i.type]);
+  wires = data.wires||[];
+  iid = data.iid || (Math.max(0,...insts.map(i=>i.id))+1);
+  wid = data.wid || (Math.max(0,...wires.map(w=>w.id))+1);
+  sel=null; selWire=null;
+  render(); scheduleAutoSave();
+}
+
+let _asTimer=null;
+function scheduleAutoSave(){
+  clearTimeout(_asTimer);
+  _asTimer = setTimeout(()=>{ try{ localStorage.setItem('stromlaufplan_manual_v1', JSON.stringify(buildSaveData())); }catch(e){} }, 600);
+}
+(function initLoad(){
+  try {
+    const raw = localStorage.getItem('stromlaufplan_manual_v1');
+    if (raw) importData(JSON.parse(raw));
+  } catch(e){}
+})();
+
+function toggleSidebar(){ document.getElementById('sidebar').classList.toggle('open'); }
+if (window.innerWidth<768) document.getElementById('btn-ham').style.display='';
+
+buildSidebar();
+render();
 </script>
 </body>
 </html>
