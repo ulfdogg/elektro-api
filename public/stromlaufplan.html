@@ -106,7 +106,10 @@ function dot(g,x,y,s){ mk('circle',{cx:x,cy:y,r:2.2,fill:s||'#1f2937'},g); }
 // Schließer (NO): Zunge endet knapp VOR dem oberen Anschluss = offen (Grundstellung).
 // Öffner (NC): Zunge erreicht den oberen Anschluss = geschlossen (Grundstellung), plus
 // kurzer Querstrich als Öffner-Kennzeichen (öffnet erst bei Betätigung).
-function contactGlyph(g, nc, actuated, cx){
+// actuator: null (automatisch betätigt, z.B. Relais-/Schützkontakt — keine Kennzeichnung),
+// 'taster' (Drucktaster: Stößel mit Knopf, kehrt nach Loslassen zurück) oder
+// 'schalter' (Raststellung: schräger Handgriff, bleibt in der Stellung stehen).
+function contactGlyph(g, nc, actuator, cx){
   cx = cx===undefined?14:cx;
   const t1=16, t2=28;
   line(g,cx,0,cx,t1);
@@ -118,9 +121,14 @@ function contactGlyph(g, nc, actuated, cx){
   } else {
     line(g,cx,t2,cx+5,t1+3,'#1f2937',1.8);
   }
-  if (actuated) { // Betätigungssymbol (Taster): kleiner Pfeil/Balken oberhalb der Zunge
-    line(g,cx+9,t1-2,cx+9,t1-10,'#1f2937',1.3);
-    line(g,cx+5,t1-10,cx+13,t1-10,'#1f2937',1.3);
+  if (actuator==='taster') {
+    // Drucktaster: senkrechter Stößel mit Knopf, drückt von oben auf die Kontaktzunge
+    line(g,cx,t1-3,cx,t1-13,'#1f2937',1.4);
+    mk('circle',{cx,cy:t1-16,r:3,fill:'#fff',stroke:'#1f2937','stroke-width':1.3},g);
+  } else if (actuator==='schalter') {
+    // Schalter (Raststellung): schräger Handgriff am oberen Anschluss
+    line(g,cx,t1-1,cx+9,t1-11,'#1f2937',1.6);
+    line(g,cx+7,t1-11,cx+11,t1-9,'#1f2937',1.6);
   }
 }
 function coilGlyph(g, delay){
@@ -153,9 +161,9 @@ function rcdMark(g,cx){
 
 const SYM = {
   contact_no:{cat:'Kontakte',label:'Schließer (NO)',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:g=>contactGlyph(g,false,false)},
+    draw:g=>contactGlyph(g,false,null)},
   contact_nc:{cat:'Kontakte',label:'Öffner (NC)',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:g=>contactGlyph(g,true,false)},
+    draw:g=>contactGlyph(g,true,null)},
   contact_co:{cat:'Kontakte',label:'Wechsler',w:38,h:44,ports:[{x:14,y:0,l:'C'},{x:14,y:44,l:'NO'},{x:32,y:44,l:'NC'}],
     draw:g=>{
       const cx=14,t1=16,t2=28;
@@ -165,13 +173,35 @@ const SYM = {
       line(g,cx,t1,32,20,'#1f2937',1.8);
     }},
   taster_no:{cat:'Taster/Schalter',label:'Taster Schließer',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:g=>contactGlyph(g,false,true)},
+    draw:g=>contactGlyph(g,false,'taster')},
   taster_nc:{cat:'Taster/Schalter',label:'Taster Öffner',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:g=>contactGlyph(g,true,true)},
+    draw:g=>contactGlyph(g,true,'taster')},
   schalter:{cat:'Taster/Schalter',label:'Schalter',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:g=>contactGlyph(g,false,false)},
+    draw:g=>contactGlyph(g,false,'schalter')},
+  wechselschalter:{cat:'Taster/Schalter',label:'Wechselschalter',w:38,h:44,
+    ports:[{x:14,y:0,l:'C'},{x:14,y:44,l:'1'},{x:32,y:44,l:'2'}],
+    draw:g=>{
+      const cx=14,t1=16,t2=28;
+      line(g,cx,0,cx,t1); dot(g,cx,t1);
+      line(g,cx,t2,cx,44); dot(g,cx,t2);
+      line(g,32,20,32,44); dot(g,32,20);
+      line(g,cx,t1,32,20,'#1f2937',1.8);
+      // Handgriff = manuelle Betätigung (unterscheidet ihn vom automatischen Wechsler-Kontakt)
+      line(g,cx,t1-1,cx+7,t1-10,'#1f2937',1.6);
+    }},
+  kreuzschalter:{cat:'Taster/Schalter',label:'Kreuzschalter',w:36,h:44,
+    ports:[{x:9,y:0,l:'1'},{x:27,y:0,l:'2'},{x:9,y:44,l:'3'},{x:27,y:44,l:'4'}],
+    draw:g=>{
+      line(g,9,0,9,14); line(g,27,0,27,14);
+      line(g,9,30,9,44); line(g,27,30,27,44);
+      dot(g,9,14); dot(g,27,14); dot(g,9,30); dot(g,27,30);
+      // Kreuzende Kontaktbahnen — Kreuzschalter kann gerade ODER gekreuzt verbinden
+      line(g,9,14,27,30,'#1f2937',1.6); line(g,27,14,9,30,'#1f2937',1.6);
+      // Handgriff = manuelle Betätigung
+      line(g,18,14,18,4,'#1f2937',1.6); line(g,14,4,22,4,'#1f2937',1.6);
+    }},
   notaus:{cat:'Taster/Schalter',label:'Not-Aus',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:g=>{ contactGlyph(g,true,true,14); mk('circle',{cx:23,cy:-2,r:4,fill:'none',stroke:'#dc2626','stroke-width':1.6},g); }},
+    draw:g=>{ contactGlyph(g,true,'taster',14); mk('circle',{cx:23,cy:-2,r:4,fill:'none',stroke:'#dc2626','stroke-width':1.6},g); }},
   coil:{cat:'Spulen',label:'Schütz-/Relaisspule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
     draw:g=>coilGlyph(g,false)},
   coil_delay:{cat:'Spulen',label:'Zeitrelais-Spule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
@@ -251,6 +281,30 @@ function svgPt(clientX, clientY){
 function portWorld(inst, pi){
   const s = SYM[inst.type], p = s.ports[pi];
   return [inst.x+p.x, inst.y+p.y];
+}
+
+// Rastet ein Bauteil beim Verschieben an den Anschlusspunkten ANDERER Bauteile ein, sobald
+// es nah genug ist — sonst landen unterschiedlich breite Symbole (z.B. Kontakt vs. Spule)
+// nur zufällig exakt untereinander, und Verbindungslinien werden schräg/geknickt statt
+// gerade. Verschiebt inst.x so, dass der nächstgelegene eigene Port exakt mit dem
+// nächstgelegenen fremden Port fluchtet.
+function snapInstX(inst){
+  const SNAP = 6;
+  const s = SYM[inst.type];
+  let best = null;
+  s.ports.forEach(p=>{
+    const myX = inst.x + p.x;
+    insts.forEach(other=>{
+      if (other===inst) return;
+      const os = SYM[other.type];
+      os.ports.forEach(op=>{
+        const otherX = other.x + op.x;
+        const d = Math.abs(myX-otherX);
+        if (d<=SNAP && (!best || d<best.d)) best = { d, delta: otherX-myX };
+      });
+    });
+  });
+  if (best) inst.x += best.delta;
 }
 
 // ── Sidebar aufbauen ─────────────────────────────────────────────────────────
@@ -453,6 +507,7 @@ function render(){
       const onMove = ev=>{
         const p = svgPt(ev.clientX,ev.clientY);
         inst.x = Math.round((p.x-ox)/10)*10; inst.y = Math.round((p.y-oy)/10)*10;
+        snapInstX(inst);
         render();
       };
       const onUp = ()=>{ window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); scheduleAutoSave(); };
