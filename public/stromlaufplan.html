@@ -336,6 +336,7 @@ let rails = [], railConns = [], rid=1, rcid=1;
 let sel = null, selWire = null, selRail = null, selRailConn = null;
 let zoom = 1, panX=80, panY=40;
 let wireStart = null; // {instId, portIdx}
+const lastClickMap = new WeakMap(); // Doppelklick-Erkennung pro Instanz, siehe renderInst-Hitbox
 
 // ── Simulation ───────────────────────────────────────────────────────────────
 // Anders als im Aufbauplan sind Spule und zugehörige Kontakte hier UNABHÄNGIGE Symbole,
@@ -769,7 +770,6 @@ function render(){
     // Body-Drag zum Verschieben + Auswahl + Doppelklick=Beschriften (VOR den Ports einfügen,
     // damit die Port-Kreise beim Klicken obenauf liegen und nicht von der Drag-Hitbox verdeckt werden)
     const hitBox = mk('rect',{x:-4,y:-4,width:s.w+8,height:s.h+8,fill:'transparent',cursor: simMode?'pointer':'grab'},g);
-    let lastClick=0;
     hitBox.addEventListener('pointerdown', e=>{
       e.stopPropagation();
       if (simMode) {
@@ -790,8 +790,12 @@ function render(){
       if (wireStart) return;
       sel = inst.id; selWire=null; selRail=null; selRailConn=null; render();
       const now = Date.now();
-      if (now-lastClick<350) { renameInst(inst); lastClick=0; return; }
-      lastClick = now;
+      // lastClick in einer WeakMap statt einer lokalen Closure-Variable speichern, da render()
+      // den kompletten SVG-Baum (inkl. dieser Hitbox) bei jedem Klick neu aufbaut und eine lokale
+      // Variable damit nie über zwei Klicks hinweg erhalten bliebe. WeakMap statt inst.-Property,
+      // damit beim Speichern (JSON.stringify(insts)) nichts Zusätzliches mitgespeichert wird.
+      if (now-(lastClickMap.get(inst)||0)<350) { lastClickMap.delete(inst); renameInst(inst); return; }
+      lastClickMap.set(inst, now);
       const start = svgPt(e.clientX,e.clientY);
       const ox = start.x-inst.x, oy = start.y-inst.y;
       const onMove = ev=>{
