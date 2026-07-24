@@ -284,23 +284,62 @@ const SYM = {
       if(on) mk('circle',{cx:14,cy:22,r:18,fill:'#fde047',opacity:0.55},g); // Glüheffekt
       mk('circle',{cx:14,cy:22,r:13,fill:on?'#fef08a':'#fff',stroke:'#1f2937','stroke-width':1.6},g);
       line(g,6,14,22,30); line(g,6,30,22,14); }},
+  // Klemmenreihenfolge U1,V1,W1 / W2,U2,V2 entspricht dem realen Klemmbrett eines
+  // Drehstrommotors: senkrechte Brücken (U1-W2, V1-U2, W1-V2) = Dreieck, waagerechte
+  // Brücke (W2-U2-V2) = Stern -- genau wie am echten Motor.
   motor:{cat:'Verbraucher',label:'Motor 3~ (6 Klemmen)',w:70,h:60,
     ports:[{x:15,y:0,l:'U1'},{x:35,y:0,l:'V1'},{x:55,y:0,l:'W1'},
-           {x:15,y:60,l:'U2'},{x:35,y:60,l:'V2'},{x:55,y:60,l:'W2'},
+           {x:15,y:60,l:'W2'},{x:35,y:60,l:'U2'},{x:55,y:60,l:'V2'},
            {x:70,y:30,l:'PE'}],
     draw:(g,inst)=>{
       const cx=35,cy=30,r=20;
       const running = simMode && inst && isInstActive(inst);
+      const mode = (simMode && inst) ? motorWindingMode(inst) : null;
+      const dir = (simMode && inst && running) ? motorDirection(inst,[0,1,2]) : null;
       [15,35,55].forEach(x=>{ line(g,x,0,x,cy-r); line(g,x,cy+r,x,60); });
-      if (running) mk('circle',{cx,cy,r:r+5,fill:'none',stroke:'#22c55e','stroke-width':2,opacity:0.5},g);
+      if (running) {
+        mk('circle',{cx,cy,r:r+5,fill:'none',stroke:'#22c55e','stroke-width':2,opacity:0.5},g);
+        if (dir) motorArrow(g,cx,cy,r+10,dir,'#16a34a');
+      }
       mk('circle',{cx,cy,r,fill:running?'#dcfce7':'#fff',stroke:'#1f2937','stroke-width':1.6},g);
       mk('text',{x:cx,y:cy+5,'text-anchor':'middle','font-size':15,fill:'#1f2937','font-weight':'bold'},g).textContent='M';
       mk('text',{x:cx,y:cy+15,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='3~';
+      if (mode) mk('text',{x:cx,y:cy-r+9,'text-anchor':'middle','font-size':10,'font-weight':'bold',fill:'#16a34a'},g).textContent = mode==='stern'?'Y':'Δ';
       // PE seitlich (Schutzerde-Symbol, siehe SYM.pe)
       line(g,cx+r,cy,70,cy);
       line(g,64,cy-6,64,cy+6); line(g,67,cy-4,67,cy+4); line(g,70,cy-2,70,cy+2);
       ['U1','V1','W1'].forEach((l,i)=>mk('text',{x:15+i*20,y:-4,'text-anchor':'middle','font-size':7,fill:'#6b7280'},g).textContent=l);
-      ['U2','V2','W2'].forEach((l,i)=>mk('text',{x:15+i*20,y:70,'text-anchor':'middle','font-size':7,fill:'#6b7280'},g).textContent=l);
+      ['W2','U2','V2'].forEach((l,i)=>mk('text',{x:15+i*20,y:70,'text-anchor':'middle','font-size':7,fill:'#6b7280'},g).textContent=l);
+    }},
+  // Polumschaltbarer (Dahlander-)Motor: zwei Drehzahlstufen über zwei Klemmensätze
+  // (1U/1V/1W = niedrige, 2U/2V/2W = hohe Drehzahl). Vereinfachte Simulation: "läuft",
+  // sobald ein Klemmensatz komplett unter Spannung steht -- die tatsächliche interne
+  // Wicklungsumschaltung (Dreieck<->Doppelstern) wird nicht physikalisch nachgebildet.
+  motor_dahlander:{cat:'Verbraucher',label:'Dahlander-Motor (2 Drehzahlen)',w:70,h:74,
+    ports:[{x:15,y:0,l:'1U'},{x:35,y:0,l:'1V'},{x:55,y:0,l:'1W'},
+           {x:15,y:74,l:'2U'},{x:35,y:74,l:'2V'},{x:55,y:74,l:'2W'},
+           {x:70,y:37,l:'PE'}],
+    draw:(g,inst)=>{
+      const cx=35,cy=37,r=20;
+      const gp = pi => (simMode && inst) ? (simPortPot[inst.id+':'+pi]||0) : 0;
+      const lowOn = simMode && inst && !!((gp(0)&ANY_L)&&(gp(1)&ANY_L)&&(gp(2)&ANY_L));
+      const highOn = simMode && inst && !!((gp(3)&ANY_L)&&(gp(4)&ANY_L)&&(gp(5)&ANY_L));
+      const running = lowOn || highOn;
+      const dirPorts = highOn ? [3,4,5] : [0,1,2];
+      const dir = (simMode && inst && running) ? motorDirection(inst,dirPorts) : null;
+      [15,35,55].forEach(x=>{ line(g,x,0,x,cy-r); line(g,x,cy+r,x,74); });
+      if (running) {
+        mk('circle',{cx,cy,r:r+5,fill:'none',stroke:'#22c55e','stroke-width':2,opacity:0.5},g);
+        if (dir) motorArrow(g,cx,cy,r+10,dir,'#16a34a');
+      }
+      mk('circle',{cx,cy,r,fill:running?'#dcfce7':'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+      mk('text',{x:cx,y:cy+5,'text-anchor':'middle','font-size':15,fill:'#1f2937','font-weight':'bold'},g).textContent='M';
+      mk('text',{x:cx,y:cy+15,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='3~';
+      if (running) mk('text',{x:cx,y:cy-r+9,'text-anchor':'middle','font-size':9,'font-weight':'bold',fill:'#16a34a'},g).textContent = highOn?'2n':'n';
+      line(g,cx+r,cy,70,cy);
+      line(g,64,cy-6,64,cy+6); line(g,67,cy-4,67,cy+4); line(g,70,cy-2,70,cy+2);
+      ['1U','1V','1W'].forEach((l,i)=>mk('text',{x:15+i*20,y:-4,'text-anchor':'middle','font-size':7,fill:'#6b7280'},g).textContent=l);
+      ['2U','2V','2W'].forEach((l,i)=>mk('text',{x:15+i*20,y:84,'text-anchor':'middle','font-size':7,fill:'#6b7280'},g).textContent=l);
     }},
   motor1:{cat:'Verbraucher',label:'Motor 1~',w:34,h:44,ports:[{x:17,y:0},{x:17,y:44}],
     draw:(g,inst)=>{ const running=simMode&&inst&&isInstActive(inst);
@@ -518,6 +557,45 @@ function potColor(pot){
   return null;
 }
 
+// Wicklungsverschaltung eines Drehstrommotors ermitteln: "stern", wenn W2/U2/V2
+// per Brücke auf denselben Knoten gelegt sind, "dreieck", wenn U1-W2/V1-U2/W1-V2
+// paarweise verbrückt sind (siehe Klemmenanordnung bei SYM.motor). Ohne (korrekte)
+// Verbrückung läuft der Motor nicht, selbst wenn U1/V1/W1 schon unter Spannung stehen.
+function motorWindingMode(inst, botPorts){
+  botPorts = botPorts || [3,4,5];
+  const gn = pi => simPortNode[inst.id+':'+pi];
+  const [w2,u2,v2] = botPorts;
+  if (gn(w2)!=null && gn(w2)===gn(u2) && gn(u2)===gn(v2)) return 'stern';
+  if (gn(0)!=null && gn(0)===gn(w2) && gn(1)===gn(u2) && gn(2)===gn(v2)) return 'dreieck';
+  return null;
+}
+// Drehrichtung aus der Phasenfolge an U/V/W ableiten: L1->L2->L3 (bzw. zyklisch
+// vertauscht) = Rechtslauf, jede Vertauschung zweier Phasen = Linkslauf (Umkehr der
+// Drehrichtung durch Phasentausch ist elektrotechnisch korrekt und der Standard-Trick
+// bei Wende-/Reversierschützen).
+function motorDirection(inst, ports){
+  const gp = pi => simPortPot[inst.id+':'+pi] || 0;
+  const phaseOf = v => v&POT.L1?1 : v&POT.L2?2 : v&POT.L3?3 : 0;
+  const [a,b,c] = ports.map(pi=>phaseOf(gp(pi)));
+  if (!a||!b||!c || a===b||b===c||a===c) return null; // Phase fehlt oder mehrdeutig
+  const cw = (a===1&&b===2&&c===3) || (a===2&&b===3&&c===1) || (a===3&&b===1&&c===2);
+  return cw ? 'cw' : 'ccw';
+}
+// Rotationspfeil (Kreisbogen + Pfeilspitze) um einen Motorkreis, Richtung je nach dir.
+function motorArrow(g, cx, cy, r, dir, col){
+  col = col || '#16a34a';
+  const a0 = -50, a1 = 230;
+  const [sa, ea] = dir==='cw' ? [a0, a1] : [a1, a0];
+  const toXY = deg => { const rad=deg*Math.PI/180; return [cx+r*Math.cos(rad), cy+r*Math.sin(rad)]; };
+  const [x1,y1] = toXY(sa), [x2,y2] = toXY(ea);
+  const sweep = dir==='cw' ? 1 : 0;
+  mk('path',{d:`M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 1 ${sweep} ${x2.toFixed(1)},${y2.toFixed(1)}`,fill:'none',stroke:col,'stroke-width':2},g);
+  const t = (ea + (dir==='cw'?-90:90)) * Math.PI/180;
+  const nx=-Math.sin(t), ny=Math.cos(t);
+  const bx=x2-6*Math.cos(t), by=y2-6*Math.sin(t);
+  mk('polygon',{points:`${x2.toFixed(1)},${y2.toFixed(1)} ${(bx+nx*3.5).toFixed(1)},${(by+ny*3.5).toFixed(1)} ${(bx-nx*3.5).toFixed(1)},${(by-ny*3.5).toFixed(1)}`,fill:col},g);
+}
+
 // Ob ein Bauteil während der Simulation "aktiv" ist (Kontakt geschlossen, Spule
 // angezogen, Verbraucher unter Spannung) — für die grüne Hervorhebung im Plan.
 function isInstActive(inst){
@@ -537,7 +615,16 @@ function isInstActive(inst){
       const p0=gp(0), p1=gp(1);
       return !!((p0&ANY_L)&&(p1&POT.N) || (p1&ANY_L)&&(p0&POT.N));
     }
-    case 'motor': { const pu=gp(0),pv=gp(1),pw=gp(2); return !!((pu&ANY_L)&&(pv&ANY_L)&&(pw&ANY_L)); }
+    case 'motor': {
+      const pu=gp(0),pv=gp(1),pw=gp(2);
+      if (!((pu&ANY_L)&&(pv&ANY_L)&&(pw&ANY_L))) return false;
+      return !!motorWindingMode(inst); // nur "an", wenn Stern- oder Dreieck-Brücke wirklich gesetzt ist
+    }
+    case 'motor_dahlander': {
+      const lowOn = !!((gp(0)&ANY_L)&&(gp(1)&ANY_L)&&(gp(2)&ANY_L));
+      const highOn = !!((gp(3)&ANY_L)&&(gp(4)&ANY_L)&&(gp(5)&ANY_L));
+      return lowOn || highOn;
+    }
     default: return false;
   }
 }
