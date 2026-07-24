@@ -116,28 +116,52 @@ function dot(g,x,y,s){ mk('circle',{cx:x,cy:y,r:2.2,fill:s||'#1f2937'},g); }
 // closedNow: undefined/null = Ruhezustand zeigen (NO=offen, NC=geschlossen, wie in der
 // Palette). true/false = tatsächlicher Zustand während der Simulation — die Kontaktzunge
 // bewegt sich dann wirklich sichtbar zwischen offen und geschlossen.
+// Gehäuserahmen (dünne Box um das eigentliche Schaltsymbol) — angelehnt an die Darstellung
+// in professionellen Schaltplan-Programmen (z.B. EPLAN-Symbolbibliotheken), wo Kontakte als
+// eigenständiges "Gerät" mit Gehäuseumriss gezeichnet werden, nicht freischwebend.
+function deviceFrame(g, cx, fy1, fy2, hw){
+  mk('rect',{x:cx-hw,y:fy1,width:hw*2,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+}
 function contactGlyph(g, nc, actuator, cx, closedNow){
   cx = cx===undefined?14:cx;
-  const t1=16, t2=28;
-  line(g,cx,0,cx,t1);
-  line(g,cx,t2,cx,44);
+  const t1=16, t2=28, fy1=8, fy2=36;
+  line(g,cx,0,cx,fy1);
+  line(g,cx,fy2,cx,44);
+  deviceFrame(g,cx,fy1,fy2,9);
   dot(g,cx,t1); dot(g,cx,t2);
   const closed = closedNow==null ? nc : closedNow;
   const bladeCol = closedNow==null ? '#1f2937' : (closed?'#16a34a':'#1f2937');
-  // Geschlossen: Zunge trifft den Anschlusspunkt exakt (glatte Verbindung, kein
-  // seitlicher Versatz mehr) — offen: sichtbar daneben, erreicht ihn nicht.
-  if (closed) line(g,cx,t2,cx,t1,bladeCol,1.8);
-  else line(g,cx,t2,cx+6,t1+3,bladeCol,1.8);
-  if (nc) line(g,cx+1,t1-1,cx+7,t1-7,'#1f2937',1.3); // Öffner-Kennzeichen (Bauart, immer sichtbar)
-  if (actuator==='taster') {
-    // Drucktaster: senkrechter Stößel mit Knopf, drückt von oben auf die Kontaktzunge
-    line(g,cx,t1-3,cx,t1-13,'#1f2937',1.4);
-    mk('circle',{cx,cy:t1-16,r:3,fill:'#fff',stroke:'#1f2937','stroke-width':1.3},g);
-  } else if (actuator==='schalter') {
-    // Schalter (Raststellung): schräger Handgriff am oberen Anschluss
-    line(g,cx,t1-1,cx+9,t1-11,'#1f2937',1.6);
-    line(g,cx+7,t1-11,cx+11,t1-9,'#1f2937',1.6);
+  if (closed) {
+    // Geschlossen: Zunge trifft den Anschlusspunkt exakt (glatte, gerade Verbindung).
+    line(g,cx,t2,cx,t1,bladeCol,1.6);
+  } else {
+    // Offen: geknickte Zunge (kurzes Stück gerade ab dem unteren Anschluss, dann Schräge,
+    // die sichtbar VOR dem oberen Anschluss endet) — liest sich als bewegliches Scharnier,
+    // näher an professioneller Schaltplan-Darstellung als eine einzelne durchgehende Diagonale.
+    line(g,cx,t2,cx,t2-4,bladeCol,1.6);
+    line(g,cx,t2-4,cx+6,t1+2,bladeCol,1.6);
   }
+  if (nc) line(g,cx+1,t1-1,cx+7,t1-7,'#1f2937',1.1); // Öffner-Kennzeichen (Bauart, immer sichtbar)
+  // Während der Simulation zeigt auch das Betätigungselement selbst (Knopf/Raste) den
+  // aktuellen Zustand farblich an — nicht nur die Kontaktzunge.
+  const actCol = closedNow==null ? '#1f2937' : bladeCol;
+  if (actuator==='taster') {
+    // Drucktaster: senkrechter Stößel mit Knopf, ragt oben aus dem Gehäuse
+    line(g,cx,fy1,cx,fy1-10,actCol,1.3);
+    mk('circle',{cx,cy:fy1-13,r:3,fill: closedNow?'#86efac':'#fff',stroke:actCol,'stroke-width':1.2},g);
+  } else if (actuator==='schalter') {
+    // Raste (Rastung): kleines "v" seitlich am Kontakt kennzeichnet die Betätigungsart
+    // "bleibt in der Schaltstellung stehen" (kein Rückfedern wie beim Taster).
+    rasteV(g, cx-9, t2-6, actCol);
+  }
+}
+// Rastungs-Kennzeichen: kleines "v" — nach DIN/IEC-Konvention für Betätigungsarten, die in
+// der eingestellten Position verharren (Schalter, Wechselschalter, Kreuzschalter …), im
+// Gegensatz zum federrückstellenden Taster (der stattdessen den Stößel mit Knopf zeigt).
+function rasteV(g, x, y, col){
+  col = col||'#1f2937';
+  line(g,x,y,x+3,y+5,col,1.3);
+  line(g,x+3,y+5,x+6,y,col,1.3);
 }
 function coilGlyph(g, delay){
   const cx=17,w=28,h=20,top=8,bot=36;
@@ -159,8 +183,12 @@ function breakerPole(g, ox, closedNow){
   dot(g,cx,t1); dot(g,cx,t2);
   const closed = closedNow==null ? true : closedNow; // Ruhezustand: eingeschaltet/geschlossen
   const bladeCol = closedNow==null ? '#1f2937' : (closed?'#16a34a':'#1f2937');
-  if (closed) line(g,cx,t2,cx,t1,bladeCol,1.8);
-  else line(g,cx,t2,cx+6,t1+3,bladeCol,1.8);
+  if (closed) {
+    line(g,cx,t2,cx,t1,bladeCol,1.6);
+  } else {
+    line(g,cx,t2,cx,t2-4,bladeCol,1.6);
+    line(g,cx,t2-4,cx+6,t1+3,bladeCol,1.6);
+  }
 }
 function rcdMark(g,cx){
   // Kreis um die Polzungen als generisches Sinnbild für die Summenstromwandler-Auslösung
@@ -184,9 +212,9 @@ const SYM = {
     draw:(g,inst)=>{
       const cx=14,t1=16,t2=28;
       const on = simMode && inst ? coilOnForLabel(inst.label) : false; // Ruhezustand = NC verbunden
-      line(g,cx,0,cx,t1); dot(g,cx,t1);
-      line(g,cx,t2,cx,44); dot(g,cx,t2);
-      line(g,32,20,32,44); dot(g,32,20);
+      line(g,cx,0,cx,8); line(g,cx,36,cx,44); line(g,32,36,32,44);
+      mk('rect',{x:3,y:8,width:32,height:28,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      dot(g,cx,t1); dot(g,cx,t2); dot(g,32,20);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (on) line(g,cx,t1,cx,t2,col,1.8); else line(g,cx,t1,32,20,col,1.8);
     }},
@@ -207,8 +235,9 @@ const SYM = {
       line(g,32,20,32,44); dot(g,32,20);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (pos2) line(g,cx,t1,32,20,col,1.8); else line(g,cx,t1,cx,t2,col,1.8);
-      // Handgriff = manuelle Betätigung (unterscheidet ihn vom automatischen Wechsler-Kontakt)
-      line(g,cx,t1-1,cx+7,t1-10,'#1f2937',1.6);
+      // Raste = manuelle, stehenbleibende Betätigung (unterscheidet ihn vom automatischen
+      // Wechsler-Kontakt, der keine Rastungs-Kennzeichnung bekommt)
+      rasteV(g, cx-9, t2-6, col);
     }},
   kreuzschalter:{cat:'Taster/Schalter',label:'Kreuzschalter',w:36,h:44,
     ports:[{x:9,y:0,l:'1'},{x:27,y:0,l:'2'},{x:9,y:44,l:'3'},{x:27,y:44,l:'4'}],
@@ -221,8 +250,8 @@ const SYM = {
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (!crossed) { line(g,9,14,9,30,col,1.6); line(g,27,14,27,30,col,1.6); }
       else { line(g,9,14,27,30,col,1.6); line(g,27,14,9,30,col,1.6); }
-      // Handgriff = manuelle Betätigung
-      line(g,18,14,18,4,'#1f2937',1.6); line(g,14,4,22,4,'#1f2937',1.6);
+      // Raste = manuelle, stehenbleibende Betätigung
+      rasteV(g, 15, 19, col);
     }},
   notaus:{cat:'Taster/Schalter',label:'Not-Aus',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
     draw:(g,inst)=>{ contactGlyph(g,true,'taster',14,simClosed(inst)); mk('circle',{cx:23,cy:-2,r:4,fill:'none',stroke:'#dc2626','stroke-width':1.6},g); }},
@@ -231,15 +260,15 @@ const SYM = {
   coil_delay:{cat:'Spulen',label:'Zeitrelais-Spule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
     draw:g=>coilGlyph(g,true)},
   ls1:{cat:'Schutzorgane',label:'LS 1-polig',w:22,h:40,ports:[{x:11,y:0},{x:11,y:40}],
-    draw:(g,inst)=>breakerPole(g,0,simClosed(inst))},
+    draw:(g,inst)=>{ mk('rect',{x:2,y:6,width:18,height:28,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g); breakerPole(g,0,simClosed(inst)); }},
   ls3:{cat:'Schutzorgane',label:'LS 3-polig',w:66,h:40,ports:[{x:11,y:0},{x:33,y:0},{x:55,y:0},{x:11,y:40},{x:33,y:40},{x:55,y:40}],
-    draw:(g,inst)=>{ const c=simClosed(inst); breakerPole(g,0,c); breakerPole(g,22,c); breakerPole(g,44,c); }},
+    draw:(g,inst)=>{ const c=simClosed(inst); mk('rect',{x:2,y:6,width:62,height:28,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g); breakerPole(g,0,c); breakerPole(g,22,c); breakerPole(g,44,c); }},
   rcd2:{cat:'Schutzorgane',label:'FI/RCD 2-polig',w:44,h:40,ports:[{x:11,y:0},{x:33,y:0},{x:11,y:40},{x:33,y:40}],
-    draw:(g,inst)=>{ const c=simClosed(inst); breakerPole(g,0,c); breakerPole(g,22,c); rcdMark(g,22); }},
+    draw:(g,inst)=>{ const c=simClosed(inst); mk('rect',{x:2,y:6,width:40,height:28,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g); breakerPole(g,0,c); breakerPole(g,22,c); rcdMark(g,22); }},
   rcd4:{cat:'Schutzorgane',label:'FI/RCD 4-polig',w:88,h:40,ports:[{x:11,y:0},{x:33,y:0},{x:55,y:0},{x:77,y:0},{x:11,y:40},{x:33,y:40},{x:55,y:40},{x:77,y:40}],
-    draw:(g,inst)=>{ const c=simClosed(inst); [0,22,44,66].forEach(o=>breakerPole(g,o,c)); rcdMark(g,44); }},
+    draw:(g,inst)=>{ const c=simClosed(inst); mk('rect',{x:2,y:6,width:84,height:28,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g); [0,22,44,66].forEach(o=>breakerPole(g,o,c)); rcdMark(g,44); }},
   rcbo:{cat:'Schutzorgane',label:'RCBO (LS+FI)',w:44,h:40,ports:[{x:11,y:0},{x:33,y:0},{x:11,y:40},{x:33,y:40}],
-    draw:(g,inst)=>{ const c=simClosed(inst); breakerPole(g,0,c); breakerPole(g,22,c); rcdMark(g,22); mk('text',{x:22,y:52,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='B16'; }},
+    draw:(g,inst)=>{ const c=simClosed(inst); mk('rect',{x:2,y:6,width:40,height:28,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g); breakerPole(g,0,c); breakerPole(g,22,c); rcdMark(g,22); mk('text',{x:22,y:52,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='B16'; }},
   lampe:{cat:'Verbraucher',label:'Lampe/Leuchte',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
     draw:(g,inst)=>{ const on=simMode&&inst&&isInstActive(inst);
       line(g,14,0,14,9); line(g,14,35,14,44);
