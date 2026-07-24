@@ -227,12 +227,12 @@ const SYM = {
   wechselschalter:{cat:'Taster/Schalter',label:'Wechselschalter',w:38,h:44,
     ports:[{x:14,y:0,l:'C'},{x:14,y:44,l:'1'},{x:32,y:44,l:'2'}],
     draw:(g,inst)=>{
-      const cx=14,t1=16,t2=28;
+      const cx=14,t1=16,t2=28,fy1=8,fy2=36;
       const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
       const pos2 = (simMode && inst) ? s.pos===2 : false; // Ruhezustand = Stellung 1
-      line(g,cx,0,cx,t1); dot(g,cx,t1);
-      line(g,cx,t2,cx,44); dot(g,cx,t2);
-      line(g,32,20,32,44); dot(g,32,20);
+      line(g,cx,0,cx,fy1); line(g,cx,fy2,cx,44); line(g,32,fy2,32,44);
+      deviceFrame(g, cx, fy1, fy2, 15);
+      dot(g,cx,t1); dot(g,cx,t2); dot(g,32,20);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (pos2) line(g,cx,t1,32,20,col,1.8); else line(g,cx,t1,cx,t2,col,1.8);
       // Raste = manuelle, stehenbleibende Betätigung (unterscheidet ihn vom automatischen
@@ -242,10 +242,12 @@ const SYM = {
   kreuzschalter:{cat:'Taster/Schalter',label:'Kreuzschalter',w:36,h:44,
     ports:[{x:9,y:0,l:'1'},{x:27,y:0,l:'2'},{x:9,y:44,l:'3'},{x:27,y:44,l:'4'}],
     draw:(g,inst)=>{
+      const fy1=8, fy2=36;
       const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
       const crossed = !!s.crossed;
-      line(g,9,0,9,14); line(g,27,0,27,14);
-      line(g,9,30,9,44); line(g,27,30,27,44);
+      line(g,9,0,9,fy1); line(g,27,0,27,fy1);
+      line(g,9,fy2,9,44); line(g,27,fy2,27,44);
+      deviceFrame(g, 18, fy1, fy2, 16);
       dot(g,9,14); dot(g,27,14); dot(g,9,30); dot(g,27,30);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (!crossed) { line(g,9,14,9,30,col,1.6); line(g,27,14,27,30,col,1.6); }
@@ -254,7 +256,14 @@ const SYM = {
       rasteV(g, 15, 19, col);
     }},
   notaus:{cat:'Taster/Schalter',label:'Not-Aus',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:(g,inst)=>{ contactGlyph(g,true,'taster',14,simClosed(inst)); mk('circle',{cx:23,cy:-2,r:4,fill:'none',stroke:'#dc2626','stroke-width':1.6},g); }},
+    draw:(g,inst)=>{
+      contactGlyph(g,true,'taster',14,simClosed(inst));
+      // Pilzkopf-Taster rastet beim Drücken ein (bleibt bis zum manuellen Entriegeln
+      // gedrückt) -- bekommt deshalb zusätzlich zum Tasterknopf die Raste-Kennzeichnung.
+      const col = simMode && inst ? '#16a34a' : '#1f2937';
+      rasteV(g, 5, 22, col);
+      mk('circle',{cx:23,cy:-2,r:4,fill:'none',stroke:'#dc2626','stroke-width':1.6},g);
+    }},
   coil:{cat:'Spulen',label:'Schütz-/Relaisspule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
     draw:g=>coilGlyph(g,false)},
   coil_delay:{cat:'Spulen',label:'Zeitrelais-Spule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
