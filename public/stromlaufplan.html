@@ -110,9 +110,8 @@ function dot(g,x,y,s){ mk('circle',{cx:x,cy:y,r:2.2,fill:s||'#1f2937'},g); }
 // Schließer (NO): Zunge endet knapp VOR dem oberen Anschluss = offen (Grundstellung).
 // Öffner (NC): Zunge erreicht den oberen Anschluss = geschlossen (Grundstellung), plus
 // kurzer Querstrich als Öffner-Kennzeichen (öffnet erst bei Betätigung).
-// actuator: null (automatisch betätigt, z.B. Relais-/Schützkontakt — keine Kennzeichnung),
-// 'taster' (Drucktaster: Stößel mit Knopf, kehrt nach Loslassen zurück) oder
-// 'schalter' (Raststellung: schräger Handgriff, bleibt in der Stellung stehen).
+// actuator: null/false (automatisch betätigt, z.B. Relais-/Schützkontakt — keine Kennzeichnung)
+// oder einer der IEC-60617-7-Betätigungsart-Codes (siehe actuatorGlyph).
 // closedNow: undefined/null = Ruhezustand zeigen (NO=offen, NC=geschlossen, wie in der
 // Palette). true/false = tatsächlicher Zustand während der Simulation — die Kontaktzunge
 // bewegt sich dann wirklich sichtbar zwischen offen und geschlossen.
@@ -122,12 +121,37 @@ function dot(g,x,y,s){ mk('circle',{cx:x,cy:y,r:2.2,fill:s||'#1f2937'},g); }
 function deviceFrame(g, cx, fy1, fy2, hw){
   mk('rect',{x:cx-hw,y:fy1,width:hw*2,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
 }
+// Betätigungsart nach IEC 60617-7: eigenständiges Symbol NEBEN dem Schaltglied, mechanisch
+// (nicht elektrisch!) über eine gestrichelte Linie verbunden -- so wie es die Norm-Tabelle
+// und reale EPLAN-Symbole zeigen. Frühere Fassung zeichnete stattdessen eine erfundene
+// "Raste"-Markierung direkt AUF den Kontakt -- das war falsch, hier korrigiert.
+// (x,y) = Anschlusspunkt der gestrichelten Linie (rechte/untere Kante des Glyphen).
+function actuatorGlyph(g, type, x, y, col){
+  col = col || '#1f2937';
+  if (type==='hand') {
+    // Handantrieb, allgemein: Winkel-Hebel (senkrechter Griff mit Fuß oben)
+    line(g,x,y-8,x,y,col,1.3);
+    line(g,x,y-8,x+6,y-8,col,1.3);
+  } else if (type==='druck') {
+    // Betätigung durch Drücken: Stößel mit Knopf
+    line(g,x-10,y,x,y,col,1.3);
+    mk('circle',{cx:x-13,cy:y,r:3,fill:'#fff',stroke:col,'stroke-width':1.2},g);
+  } else if (type==='drehen') {
+    // Betätigung durch Drehen: T-Griff (Drehknauf)
+    line(g,x-8,y,x,y,col,1.3);
+    line(g,x-8,y-6,x-8,y+6,col,1.3);
+  } else if (type==='notaus') {
+    // Antrieb für NOT-AUS-Schalter: Kreis (Pilzkopf) mit Betätigungsstab, rot
+    line(g,x-6,y,x,y,'#dc2626',1.3);
+    mk('circle',{cx:x-11,cy:y,r:5,fill:'none',stroke:'#dc2626','stroke-width':1.6},g);
+  }
+}
 function contactGlyph(g, nc, actuator, cx, closedNow){
   cx = cx===undefined?14:cx;
-  const t1=16, t2=28, fy1=8, fy2=36;
+  const t1=16, t2=28, fy1=8, fy2=36, hw=9;
   line(g,cx,0,cx,fy1);
   line(g,cx,fy2,cx,44);
-  deviceFrame(g,cx,fy1,fy2,9);
+  deviceFrame(g,cx,fy1,fy2,hw);
   dot(g,cx,t1); dot(g,cx,t2);
   const closed = closedNow==null ? nc : closedNow;
   const bladeCol = closedNow==null ? '#1f2937' : (closed?'#16a34a':'#1f2937');
@@ -142,26 +166,14 @@ function contactGlyph(g, nc, actuator, cx, closedNow){
     line(g,cx,t2-4,cx+6,t1+2,bladeCol,1.6);
   }
   if (nc) line(g,cx+1,t1-1,cx+7,t1-7,'#1f2937',1.1); // Öffner-Kennzeichen (Bauart, immer sichtbar)
-  // Während der Simulation zeigt auch das Betätigungselement selbst (Knopf/Raste) den
-  // aktuellen Zustand farblich an — nicht nur die Kontaktzunge.
-  const actCol = closedNow==null ? '#1f2937' : bladeCol;
-  if (actuator==='taster') {
-    // Drucktaster: senkrechter Stößel mit Knopf, ragt oben aus dem Gehäuse
-    line(g,cx,fy1,cx,fy1-10,actCol,1.3);
-    mk('circle',{cx,cy:fy1-13,r:3,fill: closedNow?'#86efac':'#fff',stroke:actCol,'stroke-width':1.2},g);
-  } else if (actuator==='schalter') {
-    // Raste (Rastung): kleines "v" seitlich am Kontakt kennzeichnet die Betätigungsart
-    // "bleibt in der Schaltstellung stehen" (kein Rückfedern wie beim Taster).
-    rasteV(g, cx-9, t2-6, actCol);
+  if (actuator) {
+    // Betätigungsart-Symbol links neben dem Gehäuse, gestrichelt (mechanisch) angebunden --
+    // siehe actuatorGlyph(). Während der Simulation zeigt es denselben Zustand wie die Zunge.
+    const actCol = closedNow==null ? '#1f2937' : bladeCol;
+    const ax = cx-hw-14, ay = t1;
+    mk('line',{x1:ax,y1:ay,x2:cx-hw,y2:ay,stroke:actCol,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+    actuatorGlyph(g, actuator, ax, ay, actCol);
   }
-}
-// Rastungs-Kennzeichen: kleines "v" — nach DIN/IEC-Konvention für Betätigungsarten, die in
-// der eingestellten Position verharren (Schalter, Wechselschalter, Kreuzschalter …), im
-// Gegensatz zum federrückstellenden Taster (der stattdessen den Stößel mit Knopf zeigt).
-function rasteV(g, x, y, col){
-  col = col||'#1f2937';
-  line(g,x,y,x+3,y+5,col,1.3);
-  line(g,x+3,y+5,x+6,y,col,1.3);
 }
 function coilGlyph(g, delay){
   const cx=17,w=28,h=20,top=8,bot=36;
@@ -218,52 +230,48 @@ const SYM = {
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (on) line(g,cx,t1,cx,t2,col,1.8); else line(g,cx,t1,32,20,col,1.8);
     }},
-  taster_no:{cat:'Taster/Schalter',label:'Taster Schließer',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:(g,inst)=>contactGlyph(g,false,'taster',14,simClosed(inst))},
-  taster_nc:{cat:'Taster/Schalter',label:'Taster Öffner',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:(g,inst)=>contactGlyph(g,true,'taster',14,simClosed(inst))},
-  schalter:{cat:'Taster/Schalter',label:'Schalter',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:(g,inst)=>contactGlyph(g,false,'schalter',14,simClosed(inst))},
-  wechselschalter:{cat:'Taster/Schalter',label:'Wechselschalter',w:38,h:44,
-    ports:[{x:14,y:0,l:'C'},{x:14,y:44,l:'1'},{x:32,y:44,l:'2'}],
+  taster_no:{cat:'Taster/Schalter',label:'Taster Schließer',w:42,h:44,ports:[{x:28,y:0},{x:28,y:44}],
+    draw:(g,inst)=>contactGlyph(g,false,'druck',28,simClosed(inst))},
+  taster_nc:{cat:'Taster/Schalter',label:'Taster Öffner',w:42,h:44,ports:[{x:28,y:0},{x:28,y:44}],
+    draw:(g,inst)=>contactGlyph(g,true,'druck',28,simClosed(inst))},
+  schalter:{cat:'Taster/Schalter',label:'Schalter',w:42,h:44,ports:[{x:28,y:0},{x:28,y:44}],
+    draw:(g,inst)=>contactGlyph(g,false,'hand',28,simClosed(inst))},
+  wechselschalter:{cat:'Taster/Schalter',label:'Wechselschalter',w:56,h:44,
+    ports:[{x:28,y:0,l:'C'},{x:28,y:44,l:'1'},{x:46,y:44,l:'2'}],
     draw:(g,inst)=>{
-      const cx=14,t1=16,t2=28,fy1=8,fy2=36;
+      const cx=28,t1=16,t2=28,fy1=8,fy2=36;
       const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
       const pos2 = (simMode && inst) ? s.pos===2 : false; // Ruhezustand = Stellung 1
-      line(g,cx,0,cx,fy1); line(g,cx,fy2,cx,44); line(g,32,fy2,32,44);
-      deviceFrame(g, cx, fy1, fy2, 15);
-      dot(g,cx,t1); dot(g,cx,t2); dot(g,32,20);
+      line(g,cx,0,cx,fy1); line(g,cx,fy2,cx,44); line(g,46,fy2,46,44);
+      mk('rect',{x:17,y:fy1,width:32,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      dot(g,cx,t1); dot(g,cx,t2); dot(g,46,20);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
-      if (pos2) line(g,cx,t1,32,20,col,1.8); else line(g,cx,t1,cx,t2,col,1.8);
-      // Raste = manuelle, stehenbleibende Betätigung (unterscheidet ihn vom automatischen
-      // Wechsler-Kontakt, der keine Rastungs-Kennzeichnung bekommt)
-      rasteV(g, cx-9, t2-6, col);
+      if (pos2) line(g,cx,t1,46,20,col,1.8); else line(g,cx,t1,cx,t2,col,1.8);
+      // Betätigungsart-Symbol (Handantrieb, allgemein) links, gestrichelt angebunden --
+      // siehe actuatorGlyph(). Ersetzt die frühere, falsche "Raste"-Markierung.
+      const ax=3, ay=t1;
+      mk('line',{x1:ax,y1:ay,x2:17,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+      actuatorGlyph(g,'hand',ax,ay,col);
     }},
-  kreuzschalter:{cat:'Taster/Schalter',label:'Kreuzschalter',w:36,h:44,
-    ports:[{x:9,y:0,l:'1'},{x:27,y:0,l:'2'},{x:9,y:44,l:'3'},{x:27,y:44,l:'4'}],
+  kreuzschalter:{cat:'Taster/Schalter',label:'Kreuzschalter',w:50,h:44,
+    ports:[{x:23,y:0,l:'1'},{x:41,y:0,l:'2'},{x:23,y:44,l:'3'},{x:41,y:44,l:'4'}],
     draw:(g,inst)=>{
       const fy1=8, fy2=36;
       const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
       const crossed = !!s.crossed;
-      line(g,9,0,9,fy1); line(g,27,0,27,fy1);
-      line(g,9,fy2,9,44); line(g,27,fy2,27,44);
-      deviceFrame(g, 18, fy1, fy2, 16);
-      dot(g,9,14); dot(g,27,14); dot(g,9,30); dot(g,27,30);
+      line(g,23,0,23,fy1); line(g,41,0,41,fy1);
+      line(g,23,fy2,23,44); line(g,41,fy2,41,44);
+      mk('rect',{x:16,y:fy1,width:32,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      dot(g,23,14); dot(g,41,14); dot(g,23,30); dot(g,41,30);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
-      if (!crossed) { line(g,9,14,9,30,col,1.6); line(g,27,14,27,30,col,1.6); }
-      else { line(g,9,14,27,30,col,1.6); line(g,27,14,9,30,col,1.6); }
-      // Raste = manuelle, stehenbleibende Betätigung
-      rasteV(g, 15, 19, col);
+      if (!crossed) { line(g,23,14,23,30,col,1.6); line(g,41,14,41,30,col,1.6); }
+      else { line(g,23,14,41,30,col,1.6); line(g,41,14,23,30,col,1.6); }
+      const ax=2, ay=19;
+      mk('line',{x1:ax,y1:ay,x2:16,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+      actuatorGlyph(g,'hand',ax,ay,col);
     }},
-  notaus:{cat:'Taster/Schalter',label:'Not-Aus',w:28,h:44,ports:[{x:14,y:0},{x:14,y:44}],
-    draw:(g,inst)=>{
-      contactGlyph(g,true,'taster',14,simClosed(inst));
-      // Pilzkopf-Taster rastet beim Drücken ein (bleibt bis zum manuellen Entriegeln
-      // gedrückt) -- bekommt deshalb zusätzlich zum Tasterknopf die Raste-Kennzeichnung.
-      const col = simMode && inst ? '#16a34a' : '#1f2937';
-      rasteV(g, 5, 22, col);
-      mk('circle',{cx:23,cy:-2,r:4,fill:'none',stroke:'#dc2626','stroke-width':1.6},g);
-    }},
+  notaus:{cat:'Taster/Schalter',label:'Not-Aus',w:42,h:44,ports:[{x:28,y:0},{x:28,y:44}],
+    draw:(g,inst)=>contactGlyph(g,true,'notaus',28,simClosed(inst))},
   coil:{cat:'Spulen',label:'Schütz-/Relaisspule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
     draw:g=>coilGlyph(g,false)},
   coil_delay:{cat:'Spulen',label:'Zeitrelais-Spule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
@@ -405,8 +413,12 @@ const lastClickMap = new WeakMap(); // Doppelklick-Erkennung pro Instanz, siehe 
 // die nur über eine identische Beschriftung (z.B. "K1") zusammengehören — das ist die
 // reale Konvention in einem Stromlaufplan. Die Engine gruppiert also über Labels statt
 // über feste Bauteil-Ports.
-const POT = { L1:4, L2:8, L3:16, N:2, PE:1 };
+const POT = { L1:4, L2:8, L3:16, N:2, PE:1, DCP:32, DCM:64 };
 const ANY_L = POT.L1|POT.L2|POT.L3;
+// Verallgemeinerte "stromführend"/"Rückleiter"-Bits, damit Lampen/Motoren & Co. gleich
+// behandelt werden können, egal ob sie an AC (L/N) oder DC (DC+/DC-) hängen.
+const ANY_SRC = ANY_L|POT.DCP;
+const ANY_REF = POT.N|POT.DCM;
 const POLE_PAIRS = { ls1:[[0,1]], ls3:[[0,3],[1,4],[2,5]], rcd2:[[0,2],[1,3]], rcd4:[[0,4],[1,5],[2,6],[3,7]], rcbo:[[0,1],[2,3]] };
 
 let simMode = false, simState = {};
@@ -432,6 +444,11 @@ function initSimState(){
       case 'notaus': d.latched=false; break;
       case 'ls1': case 'ls3': case 'rcbo': d.on=true; break;
       case 'rcd2': case 'rcd4': d.on=true; d.tripped=false; break;
+      case 'wechsel_kl': d.pos=1; break;
+      case 'serienschalter': d.closed1=true; d.closed2=true; break;
+      case 'frequenzumrichter': d.enabled=true; break;
+      case 'stromstoss': d.latched=false; d.prevOn=false; break;
+      case 'sps': case 'sps24': d.q=[false,false,false,false]; break;
     }
     simState[inst.id] = d;
   });
@@ -474,11 +491,48 @@ function computeSimOnce(){
       case 'rcd2': case 'rcd4':
         if (s.on!==false && !s.tripped) (POLE_PAIRS[inst.type]||[]).forEach(([a,b])=>union(P(a),P(b)));
         break;
+      case 'wechsel_kl': union(P(0), P(s.pos===2?2:1)); break;
+      case 'serienschalter':
+        if (s.closed1!==false) union(P(0),P(1));
+        if (s.closed2!==false) union(P(0),P(2));
+        break;
+      case 'frequenzumrichter':
+        if (s.enabled!==false) { union(P(0),P(4)); union(P(1),P(5)); union(P(2),P(6)); union(P(3),P(7)); }
+        break;
+      case 'schuetz3':
+        if (coilOnForLabel(inst.label)) [[0,3],[1,4],[2,5]].forEach(([a,b])=>union(P(a),P(b)));
+        break;
+      case 'stromstoss': if (s.latched) union(P(2),P(3)); break;
+      case 'sps': case 'sps24': {
+        const q = s.q || [false,false,false,false];
+        [[4,5],[6,7],[8,9],[10,11]].forEach(([a,b],i)=>{ if (q[i]) union(P(a),P(b)); });
+        break;
+      }
     }
   });
 
   const pot = new Int32Array(k);
   rails.forEach(r=>{ const n=find(idx['rail:'+r.id]); pot[n] |= POT[r.type]; });
+  // DC-Spannungsquelle speist DC+/DC- direkt an ihren eigenen Ports ein (wie eine Mini-
+  // Sammelschiene, nur ohne eigenes Rail-Objekt).
+  insts.forEach(inst=>{
+    if (inst.type!=='dcquelle') return;
+    const p0=idx[inst.id+':0'], p1=idx[inst.id+':1'];
+    if (p0!=null) pot[find(p0)] |= POT.DCP;
+    if (p1!=null) pot[find(p1)] |= POT.DCM;
+  });
+  // Gleichrichter: liegt am Eingang (L,N) eine gültige AC-Versorgung an, wird DC+/DC- am
+  // Ausgang eingespeist. Vereinfachtes Einzelpass-Modell (kein iteratives Nachziehen bei
+  // verketteten Gleichrichtern), reicht für den üblichen Fall Schiene -> Gleichrichter -> DC-Verbraucher.
+  insts.forEach(inst=>{
+    if (inst.type!=='gleichrichter') return;
+    const pL=idx[inst.id+':0'], pN=idx[inst.id+':1'], pP=idx[inst.id+':2'], pM=idx[inst.id+':3'];
+    if (pL==null || pN==null) return;
+    if ((pot[find(pL)]&ANY_L) && (pot[find(pN)]&POT.N)) {
+      if (pP!=null) pot[find(pP)] |= POT.DCP;
+      if (pM!=null) pot[find(pM)] |= POT.DCM;
+    }
+  });
 
   const gp = (id,pi)=>{ const p=idx[id+':'+pi]; return p!=null?pot[find(p)]:0; };
   return { idx, find, pot, gp };
@@ -486,13 +540,28 @@ function computeSimOnce(){
 
 function runSim(depth){
   depth = depth||0;
+  if (depth===0) {
+    // Stromstoßschalter sind bistabil: sie kippen einmal pro Impuls an A1/A2 (steigende
+    // Flanke), anders als eine normale Spule, die nur so lange hält wie sie Spannung hat.
+    // Deshalb nur einmal pro echter Aktion prüfen (depth 0), nicht bei jeder internen
+    // Stabilisierungs-Iteration weiter unten -- sonst würde ein einziger Tasterdruck den
+    // Zustand mehrfach hintereinander umkippen.
+    const pre = computeSimOnce();
+    insts.forEach(inst=>{
+      if (inst.type!=='stromstoss') return;
+      const p0=pre.gp(inst.id,0), p1=pre.gp(inst.id,1);
+      const on = !!((p0&ANY_SRC)&&(p1&ANY_REF) || (p1&ANY_SRC)&&(p0&ANY_REF));
+      const s = simState[inst.id]||{};
+      simState[inst.id] = (on && !s.prevOn) ? {...s, prevOn:on, latched:!s.latched} : {...s, prevOn:on};
+    });
+  }
   const { idx, find, pot, gp } = computeSimOnce();
 
   let changed = false;
   insts.forEach(inst=>{
     if (inst.type!=='coil' && inst.type!=='coil_delay') return;
     const p0=gp(inst.id,0), p1=gp(inst.id,1);
-    const on = !!((p0&ANY_L)&&(p1&POT.N) || (p1&ANY_L)&&(p0&POT.N));
+    const on = !!((p0&ANY_SRC)&&(p1&ANY_REF) || (p1&ANY_SRC)&&(p0&ANY_REF));
     const s = simState[inst.id]||{};
     if (!!s.on !== on) { simState[inst.id]={...s, on}; changed=true; }
   });
@@ -542,17 +611,37 @@ function toggleSim(){
   else { simState={}; simPortPot={}; simPortNode={}; render(); }
 }
 
-function simInstClick(inst){
+function simInstClick(inst, localX){
   const s = simState[inst.id]||{};
   switch(inst.type){
     case 'schalter': simState[inst.id]={...s, closed: s.closed===false}; break;
     case 'wechselschalter': simState[inst.id]={...s, pos: s.pos===1?2:1}; break;
+    case 'wechsel_kl': simState[inst.id]={...s, pos: s.pos===1?2:1}; break;
     case 'kreuzschalter': simState[inst.id]={...s, crossed: !s.crossed}; break;
     case 'notaus': simState[inst.id]={...s, latched: !s.latched}; break;
     case 'ls1': case 'ls3': case 'rcbo':
       simState[inst.id] = s.tripped ? {...s, on:true, tripped:false} : {...s, on: s.on===false}; break;
     case 'rcd2': case 'rcd4':
       simState[inst.id] = s.tripped ? {...s, on:true, tripped:false} : {...s, on: s.on===false}; break;
+    case 'frequenzumrichter': simState[inst.id]={...s, enabled: s.enabled===false}; break;
+    case 'serienschalter': {
+      // Zwei unabhängige Wippen in einem Gehäuse -- welche Hälfte angeklickt wurde,
+      // entscheidet über localX (siehe SYM.serienschalter.w).
+      const leftHalf = localX==null || localX < SYM.serienschalter.w/2;
+      const key = leftHalf ? 'closed1' : 'closed2';
+      simState[inst.id] = {...s, [key]: s[key]===false};
+      break;
+    }
+    case 'sps': case 'sps24': {
+      // 4 unabhängige Relaisausgänge Q1-Q4 nebeneinander -- Klickzone bestimmt, welcher
+      // Ausgang "vom Programm" geschaltet wird (wir simulieren keine echte Ablaufsteuerung).
+      const w = SYM[inst.type].w;
+      const zone = Math.max(0, Math.min(3, Math.floor((localX==null?0:localX) / (w/4))));
+      const q = (s.q || [false,false,false,false]).slice();
+      q[zone] = !q[zone];
+      simState[inst.id] = {...s, q};
+      break;
+    }
     default: return false;
   }
   runSim();
@@ -568,6 +657,8 @@ function potColor(pot){
   if (pot & POT.L3) return '#6b7280';
   if (pot & POT.N) return '#1a56db';
   if (pot & POT.PE) return '#16a34a';
+  if (pot & POT.DCP) return '#dc2626';
+  if (pot & POT.DCM) return '#111827';
   return null;
 }
 
@@ -905,7 +996,8 @@ function render(){
           };
           document.addEventListener('pointerup', onUp);
         } else {
-          simInstClick(inst);
+          const p = svgPt(e.clientX,e.clientY);
+          simInstClick(inst, p.x-inst.x);
         }
         return;
       }
