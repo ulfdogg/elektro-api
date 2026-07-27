@@ -1295,7 +1295,173 @@ function scheduleAutoSave(){
   clearTimeout(_asTimer);
   _asTimer = setTimeout(()=>{ try{ localStorage.setItem('stromlaufplan_manual_v1', JSON.stringify(buildSaveData())); }catch(e){} }, 600);
 }
+
+// ── Import aus dem Aufbauplan ───────────────────────────────────────────────
+// Übernimmt Bauteile+Verdrahtung eines Aufbauplan-Standes (public/index.html,
+// buildSaveData()-Format) als Rohentwurf -- ausgelöst über "🔄 Als Stromlaufplan" im
+// Aufbauplan, das den AKTUELLEN Bildschirmstand (nicht den Speicherstand) per
+// localStorage übergibt. AP_MAP[apType] = { to: Stromlaufplan-Typ, portMap: {apPortIndex:
+// stromPortIndex} } -- fehlende AP-Ports (z.B. PE an einer Lampe) werden stillschweigend
+// nicht übernommen. PASSTHROUGH-Typen (Klemmen, WAGO, Sammelschienen-Blöcke, Kabel) haben
+// selbst kein Schaltplansymbol, bleiben aber als durchsichtiger Verbindungsknoten im
+// Union-Find erhalten, damit z.B. "Schiene -> Klemme -> Lampe" nicht durch Weglassen der
+// Klemme unterbrochen wird. schuetz/zeitrelais sind Sonderfälle: EIN Aufbauplan-Bauteil
+// wird auf mehrere, gleich beschriftete Stromlaufplan-Instanzen aufgeteilt (Spule +
+// Hauptkontakte/Wechsler-Kontakt), genau wie es die Norm-Konvention im Stromlaufplan
+// ohnehin vorsieht (siehe coilOnForLabel).
+const AP_MAP = {
+  ls1:  { to:'ls1',  portMap:{0:0,1:1} },
+  ls3:  { to:'ls3',  portMap:{0:0,1:1,2:2,3:3,4:4,5:5} },
+  rcd2: { to:'rcd2', portMap:{0:0,1:1,2:2,3:3} },
+  rcd4: { to:'rcd4', portMap:{0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7} },
+  rcbo: { to:'rcbo', portMap:{0:0,1:2,2:1,3:3} },
+  lampe:{ to:'lampe', portMap:{0:0,1:1} },
+  spot: { to:'lampe', portMap:{0:0,1:1} },
+  schalter: { to:'schalter', portMap:{0:0,1:1} },
+  taster:   { to:'taster_no', portMap:{0:0,1:1} },
+  notaus:   { to:'notaus', portMap:{0:0,1:1} },
+  wechsel:  { to:'wechselschalter', portMap:{0:0,1:1,2:2} },
+  wechsel_kl: { to:'wechsel_kl', portMap:{0:0,1:1,2:2,3:3,4:4} },
+  kreuzschalter: { to:'kreuzschalter', portMap:{0:0,1:1,2:2,3:3} },
+  serienschalter: { to:'serienschalter', portMap:{0:0,1:1,2:2} },
+  steckdose: { to:'steckdose', portMap:{0:0,2:1} },
+  cee16_dose: { to:'cee16_dose', portMap:{0:0,1:1,2:2,3:3,4:4} },
+  cee16_kupplung: { to:'cee16_kupplung', portMap:{0:0,1:1,2:2,3:3,4:4} },
+  motor: { to:'motor', portMap:{0:0,1:1,2:2,3:6,4:4,5:5,6:3} },
+  dahlander: { to:'motor_dahlander', portMap:{0:0,1:1,2:2,3:3,4:4,5:5,6:6} },
+  frequenzumrichter: { to:'frequenzumrichter', portMap:{0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7} },
+  stromstoss: { to:'stromstoss', portMap:{0:0,3:1,1:2,4:3} },
+  bewegungsmelder: { to:'motion', portMap:{0:0,2:1} },
+  dcquelle: { to:'dcquelle', portMap:{0:0,1:1} },
+  gleichrichter: { to:'gleichrichter', portMap:{0:0,1:1,2:2,3:3} },
+  kontakt_no: { to:'contact_no', portMap:{0:0,1:1} },
+  kontakt_nc: { to:'contact_nc', portMap:{0:0,1:1} },
+  kontakt_led: { to:'lampe', portMap:{0:0,1:1} },
+};
+const AP_PASSTHROUGH = new Set(['klemme','klemme25','klemme25_twin','knotenpunkt','wago2','wago3','wago5','nblock','peblock']);
+// cable3/cable5 sind KEIN einzelner Knoten (jede Ader ist ein eigener, unabhängiger Leiter!)
+// -- Adernpaare West<->Ost werden separat durchverbunden, sonst würden L/N/PE kurzgeschlossen.
+const AP_CABLE_PAIRS = { cable3: [[0,3],[1,4],[2,5]], cable5: [[0,5],[1,6],[2,7],[3,8],[4,9]] };
+
+function buildFromAufbauplan(ap){
+  const comps = ap.comps||[], apWires = ap.wires||[];
+  const parent = {};
+  const find = x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  const ensure = k=>{ if(!(k in parent)) parent[k]=k; return k; };
+  const union = (a,b)=>{ a=find(ensure(a)); b=find(ensure(b)); if(a!==b) parent[b]=a; };
+  apWires.forEach(w=> union(w.fid+':'+w.fp, w.tid+':'+w.tp));
+  // Ein Durchgangsbauteil (Klemme/WAGO/N-Block/PE-Block) leitet zwischen ALL seinen eigenen
+  // Anschlüssen durch -- ohne das wären "Schiene -> Klemme -> Lampe" zwei getrennte Gruppen,
+  // weil bisher nur die AUSSEN ankommenden Drähte verbunden wurden, nicht die Klemme mit
+  // sich selbst. Nur tatsächlich verdrahtete Ports berücksichtigen (Portanzahl pro Typ ist
+  // hier nicht bekannt, muss also aus den Wires abgeleitet werden).
+  const compById = {}; comps.forEach(c=>{ compById[c.id]=c; });
+  const passthroughPorts = {};
+  apWires.forEach(w=>{
+    const fc=compById[w.fid], tc=compById[w.tid];
+    if (fc && AP_PASSTHROUGH.has(fc.type)) (passthroughPorts[w.fid]=passthroughPorts[w.fid]||new Set()).add(w.fp);
+    if (tc && AP_PASSTHROUGH.has(tc.type)) (passthroughPorts[w.tid]=passthroughPorts[w.tid]||new Set()).add(w.tp);
+  });
+  Object.keys(passthroughPorts).forEach(cid=>{
+    const ports=[...passthroughPorts[cid]];
+    for (let i=1;i<ports.length;i++) union(cid+':'+ports[0], cid+':'+ports[i]);
+  });
+  comps.forEach(c=>{
+    const pairs = AP_CABLE_PAIRS[c.type];
+    if (pairs) pairs.forEach(([a,b])=> union(c.id+':'+a, c.id+':'+b));
+  });
+
+  const newInsts = []; let nid=1;
+  const portLink = {}; // 'apCompId:apPort' -> {inst, port}
+  const COLS=6, COLW=140, ROWH=140;
+  function addInst(type, label){
+    const inst = { id: nid++, type, x:0, y:0, label: label||'' };
+    const i = newInsts.length;
+    inst.x = 60 + (i%COLS)*COLW; inst.y = 60 + Math.floor(i/COLS)*ROWH;
+    newInsts.push(inst);
+    return inst;
+  }
+
+  let importedCount=0; const skipped={};
+  comps.forEach(c=>{
+    if (AP_PASSTHROUGH.has(c.type)) return; // nur Verbindungsknoten, kein Symbol
+    if (c.type==='schuetz') {
+      importedCount++;
+      const main = addInst('schuetz3', c.label);
+      [0,1,2,3,4,5].forEach(i=>{ portLink[c.id+':'+i] = {inst:main.id, port:i}; });
+      const coil = addInst('coil', c.label);
+      portLink[c.id+':14'] = {inst:coil.id, port:0};
+      portLink[c.id+':15'] = {inst:coil.id, port:1};
+      const auxTypes = (c.state && c.state.auxTypes) || ['no','nc','nc','no'];
+      [[6,7],[8,9],[10,11],[12,13]].forEach(([a,b],i)=>{
+        const aux = addInst(auxTypes[i]==='nc' ? 'contact_nc' : 'contact_no', c.label);
+        portLink[c.id+':'+a] = {inst:aux.id, port:0};
+        portLink[c.id+':'+b] = {inst:aux.id, port:1};
+      });
+      return;
+    }
+    if (c.type==='zeitrelais') {
+      importedCount++;
+      const coil = addInst('coil_delay', c.label);
+      portLink[c.id+':1'] = {inst:coil.id, port:0}; // A1
+      portLink[c.id+':2'] = {inst:coil.id, port:1}; // N
+      const co = addInst('contact_co', c.label);
+      portLink[c.id+':4'] = {inst:co.id, port:0}; // COM -> C
+      portLink[c.id+':3'] = {inst:co.id, port:1}; // '1' -> NO
+      portLink[c.id+':5'] = {inst:co.id, port:2}; // '2' -> NC
+      return;
+    }
+    const map = AP_MAP[c.type];
+    if (!map) { skipped[c.type] = (skipped[c.type]||0)+1; return; }
+    importedCount++;
+    const inst = addInst(map.to, c.label);
+    Object.keys(map.portMap).forEach(apIdx=>{
+      portLink[c.id+':'+apIdx] = {inst:inst.id, port:map.portMap[apIdx]};
+    });
+  });
+
+  // Pro Union-Find-Gruppe alle übernommenen Ports per Sternverdrahtung verbinden.
+  const groups = {};
+  Object.keys(portLink).forEach(key=>{
+    const root = find(ensure(key));
+    (groups[root] = groups[root]||[]).push(key);
+  });
+  const newWires = []; let wid2=1;
+  Object.values(groups).forEach(keys=>{
+    if (keys.length<2) return;
+    const a = portLink[keys[0]];
+    keys.slice(1).forEach(k=>{
+      const b = portLink[k];
+      newWires.push({ id: wid2++, fid:a.inst, fp:a.port, tid:b.inst, tp:b.port });
+    });
+  });
+
+  return { insts:newInsts, wires:newWires, rails:[], railConns:[], iid:nid, wid:wid2,
+    _summary:{ imported:importedCount, skipped } };
+}
+
 (function initLoad(){
+  try {
+    if (new URLSearchParams(location.search).get('import')==='1') {
+      const raw = localStorage.getItem('stromlaufplan_import_source');
+      localStorage.removeItem('stromlaufplan_import_source');
+      history.replaceState(null,'','/stromlaufplan');
+      if (raw) {
+        const existing = localStorage.getItem('stromlaufplan_manual_v1');
+        let hasExisting = false;
+        try { hasExisting = existing && JSON.parse(existing).insts && JSON.parse(existing).insts.length>0; } catch(e){}
+        if (!hasExisting || confirm('Das ersetzt deinen aktuellen Stromlaufplan-Entwurf durch die Bauteile aus dem Aufbauplan. Fortfahren?')) {
+          const converted = buildFromAufbauplan(JSON.parse(raw));
+          importData(converted);
+          const sk = Object.entries(converted._summary.skipped);
+          let msg = converted._summary.imported + ' Bauteile aus dem Aufbauplan übernommen.';
+          if (sk.length) msg += '\n\nOhne Schaltplan-Entsprechung übersprungen:\n' + sk.map(([t,n])=>'- '+t+' ('+n+'x)').join('\n');
+          alert(msg);
+          return;
+        }
+      }
+    }
+  } catch(e){ console.error(e); }
   try {
     const raw = localStorage.getItem('stromlaufplan_manual_v1');
     if (raw) importData(JSON.parse(raw));

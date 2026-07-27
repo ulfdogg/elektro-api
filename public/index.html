@@ -206,7 +206,8 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <button class="t-btn" onclick="delSel()">✕ Löschen</button>
       <button class="t-btn" onclick="clearAll()">🗑 Neu</button>
       <select class="t-btn" id="tpl-select" onchange="loadTemplate(this.value,this)" title="Vorlage laden"><option value="">📋 Vorlage…</option></select>
-      <a href="/stromlaufplan" class="t-btn" style="text-decoration:none" title="Stromlaufplan-Editor (Schaltzeichen nach Norm zeichnen)">📐 Stromlaufplan</a>
+      <a href="/stromlaufplan" class="t-btn" style="text-decoration:none" title="Leerer Stromlaufplan-Editor (Schaltzeichen nach Norm zeichnen)">📐 Stromlaufplan</a>
+      <button class="t-btn" onclick="showAsStromlaufplan()" title="Aktuellen Aufbauplan (unabhängig vom letzten Speicherstand) als Stromlaufplan-Entwurf anzeigen">🔄 Als Stromlaufplan</button>
       <span style="flex:1"></span>
       <span id="es-username" style="font-size:11px;color:#9ca3af;padding:0 6px;white-space:nowrap"></span>
       <a id="es-admin-link" href="/admin.html" class="t-btn" style="display:none;text-decoration:none;color:#93c5fd">🛠 Admin</a>
@@ -4556,6 +4557,21 @@ function savePlan() {
   a.download = 'elektroplan.json';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// Übergibt den AKTUELLEN (nicht notwendigerweise gespeicherten) Aufbauplan-Stand direkt an
+// den Stromlaufplan-Editor, der daraus einen Schaltplan-Entwurf aufbaut -- ohne Umweg über
+// Datei-Export/Import. Übergabe per localStorage-Zwischenspeicher (wird vom Stromlaufplan
+// beim Lesen sofort wieder gelöscht), nicht über den regulären Speicherstand -- der aktuelle
+// Bildschirm-Stand wird 1:1 übernommen, egal ob er schon gespeichert wurde oder nicht.
+function showAsStromlaufplan() {
+  try {
+    localStorage.setItem('stromlaufplan_import_source', JSON.stringify(buildSaveData()));
+  } catch(e) {
+    alert('Konnte den Plan nicht übergeben: ' + e.message);
+    return;
+  }
+  window.open('/stromlaufplan?import=1', '_blank');
 }
 
 let _asTimer = null;
