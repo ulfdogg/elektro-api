@@ -296,15 +296,22 @@ const SYM = {
       const running = simMode && inst && isInstActive(inst);
       const mode = (simMode && inst) ? motorWindingMode(inst) : null;
       const dir = (simMode && inst && running) ? motorDirection(inst,[0,1,2]) : null;
-      [15,35,55].forEach(x=>{ line(g,x,0,x,cy-r); line(g,x,cy+r,x,60); });
+      const cw = dir==='cw';
+      // Dreieck = volle Spannung an den Wicklungen (kräftigere Farbe), Stern = reduziert
+      // (blasser) -- dieselbe Konvention wie im Aufbauplan (drawMotor/fullPower).
+      const fullPower = running && mode==='dreieck';
+      let bodyFill='#fff', bodyStroke='#1f2937', sw=1.6;
       if (running) {
-        mk('circle',{cx,cy,r:r+5,fill:'none',stroke:'#22c55e','stroke-width':2,opacity:0.5},g);
-        if (dir) motorArrow(g,cx,cy,r+10,dir,'#16a34a');
+        if (fullPower) { bodyFill = cw?'#4ade80':'#fb923c'; bodyStroke = cw?'#15803d':'#c2410c'; sw=2.2; }
+        else { bodyFill = cw?'#dcfce7':'#fff7ed'; bodyStroke = cw?'#86efac':'#fdba74'; sw=1.6; }
       }
-      mk('circle',{cx,cy,r,fill:running?'#dcfce7':'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+      [15,35,55].forEach(x=>{ line(g,x,0,x,cy-r); line(g,x,cy+r,x,60); });
+      if (running) mk('circle',{cx,cy,r:r+5,fill:'none',stroke:bodyStroke,'stroke-width':2,opacity:0.45},g);
+      mk('circle',{cx,cy,r,fill:bodyFill,stroke:bodyStroke,'stroke-width':sw},g);
+      if (running && dir) motorSpinGroup(g,cx,cy,r-6, cw?'#16a34a':'#ea580c', cw);
       mk('text',{x:cx,y:cy+5,'text-anchor':'middle','font-size':15,fill:'#1f2937','font-weight':'bold'},g).textContent='M';
       mk('text',{x:cx,y:cy+15,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='3~';
-      if (mode) mk('text',{x:cx,y:cy-r+9,'text-anchor':'middle','font-size':10,'font-weight':'bold',fill:'#16a34a'},g).textContent = mode==='stern'?'Y':'Δ';
+      if (mode) mk('text',{x:cx,y:cy-r+9,'text-anchor':'middle','font-size':10,'font-weight':'bold',fill: running?bodyStroke:'#6b7280'},g).textContent = mode==='stern'?'Y':'Δ';
       // PE seitlich (Schutzerde-Symbol, siehe SYM.pe)
       line(g,cx+r,cy,70,cy);
       line(g,64,cy-6,64,cy+6); line(g,67,cy-4,67,cy+4); line(g,70,cy-2,70,cy+2);
@@ -327,15 +334,22 @@ const SYM = {
       const running = lowOn || highOn;
       const dirPorts = highOn ? [3,4,5] : [0,1,2];
       const dir = (simMode && inst && running) ? motorDirection(inst,dirPorts) : null;
-      [15,35,55].forEach(x=>{ line(g,x,0,x,cy-r); line(g,x,cy+r,x,74); });
+      const cw = dir==='cw';
+      // Hohe Drehzahl (2n) = kräftigere Farbe, niedrige (n) = blasser -- analog zur
+      // Stern/Dreieck-Konvention beim normalen Motor bzw. drawDahlander() im Aufbauplan.
+      const fullPower = running && highOn;
+      let bodyFill='#fff', bodyStroke='#1f2937', sw=1.6;
       if (running) {
-        mk('circle',{cx,cy,r:r+5,fill:'none',stroke:'#22c55e','stroke-width':2,opacity:0.5},g);
-        if (dir) motorArrow(g,cx,cy,r+10,dir,'#16a34a');
+        if (fullPower) { bodyFill = cw?'#4ade80':'#fb923c'; bodyStroke = cw?'#15803d':'#c2410c'; sw=2.2; }
+        else { bodyFill = cw?'#dcfce7':'#fff7ed'; bodyStroke = cw?'#86efac':'#fdba74'; sw=1.6; }
       }
-      mk('circle',{cx,cy,r,fill:running?'#dcfce7':'#fff',stroke:'#1f2937','stroke-width':1.6},g);
+      [15,35,55].forEach(x=>{ line(g,x,0,x,cy-r); line(g,x,cy+r,x,74); });
+      if (running) mk('circle',{cx,cy,r:r+5,fill:'none',stroke:bodyStroke,'stroke-width':2,opacity:0.45},g);
+      mk('circle',{cx,cy,r,fill:bodyFill,stroke:bodyStroke,'stroke-width':sw},g);
+      if (running && dir) motorSpinGroup(g,cx,cy,r-6, cw?'#16a34a':'#ea580c', cw, highOn?2:1);
       mk('text',{x:cx,y:cy+5,'text-anchor':'middle','font-size':15,fill:'#1f2937','font-weight':'bold'},g).textContent='M';
       mk('text',{x:cx,y:cy+15,'text-anchor':'middle','font-size':7,fill:'#1f2937'},g).textContent='3~';
-      if (running) mk('text',{x:cx,y:cy-r+9,'text-anchor':'middle','font-size':9,'font-weight':'bold',fill:'#16a34a'},g).textContent = highOn?'2n':'n';
+      if (running) mk('text',{x:cx,y:cy-r+9,'text-anchor':'middle','font-size':9,'font-weight':'bold',fill:bodyStroke},g).textContent = highOn?'2n':'n';
       line(g,cx+r,cy,70,cy);
       line(g,64,cy-6,64,cy+6); line(g,67,cy-4,67,cy+4); line(g,70,cy-2,70,cy+2);
       ['1U','1V','1W'].forEach((l,i)=>mk('text',{x:15+i*20,y:-4,'text-anchor':'middle','font-size':7,fill:'#6b7280'},g).textContent=l);
@@ -581,19 +595,31 @@ function motorDirection(inst, ports){
   const cw = (a===1&&b===2&&c===3) || (a===2&&b===3&&c===1) || (a===3&&b===1&&c===2);
   return cw ? 'cw' : 'ccw';
 }
-// Rotationspfeil (Kreisbogen + Pfeilspitze) um einen Motorkreis, Richtung je nach dir.
-function motorArrow(g, cx, cy, r, dir, col){
-  col = col || '#16a34a';
-  const a0 = -50, a1 = 230;
-  const [sa, ea] = dir==='cw' ? [a0, a1] : [a1, a0];
-  const toXY = deg => { const rad=deg*Math.PI/180; return [cx+r*Math.cos(rad), cy+r*Math.sin(rad)]; };
-  const [x1,y1] = toXY(sa), [x2,y2] = toXY(ea);
-  const sweep = dir==='cw' ? 1 : 0;
-  mk('path',{d:`M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 1 ${sweep} ${x2.toFixed(1)},${y2.toFixed(1)}`,fill:'none',stroke:col,'stroke-width':2},g);
-  const t = (ea + (dir==='cw'?-90:90)) * Math.PI/180;
-  const nx=-Math.sin(t), ny=Math.cos(t);
-  const bx=x2-6*Math.cos(t), by=y2-6*Math.sin(t);
-  mk('polygon',{points:`${x2.toFixed(1)},${y2.toFixed(1)} ${(bx+nx*3.5).toFixed(1)},${(by+ny*3.5).toFixed(1)} ${(bx-nx*3.5).toFixed(1)},${(by-ny*3.5).toFixed(1)}`,fill:col},g);
+// Rotierender Läufer-Indikator (3 Speichen), echte SVG-Rotation per <animateTransform> --
+// exakt dieselbe Technik wie motorSpinGroup() im Aufbauplan (public/index.html), damit
+// laufende Motoren in beiden Editoren gleich animiert aussehen (SMIL statt CSS-Klasse,
+// da render() den SVG-Baum bei jeder Änderung neu aufbaut und eine CSS-Animation dabei
+// jedes Mal neu starten würde -- SMIL läuft dagegen sofort beim Einfügen los).
+function motorSpinGroup(g, cx, cy, r, col, cw, speed){
+  const sg = mk('g',{},g);
+  for (let i=0;i<3;i++){
+    const a=(i*120)*Math.PI/180;
+    const ex=Math.round(r*Math.sin(a)), ey=Math.round(-r*Math.cos(a));
+    mk('line',{x1:cx,y1:cy,x2:cx+ex,y2:cy+ey,stroke:col,'stroke-width':3,'stroke-linecap':'round','stroke-opacity':0.9},sg);
+    mk('circle',{cx:cx+ex,cy:cy+ey,r:3,fill:col,'fill-opacity':0.8},sg);
+  }
+  let dur;
+  if (speed===2) dur='0.32s';
+  else if (speed===1) dur='1.15s';
+  else dur='0.7s';
+  const at = document.createElementNS('http://www.w3.org/2000/svg','animateTransform');
+  at.setAttribute('attributeName','transform');
+  at.setAttribute('type','rotate');
+  at.setAttribute('from', `0 ${cx} ${cy}`);
+  at.setAttribute('to',   `${cw?360:-360} ${cx} ${cy}`);
+  at.setAttribute('dur',dur);
+  at.setAttribute('repeatCount','indefinite');
+  sg.appendChild(at);
 }
 
 // Ob ein Bauteil während der Simulation "aktiv" ist (Kontakt geschlossen, Spule
