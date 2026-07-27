@@ -230,6 +230,16 @@ const SYM = {
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (on) line(g,cx,t1,cx,t2,col,1.8); else line(g,cx,t1,32,20,col,1.8);
     }},
+  // Hauptkontakte eines Schützes: 3 gemeinsam schaltende Leistungspole, angesteuert über
+  // dieselbe Spulen-Beschriftung wie ein einzelner Kontakt (coilOnForLabel) -- Ruhezustand
+  // ist OFFEN (anders als LS/FI, die im Ruhezustand geschlossen/eingeschaltet sind).
+  schuetz3:{cat:'Kontakte',label:'Schütz-Hauptkontakte (3-polig)',w:66,h:40,
+    ports:[{x:11,y:0,l:'1'},{x:33,y:0,l:'3'},{x:55,y:0,l:'5'},{x:11,y:40,l:'2'},{x:33,y:40,l:'4'},{x:55,y:40,l:'6'}],
+    draw:(g,inst)=>{
+      const closed = (simMode && inst) ? coilOnForLabel(inst.label) : false;
+      mk('rect',{x:2,y:6,width:62,height:28,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      breakerPole(g,0,closed); breakerPole(g,22,closed); breakerPole(g,44,closed);
+    }},
   taster_no:{cat:'Taster/Schalter',label:'Taster Schließer',w:42,h:44,ports:[{x:28,y:0},{x:28,y:44}],
     draw:(g,inst)=>contactGlyph(g,false,'druck',28,simClosed(inst))},
   taster_nc:{cat:'Taster/Schalter',label:'Taster Öffner',w:42,h:44,ports:[{x:28,y:0},{x:28,y:44}],
@@ -272,6 +282,65 @@ const SYM = {
     }},
   notaus:{cat:'Taster/Schalter',label:'Not-Aus',w:42,h:44,ports:[{x:28,y:0},{x:28,y:44}],
     draw:(g,inst)=>contactGlyph(g,true,'notaus',28,simClosed(inst))},
+  wechsel_kl:{cat:'Taster/Schalter',label:'Wechselschalter mit Kontrollleuchte',w:56,h:66,
+    ports:[{x:28,y:0,l:'C'},{x:28,y:44,l:'1'},{x:46,y:44,l:'2'},{x:14,y:66,l:'N'},{x:42,y:66,l:'KL'}],
+    draw:(g,inst)=>{
+      const cx=28,t1=16,t2=28,fy1=8,fy2=36;
+      const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
+      const pos2 = (simMode && inst) ? s.pos===2 : false;
+      line(g,cx,0,cx,fy1); line(g,cx,fy2,cx,44); line(g,46,fy2,46,44);
+      mk('rect',{x:17,y:fy1,width:32,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      dot(g,cx,t1); dot(g,cx,t2); dot(g,46,20);
+      const col = simMode && inst ? '#16a34a' : '#1f2937';
+      if (pos2) line(g,cx,t1,46,20,col,1.8); else line(g,cx,t1,cx,t2,col,1.8);
+      const ax=3, ay=t1;
+      mk('line',{x1:ax,y1:ay,x2:17,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+      actuatorGlyph(g,'hand',ax,ay,col);
+      // Kontrollleuchte: vereinfacht direkt an die Schalterstellung gekoppelt (leuchtet in
+      // Stellung 2) statt an eine tatsächlich simulierte Glimmlampen-Verdrahtung über N/KL.
+      const lit = simMode && inst && pos2;
+      line(g,14,44,14,58); line(g,42,44,42,58);
+      mk('circle',{cx:28,cy:58,r:8,fill:lit?'#fef08a':'#fff',stroke:'#1f2937','stroke-width':1.2},g);
+      line(g,14,58,14,66); line(g,42,58,42,66);
+    }},
+  // Zwei unabhängige Wippen in einem Gehäuse mit gemeinsamem Zuleitungspol L -- welche
+  // Hälfte geschaltet wird, entscheidet die Klickposition (siehe simInstClick/localX).
+  serienschalter:{cat:'Taster/Schalter',label:'Serienschalter',w:70,h:44,
+    ports:[{x:35,y:0,l:'L'},{x:18,y:44,l:'1'},{x:52,y:44,l:'2'}],
+    draw:(g,inst)=>{
+      const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
+      const c1 = s.closed1!==false, c2 = s.closed2!==false;
+      const fy1=8, fy2=36;
+      line(g,35,0,35,fy1);
+      line(g,18,fy2,18,44); line(g,52,fy2,52,44);
+      mk('rect',{x:9,y:fy1,width:52,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      dot(g,35,16); dot(g,18,28); dot(g,52,28);
+      const col1 = simMode&&inst ? (c1?'#16a34a':'#1f2937') : '#1f2937';
+      const col2 = simMode&&inst ? (c2?'#16a34a':'#1f2937') : '#1f2937';
+      if (c1) line(g,35,16,18,28,col1,1.6); else line(g,35,16,26,20,col1,1.6);
+      if (c2) line(g,35,16,52,28,col2,1.6); else line(g,35,16,44,20,col2,1.6);
+      mk('line',{x1:5,y1:16,x2:9,y2:16,stroke:col1,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+      actuatorGlyph(g,'hand',5,16,col1);
+      mk('line',{x1:65,y1:16,x2:61,y2:16,stroke:col2,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+      actuatorGlyph(g,'hand',65,16,col2);
+    }},
+  // Stromstoßschalter (Treppenlichtautomat-Relais): bistabil -- kippt bei jedem Impuls an
+  // A1/A2 (siehe runSim/Flankenerkennung), bleibt danach OHNE weitere Spannung in Stellung.
+  stromstoss:{cat:'Taster/Schalter',label:'Stromstoßschalter',w:50,h:60,
+    ports:[{x:12,y:0,l:'A1'},{x:12,y:60,l:'A2'},{x:38,y:0,l:'13'},{x:38,y:60,l:'14'}],
+    draw:(g,inst)=>{
+      const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
+      const latched = !!s.latched;
+      line(g,12,0,12,10); line(g,12,50,12,60);
+      mk('rect',{x:4,y:10,width:16,height:40,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      mk('text',{x:12,y:33,'text-anchor':'middle','font-size':8,fill:'#1f2937'},g).textContent='Z';
+      line(g,38,0,38,16); line(g,38,44,38,60);
+      dot(g,38,16); dot(g,38,44);
+      const col = simMode&&inst ? (latched?'#16a34a':'#1f2937') : '#1f2937';
+      if (latched) line(g,38,44,38,16,col,1.6);
+      else { line(g,38,44,38,40,col,1.6); line(g,38,40,44,20,col,1.6); }
+      mk('rect',{x:30,y:12,width:16,height:36,fill:'none',stroke:'#1f2937','stroke-width':1.1},g);
+    }},
   coil:{cat:'Spulen',label:'Schütz-/Relaisspule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
     draw:g=>coilGlyph(g,false)},
   coil_delay:{cat:'Spulen',label:'Zeitrelais-Spule',w:34,h:44,ports:[{x:17,y:0,l:'A1'},{x:17,y:44,l:'A2'}],
@@ -375,16 +444,101 @@ const SYM = {
       line(g,14,0,14,9); line(g,14,35,14,44);
       mk('circle',{cx:14,cy:22,r:13,fill:on?'#dcfce7':'#fff',stroke:on?'#16a34a':'#1f2937','stroke-width':1.6},g);
       dot(g,10,22); dot(g,18,22); }},
+  cee16_dose:{cat:'Verbraucher',label:'CEE 16A Dose',w:70,h:50,
+    ports:[{x:10,y:50,l:'L1'},{x:25,y:50,l:'L2'},{x:40,y:50,l:'L3'},{x:55,y:50,l:'N'},{x:70,y:50,l:'PE'}],
+    draw:(g,inst)=>{ const live=simMode&&inst&&isInstActive(inst);
+      [10,25,40,55,70].forEach(x=>line(g,x,50,x,40));
+      mk('rect',{x:2,y:4,width:66,height:36,fill:live?'#dcfce7':'#fff',stroke:live?'#16a34a':'#1f2937','stroke-width':1.4,rx:4},g);
+      mk('text',{x:35,y:26,'text-anchor':'middle','font-size':8,fill:'#1f2937','font-weight':'bold'},g).textContent='CEE 16A';
+      [10,25,40,55,70].forEach(x=>dot(g,x,40)); }},
+  cee16_kupplung:{cat:'Verbraucher',label:'CEE 16A Kupplung',w:70,h:50,
+    ports:[{x:10,y:50,l:'L1'},{x:25,y:50,l:'L2'},{x:40,y:50,l:'L3'},{x:55,y:50,l:'N'},{x:70,y:50,l:'PE'}],
+    draw:(g,inst)=>{ const live=simMode&&inst&&isInstActive(inst);
+      [10,25,40,55,70].forEach(x=>line(g,x,50,x,40));
+      mk('ellipse',{cx:35,cy:22,rx:33,ry:18,fill:live?'#dcfce7':'#fff',stroke:live?'#16a34a':'#1f2937','stroke-width':1.4},g);
+      mk('text',{x:35,y:26,'text-anchor':'middle','font-size':8,fill:'#1f2937','font-weight':'bold'},g).textContent='CEE 16A';
+      [10,25,40,55,70].forEach(x=>dot(g,x,40)); }},
   motion:{cat:'Verbraucher',label:'Bewegungsmelder',w:30,h:50,ports:[{x:15,y:6},{x:15,y:50}],
     draw:g=>{ contactGlyph(g,false,false); mk('path',{d:'M4,15 Q15,4 26,15',fill:'none',stroke:'#1f2937','stroke-width':1.3},g); }},
   block:{cat:'Geräte',label:'Gerät (SPS/FU/Netzteil …)',w:70,h:50,
     ports:[{x:10,y:0},{x:35,y:0},{x:60,y:0},{x:10,y:50},{x:35,y:50},{x:60,y:50}],
     draw:g=>{ mk('rect',{x:0,y:0,width:70,height:50,fill:'#fff',stroke:'#1f2937','stroke-width':1.6},g);
       [10,35,60].forEach(x=>{ line(g,x,-6,x,0); line(g,x,50,x,56); }); }},
-  gleichrichter:{cat:'Geräte',label:'Gleichrichter',w:40,h:40,ports:[{x:20,y:0},{x:0,y:20},{x:20,y:40},{x:40,y:20}],
+  // AC-Eingang oben+links (L,N), DC-Ausgang unten+rechts (L+,M) -- Reihenfolge muss zu den
+  // Port-Indizes 0-3 passen, die computeSimOnce() für die DC+/DC--Einspeisung erwartet.
+  gleichrichter:{cat:'Geräte',label:'Gleichrichter',w:40,h:40,
+    ports:[{x:20,y:0,l:'L'},{x:0,y:20,l:'N'},{x:20,y:40,l:'L+'},{x:40,y:20,l:'M'}],
     draw:g=>{ mk('circle',{cx:20,cy:20,r:19,fill:'#fff',stroke:'#1f2937','stroke-width':1.6},g);
       line(g,8,8,32,32); line(g,8,32,32,8);
       mk('polygon',{points:'12,12 12,28 26,20',fill:'#1f2937'},g); }},
+  frequenzumrichter:{cat:'Geräte',label:'Frequenzumrichter',w:80,h:70,
+    ports:[{x:12,y:0,l:'L1'},{x:35,y:0,l:'L2'},{x:58,y:0,l:'L3'},{x:75,y:0,l:'PE'},
+           {x:12,y:70,l:'U'},{x:35,y:70,l:'V'},{x:58,y:70,l:'W'},{x:75,y:70,l:'PE'}],
+    draw:(g,inst)=>{
+      const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
+      const on = (simMode && inst) ? s.enabled!==false : true;
+      [12,35,58,75].forEach(x=>{ line(g,x,0,x,6); line(g,x,64,x,70); });
+      mk('rect',{x:2,y:6,width:76,height:58,fill:on?'#eef2ff':'#f3f4f6',stroke:'#4338ca','stroke-width':1.4,rx:3},g);
+      mk('text',{x:40,y:32,'text-anchor':'middle','font-size':13,fill:'#4338ca','font-weight':'bold'},g).textContent='FU';
+      mk('text',{x:40,y:44,'text-anchor':'middle','font-size':7,fill:'#6366f1'},g).textContent='3~';
+      mk('circle',{cx:70,cy:14,r:3,fill:(simMode&&inst)?(on?'#22c55e':'#9ca3af'):'#9ca3af'},g);
+    }},
+  // Vereinfachtes SPS-Abbild: 4 Eingänge (nur Anschlusspunkte, keine Ablaufsteuerung
+  // simuliert) + 4 potentialfreie Relais-Ausgänge, die im Sim-Modus einzeln antippbar sind
+  // (Klickzone = welcher Ausgang) -- steht stellvertretend dafür, dass "das Programm" diesen
+  // Ausgang geschaltet hat.
+  sps:{cat:'Geräte',label:'SPS 230V (4 In / 4 Relais-Out)',w:140,h:90,
+    ports:[{x:15,y:0,l:'I1'},{x:45,y:0,l:'I2'},{x:75,y:0,l:'I3'},{x:105,y:0,l:'I4'},
+           {x:10,y:90,l:'Q1'},{x:25,y:90,l:''},{x:45,y:90,l:'Q2'},{x:60,y:90,l:''},
+           {x:80,y:90,l:'Q3'},{x:95,y:90,l:''},{x:115,y:90,l:'Q4'},{x:130,y:90,l:''},
+           {x:0,y:30,l:'L'},{x:0,y:60,l:'N'}],
+    draw:(g,inst)=>{
+      const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
+      const q = s.q || [false,false,false,false];
+      [15,45,75,105].forEach(x=>line(g,x,0,x,8));
+      line(g,0,30,6,30); line(g,0,60,6,60);
+      mk('rect',{x:6,y:8,width:128,height:74,fill:'#fff',stroke:'#374151','stroke-width':1.4,rx:3},g);
+      mk('text',{x:70,y:26,'text-anchor':'middle','font-size':11,fill:'#374151','font-weight':'bold'},g).textContent='SPS';
+      mk('text',{x:70,y:38,'text-anchor':'middle','font-size':7,fill:'#6b7280'},g).textContent='230V AC';
+      [[10,25],[45,60],[80,95],[115,130]].forEach(([xa,xb],i)=>{
+        const on = q[i];
+        const col = (simMode&&inst) ? (on?'#16a34a':'#1f2937') : '#1f2937';
+        line(g,xa,70,xa,90); line(g,xb,70,xb,90);
+        dot(g,xa,70); dot(g,xb,70);
+        if (on) line(g,xa,70,xb,70,col,1.8); else line(g,xa,70,xa+4,66,col,1.6);
+        mk('text',{x:(xa+xb)/2,y:6,'text-anchor':'middle','font-size':7,fill:'#dc2626'},g).textContent='Q'+(i+1);
+      });
+    }},
+  sps24:{cat:'Geräte',label:'SPS 24VDC (4 In / 4 Relais-Out)',w:140,h:90,
+    ports:[{x:15,y:0,l:'I1'},{x:45,y:0,l:'I2'},{x:75,y:0,l:'I3'},{x:105,y:0,l:'I4'},
+           {x:10,y:90,l:'Q1'},{x:25,y:90,l:''},{x:45,y:90,l:'Q2'},{x:60,y:90,l:''},
+           {x:80,y:90,l:'Q3'},{x:95,y:90,l:''},{x:115,y:90,l:'Q4'},{x:130,y:90,l:''},
+           {x:0,y:30,l:'L+'},{x:0,y:60,l:'M'}],
+    draw:(g,inst)=>{
+      const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
+      const q = s.q || [false,false,false,false];
+      [15,45,75,105].forEach(x=>line(g,x,0,x,8));
+      line(g,0,30,6,30); line(g,0,60,6,60);
+      mk('rect',{x:6,y:8,width:128,height:74,fill:'#fff',stroke:'#374151','stroke-width':1.4,rx:3},g);
+      mk('text',{x:70,y:26,'text-anchor':'middle','font-size':11,fill:'#374151','font-weight':'bold'},g).textContent='SPS';
+      mk('text',{x:70,y:38,'text-anchor':'middle','font-size':7,fill:'#6b7280'},g).textContent='24V DC';
+      [[10,25],[45,60],[80,95],[115,130]].forEach(([xa,xb],i)=>{
+        const on = q[i];
+        const col = (simMode&&inst) ? (on?'#16a34a':'#1f2937') : '#1f2937';
+        line(g,xa,70,xa,90); line(g,xb,70,xb,90);
+        dot(g,xa,70); dot(g,xb,70);
+        if (on) line(g,xa,70,xb,70,col,1.8); else line(g,xa,70,xa+4,66,col,1.6);
+        mk('text',{x:(xa+xb)/2,y:6,'text-anchor':'middle','font-size':7,fill:'#dc2626'},g).textContent='Q'+(i+1);
+      });
+    }},
+  dcquelle:{cat:'Geräte',label:'DC-Spannungsquelle',w:40,h:50,ports:[{x:12,y:50,l:'+'},{x:28,y:50,l:'–'}],
+    draw:(g,inst)=>{
+      line(g,12,50,12,40); line(g,28,50,28,40);
+      mk('rect',{x:2,y:6,width:36,height:34,fill:'#fff',stroke:'#1f2937','stroke-width':1.4,rx:3},g);
+      mk('text',{x:20,y:20,'text-anchor':'middle','font-size':12,fill:'#dc2626','font-weight':'bold'},g).textContent='+';
+      mk('text',{x:20,y:34,'text-anchor':'middle','font-size':12,fill:'#1f2937','font-weight':'bold'},g).textContent='–';
+      dot(g,12,40); dot(g,28,40);
+    }},
   junction:{cat:'Verbindungen',label:'Verbindungspunkt',w:10,h:10,ports:[{x:5,y:5}],
     draw:g=>{ dot(g,5,5,'#1f2937'); }},
   pe:{cat:'Verbindungen',label:'Schutzerde (PE)',w:20,h:26,ports:[{x:10,y:0}],
@@ -730,7 +884,7 @@ function isInstActive(inst){
     case 'ls1': case 'ls3': case 'rcbo': case 'rcd2': case 'rcd4': return s.on!==false && !s.tripped;
     case 'lampe': case 'spot': case 'steckdose': case 'motor1': {
       const p0=gp(0), p1=gp(1);
-      return !!((p0&ANY_L)&&(p1&POT.N) || (p1&ANY_L)&&(p0&POT.N));
+      return !!((p0&ANY_SRC)&&(p1&ANY_REF) || (p1&ANY_SRC)&&(p0&ANY_REF));
     }
     case 'motor': {
       const pu=gp(0),pv=gp(1),pw=gp(2);
@@ -741,6 +895,15 @@ function isInstActive(inst){
       const lowOn = !!((gp(0)&ANY_L)&&(gp(1)&ANY_L)&&(gp(2)&ANY_L));
       const highOn = !!((gp(3)&ANY_L)&&(gp(4)&ANY_L)&&(gp(5)&ANY_L));
       return lowOn || highOn;
+    }
+    case 'schuetz3': return coilOnForLabel(inst.label);
+    case 'frequenzumrichter': return s.enabled!==false;
+    case 'stromstoss': return !!s.latched;
+    case 'wechsel_kl': return true; // Wechselschalter leitet immer irgendwohin
+    case 'serienschalter': return s.closed1!==false || s.closed2!==false;
+    case 'cee16_dose': case 'cee16_kupplung': {
+      const p0=gp(0), p3=gp(3);
+      return !!((p0&ANY_L)&&(p3&POT.N));
     }
     default: return false;
   }
