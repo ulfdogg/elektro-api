@@ -1337,11 +1337,27 @@ const AP_MAP = {
   kontakt_no: { to:'contact_no', portMap:{0:0,1:1} },
   kontakt_nc: { to:'contact_nc', portMap:{0:0,1:1} },
   kontakt_led: { to:'lampe', portMap:{0:0,1:1} },
+  // Vereinfachtes SPS-Symbol hat nur 4 statt 12 Eingänge und 4 statt 8 Relaisausgänge --
+  // I5-I12 und Q5-Q8 werden beim Import stillschweigend nicht übernommen.
+  sps:   { to:'sps',   portMap:{0:0,1:1,2:2,3:3,12:4,13:5,14:6,15:7,16:8,17:9,18:10,19:11,28:12,29:13} },
+  sps24: { to:'sps24', portMap:{0:0,1:1,2:2,3:3,12:4,13:5,14:6,15:7,16:8,17:9,18:10,19:11,28:12,29:13} },
 };
 const AP_PASSTHROUGH = new Set(['klemme','klemme25','klemme25_twin','knotenpunkt','wago2','wago3','wago5','nblock','peblock']);
 // cable3/cable5 sind KEIN einzelner Knoten (jede Ader ist ein eigener, unabhängiger Leiter!)
 // -- Adernpaare West<->Ost werden separat durchverbunden, sonst würden L/N/PE kurzgeschlossen.
 const AP_CABLE_PAIRS = { cable3: [[0,3],[1,4],[2,5]], cable5: [[0,5],[1,6],[2,7],[3,8],[4,9]] };
+// Welche Aufbauplan-Ports eine erkennbare Versorgungsrolle tragen (Text-Label im Aufbauplan,
+// siehe D-Tabelle in index.html) -- nur EIN generisches "L" (einpolige Geräte, Phase im
+// Aufbauplan nicht unterschieden) wird auf L1 gemapt. Damit lassen sich Union-Find-Gruppen,
+// die tatsächlich eine gemeinsame Versorgung sind, als echte Sammelschiene abbilden statt
+// als Punkt-zu-Punkt-Sternverdrahtung -- so wie jeder andere Stromlaufplan hier aufgebaut ist.
+const AP_ROLE = {
+  ls3:{0:'L1',1:'L2',2:'L3'}, rcd2:{0:'L1',1:'N'}, rcd4:{0:'L1',1:'L2',2:'L3',3:'N'}, rcbo:{0:'L1',2:'N'},
+  lampe:{0:'L1',1:'N',2:'PE'}, spot:{0:'L1',1:'N'},
+  schalter:{0:'L1'}, taster:{0:'L1'}, notaus:{0:'L1'}, wechsel:{0:'L1'}, wechsel_kl:{0:'L1',3:'N'}, serienschalter:{0:'L1'},
+  steckdose:{0:'L1',1:'PE',2:'N'}, cee16_dose:{0:'L1',1:'L2',2:'L3',3:'N',4:'PE'}, cee16_kupplung:{0:'L1',1:'L2',2:'L3',3:'N',4:'PE'},
+  frequenzumrichter:{0:'L1',1:'L2',2:'L3',3:'PE'}, gleichrichter:{0:'L1',1:'N'}, bewegungsmelder:{0:'L1',1:'N'}, sps:{28:'L1',29:'N'},
+};
 
 function buildFromAufbauplan(ap){
   const comps = ap.comps||[], apWires = ap.wires||[];
@@ -1373,11 +1389,11 @@ function buildFromAufbauplan(ap){
 
   const newInsts = []; let nid=1;
   const portLink = {}; // 'apCompId:apPort' -> {inst, port}
-  const COLS=6, COLW=140, ROWH=140;
+  const COLS=6, COLW=140, ROWH=140, GRID_Y0=180; // Platz oben für bis zu 5 Sammelschienen
   function addInst(type, label){
     const inst = { id: nid++, type, x:0, y:0, label: label||'' };
     const i = newInsts.length;
-    inst.x = 60 + (i%COLS)*COLW; inst.y = 60 + Math.floor(i/COLS)*ROWH;
+    inst.x = 60 + (i%COLS)*COLW; inst.y = GRID_Y0 + Math.floor(i/COLS)*ROWH;
     newInsts.push(inst);
     return inst;
   }
@@ -1420,15 +1436,53 @@ function buildFromAufbauplan(ap){
     });
   });
 
-  // Pro Union-Find-Gruppe alle übernommenen Ports per Sternverdrahtung verbinden.
+  // Versorgungsrolle (L1/L2/L3/N/PE) jedes Union-Find-Wurzelknotens ermitteln: nur Ports mit
+  // bekannter Rolle (AP_ROLE) zählen. Eine Gruppe wird NUR dann als Sammelschiene gezeichnet,
+  // wenn ALLE ihre Rollen-Hinweise übereinstimmen (sonst -- z.B. wenn irrtümlich L und N in
+  // derselben Gruppe landen -- sicherheitshalber normale Punkt-zu-Punkt-Verdrahtung).
+  const roleOf = {};
+  comps.forEach(c=>{
+    const roles = AP_ROLE[c.type];
+    if (roles) Object.keys(roles).forEach(pi=>{ roleOf[c.id+':'+pi] = roles[pi]; });
+  });
+  const rootRoles = {};
+  Object.keys(roleOf).forEach(rk=>{
+    const root = find(ensure(rk));
+    (rootRoles[root] = rootRoles[root] || new Set()).add(roleOf[rk]);
+  });
+
+  // Pro Union-Find-Gruppe: entweder eine echte Sammelschiene (Vorlage wie in jedem anderen
+  // Stromlaufplan hier: L1/L2/L3/N/PE als durchgehende Linie, Bauteile hängen per railConn
+  // daran) oder, falls keine eindeutige Rolle erkennbar ist, normale Punkt-zu-Punkt-Verdrahtung.
   const groups = {};
   Object.keys(portLink).forEach(key=>{
     const root = find(ensure(key));
     (groups[root] = groups[root]||[]).push(key);
   });
   const newWires = []; let wid2=1;
-  Object.values(groups).forEach(keys=>{
-    if (keys.length<2) return;
+  const newRails = []; let ridN=1;
+  const newRailConns = []; let rcidN=1;
+  let railY = 20;
+  Object.entries(groups).forEach(([root, keys])=>{
+    if (keys.length<2) return; // unverdrahteter Einzelport -- nichts zu tun
+    const roles = rootRoles[root];
+    // Nur bei >=3 beteiligten GERÄTEN als Sammelschiene behandeln: eine simple Reihenschaltung
+    // Schalter->Lampe hat z.B. auch eine erkennbare Rolle (L1 am Schaltereingang), ist aber
+    // keine geteilte Sammelschiene, sondern eine gewöhnliche Punkt-zu-Punkt-Verbindung. Eine
+    // ECHTE Schiene erkennt man daran, dass mehrere UNTERSCHIEDLICHE Geräte daran hängen.
+    const distinctInsts = new Set(keys.map(k=>portLink[k].inst));
+    if (roles && roles.size===1 && distinctInsts.size>=3) {
+      const rail = { id: ridN++, type:[...roles][0], y:railY, x1:20, x2:20+COLS*COLW };
+      railY += 20;
+      newRails.push(rail);
+      keys.forEach(k=>{
+        const p = portLink[k];
+        const inst = newInsts.find(i=>i.id===p.inst);
+        const port = SYM[inst.type].ports[p.port];
+        newRailConns.push({ id: rcidN++, fid:p.inst, fp:p.port, rail:rail.id, rx: inst.x + (port?port.x:0) });
+      });
+      return;
+    }
     const a = portLink[keys[0]];
     keys.slice(1).forEach(k=>{
       const b = portLink[k];
@@ -1436,7 +1490,8 @@ function buildFromAufbauplan(ap){
     });
   });
 
-  return { insts:newInsts, wires:newWires, rails:[], railConns:[], iid:nid, wid:wid2,
+  return { insts:newInsts, wires:newWires, rails:newRails, railConns:newRailConns,
+    iid:nid, wid:wid2, rid:ridN, rcid:rcidN,
     _summary:{ imported:importedCount, skipped } };
 }
 
