@@ -208,7 +208,6 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <select class="t-btn" id="tpl-select" onchange="loadTemplate(this.value,this)" title="Vorlage laden"><option value="">📋 Vorlage…</option></select>
       <a href="/stromlaufplan" class="t-btn" style="text-decoration:none" title="Leerer Stromlaufplan-Editor (Schaltzeichen nach Norm zeichnen)">📐 Stromlaufplan</a>
       <button class="t-btn" onclick="showAsStromlaufplan()" title="Aktuellen Aufbauplan (unabhängig vom letzten Speicherstand) als Stromlaufplan-Entwurf anzeigen">🔄 Als Stromlaufplan</button>
-      <button class="t-btn" onclick="arrangeAlongCeeRails()" title="Frei stehende Bauteile (Schalter, Leuchten, Steckdosen …), die mit einer CEE-Kupplung verdrahtet sind, untereinander zwischen den Schienen anordnen. DIN-Schienen-Geräte (LS/RCD/Klemmen) bleiben unverändert. Rückgängig mit Strg+Z.">↕ CEE-Kette anordnen</button>
       <span style="flex:1"></span>
       <span id="es-username" style="font-size:11px;color:#9ca3af;padding:0 6px;white-space:nowrap"></span>
       <a id="es-admin-link" href="/admin.html" class="t-btn" style="display:none;text-decoration:none;color:#93c5fd">🛠 Admin</a>
@@ -4618,59 +4617,6 @@ function showAsStromlaufplan() {
     return;
   }
   window.open('/stromlaufplan?import=1', '_blank');
-}
-
-// Ordnet frei stehende (nicht auf einer Hutschiene montierte) Bauteile, die über Leitungen
-// mit einer CEE-Kupplung zusammenhängen, untereinander zwischen den CEE-Sammelschienen an.
-// DIN-Schienen-Geräte (LS/RCD/Klemmen/SPS/…) bleiben unverändert -- die sitzen physisch
-// nebeneinander auf der Hutschiene, "untereinander" ergibt für die keinen Sinn. Betrifft nur
-// echte, wirklich verdrahtete Funktionsgruppen (Bauteil-Graph über die Leitungen, unabhängig
-// vom aktuellen Schaltzustand). Rückgängig über die normale Undo-Historie.
-function arrangeAlongCeeRails() {
-  const ceeComps = comps.filter(c => c.type === 'cee16_kupplung');
-  if (!ceeComps.length) { alert('Keine CEE-Kupplung im Plan.'); return; }
-
-  const adj = {};
-  wires.forEach(w => {
-    (adj[w.fid] = adj[w.fid] || new Set()).add(w.tid);
-    (adj[w.tid] = adj[w.tid] || new Set()).add(w.fid);
-  });
-  const visited = new Set(ceeComps.map(c => c.id));
-  const queue = [...visited];
-  while (queue.length) {
-    const id = queue.shift();
-    (adj[id] || new Set()).forEach(nid => { if (!visited.has(nid)) { visited.add(nid); queue.push(nid); } });
-  }
-
-  const movable = comps.filter(c =>
-    visited.has(c.id) && c.type !== 'cee16_kupplung' &&
-    !c.def.isDINDevice && !c.def.isDINRail && !c.def.isContainer && !c.def.isContact && !c.def.isActuator
-  );
-  if (!movable.length) {
-    alert('Keine frei stehenden Bauteile (Schalter, Leuchten, Steckdosen …) an dieser CEE-Kupplung gefunden.');
-    return;
-  }
-
-  pushHistory();
-  movable.sort((a,b) => a.x - b.x); // bisherige Links-nach-rechts-Reihenfolge wird oben-nach-unten
-
-  const cee = ceeComps[0];
-  const ceeCx = cee.x + cee.def.w/2;
-  const startY = cee.y + cee.def.h + 60;
-  const gapY = 70;
-  movable.forEach((c, i) => {
-    c.x = Math.round(ceeCx - c.def.w/2);
-    c.y = Math.round(startY + i*gapY);
-  });
-
-  // Manuelle Leitungsführung an den verschobenen Bauteilen verwerfen, damit sich die
-  // Leitungen neu (gerade zu den neuen Positionen) einreihen statt durch alte Biegepunkte.
-  const movedIds = new Set(movable.map(c => c.id));
-  wires.forEach(w => {
-    if (movedIds.has(w.fid) || movedIds.has(w.tid)) { delete w.pts; w.manual = false; }
-  });
-
-  render();
 }
 
 let _asTimer = null;
