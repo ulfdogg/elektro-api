@@ -71,6 +71,7 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;ba
     <button class="bar-btn" onclick="doLoad()">📂 Datei</button>
     <button class="bar-btn danger" onclick="doDeleteSel()">✕ Löschen</button>
     <button class="bar-btn" id="btn-sim" onclick="toggleSim()">⚡ Simulation</button>
+    <button class="bar-btn" onclick="arrangeStromlaufplan()" title="Über Leitungen verbundene Bauteile mit Schienenanschluss untereinander zwischen den Schienen anordnen">↕ Anordnen</button>
     <span class="hint" id="normal-hint">Symbol ziehen oder antippen = platzieren · Port→Port klicken = verbinden · Doppelklick = beschriften · Entf = löschen</span>
     <span class="hint" id="sim-hint" style="display:none;color:#fbbf24">SIM: Wechselschalter anklicken zum Umschalten</span>
   </div>
@@ -672,6 +673,89 @@ function doNew(){
   if (!insts.length && !wires.length && !rails.length) return;
   if (!confirm('Zeichnung wirklich leeren?')) return;
   insts=[]; wires=[]; rails=[]; railConns=[]; iid=1; wid=1; rid=1; rcid=1;
+  sel=null; selWire=null; selRail=null; selRailConn=null;
+  render(); scheduleAutoSave();
+}
+
+// Ordnet über Leitungen zusammenhängende Bauteil-Ketten, die einen Schienenanschluss haben,
+// untereinander zwischen den Schienen an -- die Vorlage, die jeder Stromlaufplan hier
+// verwendet (Bauteile hängen senkrecht zwischen Versorgung oben/unten). Für jede Kette wird
+// die JEWEILS verbindende Anschlussstelle exakt auf die Ziel-X ausgerichtet, damit die
+// Leitungen gerade werden (Wires werden hier immer live aus den aktuellen Portpositionen
+// gezeichnet, keine manuelle Wegführung wie im Aufbauplan -- daher reicht reines Verschieben).
+function arrangeStromlaufplan(){
+  if (!insts.length) { alert('Keine Bauteile im Plan.'); return; }
+
+  const adj = {};
+  wires.forEach(w=>{
+    (adj[w.fid]=adj[w.fid]||new Set()).add(w.tid);
+    (adj[w.tid]=adj[w.tid]||new Set()).add(w.fid);
+  });
+
+  // Bauteil-Cluster über die Leitungen bilden (Union-Find).
+  const parent = {};
+  const find = x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  insts.forEach(i=> parent[i.id]=i.id);
+  wires.forEach(w=>{ const a=find(w.fid), b=find(w.tid); if(a!==b) parent[b]=a; });
+  const clusters = {};
+  insts.forEach(i=>{ const r=find(i.id); (clusters[r]=clusters[r]||[]).push(i.id); });
+
+  let moved = 0;
+  Object.values(clusters).forEach(memberIds=>{
+    const rcs = railConns.filter(rc=>memberIds.includes(rc.fid));
+    if (!rcs.length) return; // kein Schienenanschluss -> bleibt unangetastet
+
+    // Oberste Schiene zuerst als Kettenanfang (kleinstes rail.y).
+    let best = rcs[0], bestRail = rails.find(r=>r.id===best.rail);
+    rcs.forEach(rc=>{
+      const rail = rails.find(r=>r.id===rc.rail);
+      if (rail && bestRail && rail.y < bestRail.y) { best = rc; bestRail = rail; }
+    });
+    const anchorInst = insts.find(i=>i.id===best.fid);
+    if (!anchorInst || !bestRail) return;
+    const targetX = best.rx;
+
+    // Kette per BFS ab dem Anker aufbauen, dabei je Schritt merken, über welchen Port das
+    // Bauteil an sein Vorgänger-Bauteil angebunden ist -- genau dieser Port wird nachher auf
+    // targetX ausgerichtet, damit die Verbindung gerade verläuft.
+    const order = [{id:best.fid, portIdx:best.fp}];
+    const seen = new Set([best.fid]);
+    const queue = [best.fid];
+    while (queue.length) {
+      const curId = queue.shift();
+      wires.forEach(w=>{
+        let nid=null, nPort=null;
+        if (w.fid===curId && !seen.has(w.tid)) { nid=w.tid; nPort=w.tp; }
+        else if (w.tid===curId && !seen.has(w.fid)) { nid=w.fid; nPort=w.fp; }
+        if (nid!=null) { seen.add(nid); order.push({id:nid, portIdx:nPort}); queue.push(nid); }
+      });
+    }
+
+    const gapY = 90;
+    let y = bestRail.y + 50;
+    order.forEach(({id,portIdx})=>{
+      const inst = insts.find(i=>i.id===id);
+      if (!inst) return;
+      const s = SYM[inst.type];
+      const port = s.ports[portIdx] || {x: s.w/2};
+      inst.x = Math.round(targetX - port.x);
+      inst.y = Math.round(y);
+      y += gapY;
+      moved++;
+    });
+
+    // Jeden Schienenanschluss auf die TATSÄCHLICHE (neue) Weltposition SEINES EIGENEN Ports
+    // ausrichten -- nicht pauschal auf targetX, denn ein Bauteil kann mehrere Schienenanschlüsse
+    // auf unterschiedlichen Ports haben (z.B. Wechselschalter: C an einer Schiene, Pos.2 an
+    // einer anderen), die nicht zwangsläufig auf derselben X liegen wie der Ketten-Anschlusspunkt.
+    rcs.forEach(rc=>{
+      const inst = insts.find(i=>i.id===rc.fid);
+      const port = inst && SYM[inst.type].ports[rc.fp];
+      if (inst && port) rc.rx = inst.x + port.x;
+    });
+  });
+
+  if (!moved) { alert('Keine Bauteile mit Schienenanschluss gefunden.'); return; }
   sel=null; selWire=null; selRail=null; selRailConn=null;
   render(); scheduleAutoSave();
 }
