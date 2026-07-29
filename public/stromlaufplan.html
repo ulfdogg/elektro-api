@@ -71,6 +71,7 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;ba
     <button class="bar-btn" onclick="doLoad()">📂 Datei</button>
     <button class="bar-btn danger" onclick="doDeleteSel()">✕ Löschen</button>
     <button class="bar-btn" id="btn-sim" onclick="toggleSim()">⚡ Simulation</button>
+    <button class="bar-btn" onclick="arrangeStromlaufplanButton()" title="Über Leitungen verbundene Bauteile mit Schienenanschluss untereinander zwischen den Schienen anordnen">↕ Anordnen</button>
     <span class="hint" id="normal-hint">Symbol ziehen oder antippen = platzieren · Port→Port klicken = verbinden · Doppelklick = beschriften · Entf = löschen</span>
     <span class="hint" id="sim-hint" style="display:none;color:#fbbf24">SIM: Taster/Schalter/Sicherungen anklicken zum Schalten · Spulen-Beschriftung (z.B. "K1") muss mit den zugehörigen Kontakten übereinstimmen</span>
   </div>
@@ -1258,6 +1259,98 @@ function doNew(){
   render(); scheduleAutoSave();
 }
 
+// Ordnet über Leitungen zusammenhängende Bauteil-Ketten, die einen Schienenanschluss haben,
+// untereinander zwischen den Schienen an -- die Vorlage, die jeder Stromlaufplan hier
+// verwendet (Bauteile hängen senkrecht zwischen Versorgung oben/unten). Für jede Kette wird
+// die JEWEILS verbindende Anschlussstelle exakt auf die Ziel-X ausgerichtet, damit die
+// Leitungen gerade werden (Wires werden hier immer live aus den aktuellen Portpositionen
+// gezeichnet, keine manuelle Wegführung wie im Aufbauplan -- daher reicht reines Verschieben).
+// Wird sowohl über den Button als auch automatisch direkt nach einem Aufbauplan-Import
+// aufgerufen, damit der Entwurf schon beim Erstellen sauber aussieht.
+function arrangeStromlaufplan(){
+  if (!insts.length) { alert('Keine Bauteile im Plan.'); return; }
+
+  const adj = {};
+  wires.forEach(w=>{
+    (adj[w.fid]=adj[w.fid]||new Set()).add(w.tid);
+    (adj[w.tid]=adj[w.tid]||new Set()).add(w.fid);
+  });
+
+  // Bauteil-Cluster über die Leitungen bilden (Union-Find).
+  const parent = {};
+  const find = x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  insts.forEach(i=> parent[i.id]=i.id);
+  wires.forEach(w=>{ const a=find(w.fid), b=find(w.tid); if(a!==b) parent[b]=a; });
+  const clusters = {};
+  insts.forEach(i=>{ const r=find(i.id); (clusters[r]=clusters[r]||[]).push(i.id); });
+
+  let moved = 0;
+  Object.values(clusters).forEach(memberIds=>{
+    const rcs = railConns.filter(rc=>memberIds.includes(rc.fid));
+    if (!rcs.length) return; // kein Schienenanschluss -> bleibt unangetastet
+
+    // Oberste Schiene zuerst als Kettenanfang (kleinstes rail.y).
+    let best = rcs[0], bestRail = rails.find(r=>r.id===best.rail);
+    rcs.forEach(rc=>{
+      const rail = rails.find(r=>r.id===rc.rail);
+      if (rail && bestRail && rail.y < bestRail.y) { best = rc; bestRail = rail; }
+    });
+    const anchorInst = insts.find(i=>i.id===best.fid);
+    if (!anchorInst || !bestRail) return;
+    const targetX = best.rx;
+
+    // Kette per BFS ab dem Anker aufbauen, dabei je Schritt merken, über welchen Port das
+    // Bauteil an sein Vorgänger-Bauteil angebunden ist -- genau dieser Port wird nachher auf
+    // targetX ausgerichtet, damit die Verbindung gerade verläuft.
+    const order = [{id:best.fid, portIdx:best.fp}];
+    const seen = new Set([best.fid]);
+    const queue = [best.fid];
+    while (queue.length) {
+      const curId = queue.shift();
+      wires.forEach(w=>{
+        let nid=null, nPort=null;
+        if (w.fid===curId && !seen.has(w.tid)) { nid=w.tid; nPort=w.tp; }
+        else if (w.tid===curId && !seen.has(w.fid)) { nid=w.fid; nPort=w.fp; }
+        if (nid!=null) { seen.add(nid); order.push({id:nid, portIdx:nPort}); queue.push(nid); }
+      });
+    }
+
+    const gapY = 90;
+    let y = bestRail.y + 50;
+    order.forEach(({id,portIdx})=>{
+      const inst = insts.find(i=>i.id===id);
+      if (!inst) return;
+      const s = SYM[inst.type];
+      const port = s.ports[portIdx] || {x: s.w/2};
+      inst.x = Math.round(targetX - port.x);
+      inst.y = Math.round(y);
+      y += gapY;
+      moved++;
+    });
+
+    // Jeden Schienenanschluss auf die TATSÄCHLICHE (neue) Weltposition SEINES EIGENEN Ports
+    // ausrichten -- nicht pauschal auf targetX, denn ein Bauteil kann mehrere Schienenanschlüsse
+    // auf unterschiedlichen Ports haben (z.B. Wechselschalter: C an einer Schiene, Pos.2 an
+    // einer anderen), die nicht zwangsläufig auf derselben X liegen wie der Ketten-Anschlusspunkt.
+    rcs.forEach(rc=>{
+      const inst = insts.find(i=>i.id===rc.fid);
+      const port = inst && SYM[inst.type].ports[rc.fp];
+      if (inst && port) rc.rx = inst.x + port.x;
+    });
+  });
+
+  return moved;
+}
+// Button-Handler: gibt Rückmeldung, falls nichts zu tun war (der automatische Aufruf direkt
+// nach dem Aufbauplan-Import bleibt dagegen stumm, da dort schon eine eigene Zusammenfassung
+// angezeigt wird).
+function arrangeStromlaufplanButton(){
+  const moved = arrangeStromlaufplan();
+  if (!moved) { alert('Keine Bauteile mit Schienenanschluss gefunden.'); return; }
+  sel=null; selWire=null; selRail=null; selRailConn=null;
+  render(); scheduleAutoSave();
+}
+
 function buildSaveData(){ return { insts, wires, rails, railConns, iid, wid, rid, rcid }; }
 function doSave(){
   const blob = new Blob([JSON.stringify(buildSaveData(),null,2)],{type:'application/json'});
@@ -1349,8 +1442,18 @@ const AP_CABLE_PAIRS = { cable3: [[0,3],[1,4],[2,5]], cable5: [[0,5],[1,6],[2,7]
 // Aufbauplan nicht unterschieden) wird auf L1 gemapt. Damit lassen sich Union-Find-Gruppen,
 // die tatsächlich eine gemeinsame Versorgung sind, als echte Sammelschiene abbilden statt
 // als Punkt-zu-Punkt-Sternverdrahtung -- so wie jeder andere Stromlaufplan hier aufgebaut ist.
+// Rollen auf BEIDEN Seiten von Schutzorganen (Ein- UND Ausgang) markieren -- ein Bus kann
+// genauso gut an der Ausgangsseite entstehen (z.B. RCD-Ausgang bridgt einzeln zu mehreren
+// LS-Eingängen) wie an der Eingangsseite (gemeinsame Einspeisung mehrerer Geräte). Das ist
+// jetzt gefahrlos möglich, weil eine Gruppe zusätzlich eine ECHTE Verzweigung (groupHasJunction,
+// siehe buildFromAufbauplan) braucht, um als Schiene zu gelten -- eine bloße Reihenschaltung
+// wird dadurch nicht mehr fälschlich als Bus erkannt, egal wie großzügig hier markiert wird.
 const AP_ROLE = {
-  ls3:{0:'L1',1:'L2',2:'L3'}, rcd2:{0:'L1',1:'N'}, rcd4:{0:'L1',1:'L2',2:'L3',3:'N'}, rcbo:{0:'L1',2:'N'},
+  ls1:{0:'L1',1:'L1'},
+  ls3:{0:'L1',1:'L2',2:'L3',3:'L1',4:'L2',5:'L3'},
+  rcd2:{0:'L1',1:'N',2:'L1',3:'N'},
+  rcd4:{0:'L1',1:'L2',2:'L3',3:'N',4:'L1',5:'L2',6:'L3',7:'N'},
+  rcbo:{0:'L1',1:'L1',2:'N',3:'N'},
   lampe:{0:'L1',1:'N',2:'PE'}, spot:{0:'L1',1:'N'},
   schalter:{0:'L1'}, taster:{0:'L1'}, notaus:{0:'L1'}, wechsel:{0:'L1'}, wechsel_kl:{0:'L1',3:'N'}, serienschalter:{0:'L1'},
   steckdose:{0:'L1',1:'PE',2:'N'}, cee16_dose:{0:'L1',1:'L2',2:'L3',3:'N',4:'PE'}, cee16_kupplung:{0:'L1',1:'L2',2:'L3',3:'N',4:'PE'},
@@ -1449,6 +1552,32 @@ function buildFromAufbauplan(ap){
     (rootRoles[root] = rootRoles[root] || new Set()).add(roleOf[rk]);
   });
 
+  // Grad (Anzahl direkt anliegender Leitungen) je Port zählen, um eine ECHTE Sammelschiene
+  // (mehrere Leitungen laufen an einem Punkt zusammen, z.B. RCD-Ausgang bridgt zu 3 LS) von
+  // einer bloßen Reihenschaltung zu unterscheiden, bei der rein zufällig mehrere Geräte-Ports
+  // in derselben Kette eine Rollen-Kennzeichnung tragen (z.B. LS -> CEE-Kupplung -> Schalter
+  // hintereinander -- das ist kein gemeinsamer Bus, nur weil 2 von 3 Ports "L1" markiert sind).
+  const portDegree = {};
+  apWires.forEach(w=>{
+    portDegree[w.fid+':'+w.fp] = (portDegree[w.fid+':'+w.fp]||0)+1;
+    portDegree[w.tid+':'+w.tp] = (portDegree[w.tid+':'+w.tp]||0)+1;
+  });
+  const groupHasJunction = {};
+  Object.keys(portDegree).forEach(pk=>{
+    if (portDegree[pk] >= 3) groupHasJunction[find(ensure(pk))] = true;
+  });
+  // Durchgangsbauteile (Klemme/WAGO/N-Block/PE-Block) sind per Definition bus-artig, auch wenn
+  // an jedem ihrer Ports einzeln nur eine Leitung hängt.
+  const groupHasPassthrough = {};
+  Object.keys(passthroughPorts).forEach(cid=>{
+    const anyPort = [...passthroughPorts[cid]][0];
+    if (anyPort!=null) {
+      const root = find(ensure(cid+':'+anyPort));
+      groupHasJunction[root] = true;
+      groupHasPassthrough[root] = true;
+    }
+  });
+
   // Pro Union-Find-Gruppe: entweder eine echte Sammelschiene (Vorlage wie in jedem anderen
   // Stromlaufplan hier: L1/L2/L3/N/PE als durchgehende Linie, Bauteile hängen per railConn
   // daran) oder, falls keine eindeutige Rolle erkennbar ist, normale Punkt-zu-Punkt-Verdrahtung.
@@ -1461,15 +1590,20 @@ function buildFromAufbauplan(ap){
   const newRails = []; let ridN=1;
   const newRailConns = []; let rcidN=1;
   let railY = 20;
+  const railGroupRoots = new Set();
   Object.entries(groups).forEach(([root, keys])=>{
     if (keys.length<2) return; // unverdrahteter Einzelport -- nichts zu tun
     const roles = rootRoles[root];
-    // Nur bei >=3 beteiligten GERÄTEN als Sammelschiene behandeln: eine simple Reihenschaltung
-    // Schalter->Lampe hat z.B. auch eine erkennbare Rolle (L1 am Schaltereingang), ist aber
-    // keine geteilte Sammelschiene, sondern eine gewöhnliche Punkt-zu-Punkt-Verbindung. Eine
-    // ECHTE Schiene erkennt man daran, dass mehrere UNTERSCHIEDLICHE Geräte daran hängen.
+    // Nur bei >=3 beteiligten GERÄTEN UND einer echten Verzweigung (mind. 3 Leitungen laufen an
+    // einem Punkt zusammen, oder ein Durchgangsbauteil ist beteiligt) als Sammelschiene
+    // behandeln: eine simple Reihenschaltung LS -> CEE-Kupplung -> Schalter hat z.B. auch
+    // durchgehend erkennbare Rollen (L1), ist aber KEINE geteilte Sammelschiene, sondern eine
+    // gewöhnliche Punkt-zu-Punkt-Verbindung -- eine ECHTE Schiene erkennt man daran, dass
+    // mehrere Leitungen an einem gemeinsamen Punkt zusammenlaufen, nicht nur daran, dass
+    // zufällig mehrere Geräte in derselben Kette rollenmarkierte Ports haben.
     const distinctInsts = new Set(keys.map(k=>portLink[k].inst));
-    if (roles && roles.size===1 && distinctInsts.size>=3) {
+    if (roles && roles.size===1 && distinctInsts.size>=3 && groupHasJunction[root]) {
+      railGroupRoots.add(root);
       const rail = { id: ridN++, type:[...roles][0], y:railY, x1:20, x2:20+COLS*COLW };
       railY += 20;
       newRails.push(rail);
@@ -1481,11 +1615,31 @@ function buildFromAufbauplan(ap){
       });
       return;
     }
-    const a = portLink[keys[0]];
-    keys.slice(1).forEach(k=>{
-      const b = portLink[k];
-      newWires.push({ id: wid2++, fid:a.inst, fp:a.port, tid:b.inst, tp:b.port });
-    });
+    if (groupHasPassthrough[root]) {
+      // Über eine Klemme/WAGO/N-Block/... vermittelte Gruppe: die einzelnen Original-Leitungen
+      // (A->Klemme, Klemme->B) haben keine direkten Entsprechungen im neuen Plan, weil die
+      // Klemme selbst nicht übernommen wird. Stattdessen sternförmig von einem Mitglied aus
+      // verbinden -- elektrisch identisch, auch wenn es visuell kein exaktes Abbild der
+      // ursprünglichen Verkabelung ist.
+      const a = portLink[keys[0]];
+      keys.slice(1).forEach(k=>{
+        const b = portLink[k];
+        newWires.push({ id: wid2++, fid:a.inst, fp:a.port, tid:b.inst, tp:b.port });
+      });
+    }
+  });
+
+  // Für Gruppen OHNE Durchgangsbauteil und OHNE Schiene: die Original-Leitungen 1:1 nachbauen,
+  // statt sie künstlich zu einem Stern von einem Mitglied aus neu zu verknüpfen -- sonst würde
+  // z.B. eine echte Kette LS -> CEE-Kupplung -> Schalter als Stern (LS->CEE UND LS->Schalter)
+  // erscheinen statt als Kette, weil beide "zufällig" im selben Union-Find-Knoten landen.
+  apWires.forEach(w=>{
+    const fk = w.fid+':'+w.fp, tk = w.tid+':'+w.tp;
+    const root = find(ensure(fk));
+    if (railGroupRoots.has(root) || groupHasPassthrough[root]) return; // schon behandelt
+    const a = portLink[fk], b = portLink[tk];
+    if (!a || !b) return; // eine Seite ist ein übersprungenes/nicht gemapptes Bauteil
+    newWires.push({ id: wid2++, fid:a.inst, fp:a.port, tid:b.inst, tp:b.port });
   });
 
   return { insts:newInsts, wires:newWires, rails:newRails, railConns:newRailConns,
@@ -1506,6 +1660,8 @@ function buildFromAufbauplan(ap){
         if (!hasExisting || confirm('Das ersetzt deinen aktuellen Stromlaufplan-Entwurf durch die Bauteile aus dem Aufbauplan. Fortfahren?')) {
           const converted = buildFromAufbauplan(JSON.parse(raw));
           importData(converted);
+          arrangeStromlaufplan(); // Bauteilketten mit Schienenanschluss gleich sauber anordnen
+          render(); scheduleAutoSave();
           const sk = Object.entries(converted._summary.skipped);
           let msg = converted._summary.imported + ' Bauteile aus dem Aufbauplan übernommen.';
           if (sk.length) msg += '\n\nOhne Schaltplan-Entsprechung übersprungen:\n' + sk.map(([t,n])=>'- '+t+' ('+n+'x)').join('\n');
