@@ -190,6 +190,29 @@ const SYM = {
       const ax=cx-hw-22, ay=(t1+t2)/2;
       drawActuatorLink(g, ax, ay, cx-hw, 'hand', col, true);
     }},
+  // Einfacher Ein-/Ausschalter: 2 Anschlüsse, ein Kontakt -- Ruhezustand geschlossen/ein.
+  // Selbes Gehäuse-/Antriebsdesign wie wechselschalter (Rahmen + Handantrieb-Haken +
+  // Raste-v, gestrichelt angebunden), nur mit einer einzelnen geraden/geknickten Zunge
+  // statt zwei Stellungen.
+  ausschalter:{cat:'Taster/Schalter',label:'Ausschalter',w:50,h:44,
+    ports:[{x:36,y:0},{x:36,y:44}],
+    draw:(g,inst)=>{
+      const cx=36, t1=16, t2=28, fy1=8, fy2=36, hw=9;
+      const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
+      const closed = (simMode && inst) ? s.closed!==false : true; // Ruhezustand: geschlossen/ein
+      line(g,cx,0,cx,fy1); line(g,cx,fy2,cx,44);
+      mk('rect',{x:cx-hw,y:fy1,width:hw*2,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      dot(g,cx,t1); dot(g,cx,t2);
+      const col = simMode && inst ? (closed?'#16a34a':'#1f2937') : '#1f2937';
+      if (closed) {
+        line(g,cx,t2,cx,t1,col,1.8);
+      } else {
+        line(g,cx,t2,cx,t2-4,col,1.8);
+        line(g,cx,t2-4,cx+6,t1+2,col,1.8);
+      }
+      const ax=cx-hw-22, ay=(t1+t2)/2;
+      drawActuatorLink(g, ax, ay, cx-hw, 'hand', col, true);
+    }},
 };
 const CATS = ['Taster/Schalter'];
 
@@ -228,13 +251,14 @@ function initSimState(){
   insts.forEach(inst=>{
     const d = {};
     if (inst.type==='wechselschalter') d.pos=1;
+    if (inst.type==='ausschalter') d.closed=true;
     simState[inst.id] = d;
   });
 }
 
 // Eine Simulationsrunde: Potentiale über Union-Find ausbreiten (Schienen = Quellen,
-// geschlossene Kontakte/Schalter verbinden). Nur Wechselschalter bislang -- weitere
-// Bauteile kommen erst zurück, wenn sie einzeln geprüft/freigegeben sind.
+// geschlossene Kontakte/Schalter verbinden). Nur Wechselschalter/Ausschalter bislang --
+// weitere Bauteile kommen erst zurück, wenn sie einzeln geprüft/freigegeben sind.
 function computeSimOnce(){
   const idx = {}; let k=0;
   insts.forEach(inst=>{ SYM[inst.type].ports.forEach((p,pi)=>{ idx[inst.id+':'+pi]=k++; }); });
@@ -250,6 +274,7 @@ function computeSimOnce(){
     const s = simState[inst.id]||{};
     const P = pi=>idx[inst.id+':'+pi];
     if (inst.type==='wechselschalter') union(P(0), P(s.pos===2?2:1));
+    if (inst.type==='ausschalter' && s.closed!==false) union(P(0), P(1));
   });
 
   const pot = new Int32Array(k);
@@ -293,6 +318,7 @@ function simInstClick(inst, localX){
   const s = simState[inst.id]||{};
   switch(inst.type){
     case 'wechselschalter': simState[inst.id]={...s, pos: s.pos===1?2:1}; break;
+    case 'ausschalter': simState[inst.id]={...s, closed: s.closed===false}; break;
     default: return false;
   }
   runSim();
