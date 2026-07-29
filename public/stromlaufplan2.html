@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Stromlaufplan-Editor (Neuaufbau)</title>
+<script>
+// Wird beim Bauen der Offline-APK auf true gesetzt (siehe index.html) — schaltet den
+// Login-Check ab. Diese Seite ist bewusst NICHT von der Startseite aus verlinkt
+// (nur per Direktlink erreichbar), solange sie in Arbeit ist.
+const OFFLINE_APP = false;
+</script>
+<script>
+(function(){
+  if (OFFLINE_APP) return;
+  document.documentElement.style.visibility='hidden';
+  fetch('/api/me.php',{credentials:'include'}).then(r=>r.json()).then(d=>{
+    document.documentElement.style.visibility='';
+    if(!d.user){ location.href='/login.html'; }
+  }).catch(()=>{
+    let cached=null;
+    try { cached=JSON.parse(localStorage.getItem('elektroplan_user')||'null'); } catch(e){}
+    document.documentElement.style.visibility='';
+    if (!cached) location.href='/login.html';
+  });
+})();
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;background:#e8edf2;color:#1f2937;user-select:none}
+#app{display:flex;flex-direction:column;height:100vh}
+#bar{background:#1a365d;color:#fff;display:flex;align-items:center;gap:8px;padding:0 10px;height:44px;flex-shrink:0;box-shadow:0 2px 8px #0005;z-index:20}
+#bar a{color:#90cdf4;text-decoration:none;font-size:12px;white-space:nowrap}
+#bar a:hover{text-decoration:underline}
+#bar h1{font-size:13px;font-weight:700;white-space:nowrap;margin-right:6px}
+#bar .sep{width:1px;height:22px;background:rgba(255,255,255,0.15)}
+.bar-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:11px;white-space:nowrap}
+.bar-btn:hover{background:rgba(255,255,255,0.18)}
+.bar-btn.danger{color:#fca5a5}
+.bar-btn.active{background:#d97706;border-color:#f59e0b}
+.sim-clickable{cursor:pointer}
+#bar .hint{margin-left:auto;font-size:10px;color:rgba(255,255,255,0.5);white-space:nowrap}
+#main{flex:1;display:flex;overflow:hidden;position:relative}
+#sidebar{width:190px;flex-shrink:0;background:#fff;border-right:1px solid #d1d5db;overflow-y:auto;padding:6px}
+.sb-head{font-size:10px;font-weight:700;letter-spacing:.4px;color:#64748b;text-transform:uppercase;padding:10px 6px 4px}
+.sb-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:grab;font-size:11.5px;color:#374151}
+.sb-item:hover{background:#eef2ff}
+.sb-item svg{flex-shrink:0}
+#canvasWrap{flex:1;overflow:hidden;position:relative;background:
+  linear-gradient(#dbe2ea 1px,transparent 1px),linear-gradient(90deg,#dbe2ea 1px,transparent 1px);
+  background-size:20px 20px;background-color:#eef1f5;cursor:default}
+#svg{position:absolute;top:0;left:0}
+.port-hit{cursor:crosshair}
+.port-hit:hover circle{stroke:#2563eb!important;stroke-width:2.5!important}
+#tip{position:fixed;background:#1a202c;color:#e2e8f0;font-size:11px;padding:3px 8px;border-radius:4px;pointer-events:none;display:none;z-index:1000}
+#zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:4px;z-index:15}
+#zoom button{width:30px;height:30px;border-radius:6px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:15px;box-shadow:0 1px 3px #0002}
+@media (max-width:767px){ #sidebar{position:absolute;left:0;top:0;bottom:0;z-index:30;transform:translateX(-100%);transition:transform .2s;box-shadow:2px 0 8px #0003} #sidebar.open{transform:translateX(0)} }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <button class="bar-btn" id="btn-ham" onclick="toggleSidebar()" style="display:none">☰</button>
+    <a href="/">← Zurück</a>
+    <div class="sep"></div>
+    <h1>⚡ Stromlaufplan-Editor (Neuaufbau — bisher nur Wechselschalter + Schienen)</h1>
+    <button class="bar-btn" onclick="doNew()">🗑 Neu</button>
+    <button class="bar-btn" onclick="doSave()">💾 Datei</button>
+    <button class="bar-btn" onclick="doLoad()">📂 Datei</button>
+    <button class="bar-btn danger" onclick="doDeleteSel()">✕ Löschen</button>
+    <button class="bar-btn" id="btn-sim" onclick="toggleSim()">⚡ Simulation</button>
+    <span class="hint" id="normal-hint">Symbol ziehen oder antippen = platzieren · Port→Port klicken = verbinden · Doppelklick = beschriften · Entf = löschen</span>
+    <span class="hint" id="sim-hint" style="display:none;color:#fbbf24">SIM: Wechselschalter anklicken zum Umschalten</span>
+  </div>
+  <div id="main">
+    <div id="sidebar"></div>
+    <div id="canvasWrap">
+      <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="zoom">
+        <button onclick="setZoom(zoom*1.2)">+</button>
+        <button onclick="setZoom(zoom/1.2)">−</button>
+        <button onclick="resetView()" title="Ansicht zurücksetzen">⤢</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="tip"></div>
+
+<script>
+'use strict';
+const NS='http://www.w3.org/2000/svg';
+function mk(tag,attrs,parent){
+  const el=document.createElementNS(NS,tag);
+  for(const k in attrs) el.setAttribute(k,attrs[k]);
+  if(parent) parent.appendChild(el);
+  return el;
+}
+
+// ── Symbolbibliothek (IEC 60617 / DIN EN 60617 angelehnt) ──────────────────────
+// Jedes Symbol: w,h (Bounding-Box), ports:[{x,y,label}] (Anschlusspunkte, oben=Versorgung
+// Richtung), draw(g, stroke) zeichnet das reine Symbol bei (0,0) — wird per <g transform>
+// an die Instanzposition verschoben.
+function line(g,x1,y1,x2,y2,s,w){ mk('line',{x1,y1,x2,y2,stroke:s||'#1f2937','stroke-width':w||1.6,'stroke-linecap':'round'},g); }
+function dot(g,x,y,s){ mk('circle',{cx:x,cy:y,r:2.2,fill:s||'#1f2937'},g); }
+
+// Kontaktzunge beginnt/endet IMMER genau an einem der beiden Anschlusspunkte (t1 oben,
+// t2 unten) — vorher endete sie frei im Raum, dadurch wirkte das Symbol "nicht verbunden".
+// Schließer (NO): Zunge endet knapp VOR dem oberen Anschluss = offen (Grundstellung).
+// Öffner (NC): Zunge erreicht den oberen Anschluss = geschlossen (Grundstellung), plus
+// kurzer Querstrich als Öffner-Kennzeichen (öffnet erst bei Betätigung).
+// actuator: null/false (automatisch betätigt, z.B. Relais-/Schützkontakt — keine Kennzeichnung)
+// oder einer der IEC-60617-7-Betätigungsart-Codes (siehe actuatorGlyph).
+// closedNow: undefined/null = Ruhezustand zeigen (NO=offen, NC=geschlossen, wie in der
+// Palette). true/false = tatsächlicher Zustand während der Simulation — die Kontaktzunge
+// bewegt sich dann wirklich sichtbar zwischen offen und geschlossen.
+// Gehäuserahmen (dünne Box um das eigentliche Schaltsymbol) — angelehnt an die Darstellung
+// in professionellen Schaltplan-Programmen (z.B. EPLAN-Symbolbibliotheken), wo Kontakte als
+// eigenständiges "Gerät" mit Gehäuseumriss gezeichnet werden, nicht freischwebend.
+function deviceFrame(g, cx, fy1, fy2, hw){
+  mk('rect',{x:cx-hw,y:fy1,width:hw*2,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+}
+// Betätigungsart nach IEC 60617-7: eigenständiges Symbol NEBEN dem Schaltglied, mechanisch
+// (nicht elektrisch!) über eine gestrichelte Linie verbunden -- so wie es die Norm-Tabelle
+// und reale EPLAN-Symbole zeigen. Frühere Fassung zeichnete stattdessen eine erfundene
+// "Raste"-Markierung direkt AUF den Kontakt -- das war falsch, hier korrigiert.
+// (x,y) = Anschlusspunkt der gestrichelten Linie (rechte/untere Kante des Glyphen).
+function actuatorGlyph(g, type, x, y, col){
+  col = col || '#1f2937';
+  if (type==='hand') {
+    // Handantrieb, allgemein: Winkel-Hebel (senkrechter Griff mit Fuß oben)
+    line(g,x,y-8,x,y,col,1.3);
+    line(g,x,y-8,x+6,y-8,col,1.3);
+  } else if (type==='druck') {
+    // Betätigung durch Drücken: Stößel mit Knopf
+    line(g,x-10,y,x,y,col,1.3);
+    mk('circle',{cx:x-13,cy:y,r:3,fill:'#fff',stroke:col,'stroke-width':1.2},g);
+  } else if (type==='drehen') {
+    // Betätigung durch Drehen: T-Griff (Drehknauf)
+    line(g,x-8,y,x,y,col,1.3);
+    line(g,x-8,y-6,x-8,y+6,col,1.3);
+  } else if (type==='notaus') {
+    // Antrieb für NOT-AUS-Schalter: Kreis (Pilzkopf) mit Betätigungsstab, rot
+    line(g,x-6,y,x,y,'#dc2626',1.3);
+    mk('circle',{cx:x-11,cy:y,r:5,fill:'none',stroke:'#dc2626','stroke-width':1.6},g);
+  }
+}
+// Rastungs-Kennzeichen (kleines "v"): eigenständiges IEC-60617-7-Symbol für "Betätigungsart
+// bleibt in der eingestellten Position stehen" -- wird IN REIHE mit dem eigentlichen
+// Antriebssymbol auf derselben gestrichelten Linie gezeichnet (nicht anstelle davon, siehe
+// drawActuatorLink), z.B. Handantrieb-Haken -- Raste-v -- Gehäuse.
+function rasteV(g, x, y, col){
+  col = col||'#1f2937';
+  line(g,x,y,x+3,y+5,col,1.2);
+  line(g,x+3,y+5,x+6,y,col,1.2);
+}
+// Verbindet Betätigungsart-Symbol(e) mechanisch mit dem Gehäuse: bei rastenden (in Stellung
+// verharrenden) Antrieben zusätzlich das Rastungs-"v" auf derselben gestrichelten Linie,
+// zwischen Antrieb und Gehäuse -- genau wie im Referenzbild (Haken -- gestrichelt -- v --
+// gestrichelt -- Gehäuse). Bei federrückstellenden Antrieben (Taster) nur die einfache Linie.
+function drawActuatorLink(g, ax, ay, frameX, type, col, maintained){
+  if (maintained) {
+    const vx = frameX-8;
+    mk('line',{x1:ax,y1:ay,x2:vx-3,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+    rasteV(g, vx-3, ay-3, col);
+    mk('line',{x1:vx+3,y1:ay,x2:frameX,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+  } else {
+    mk('line',{x1:ax,y1:ay,x2:frameX,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+  }
+  actuatorGlyph(g, type, ax, ay, col);
+}
+const SYM = {
+  wechselschalter:{cat:'Taster/Schalter',label:'Wechselschalter',w:64,h:44,
+    ports:[{x:41,y:44,l:'C'},{x:29,y:0,l:'1'},{x:41,y:0,l:'2'}],
+    draw:(g,inst)=>{
+      const cx=41, off=29, t1=16, t2=28, fy1=8, fy2=36, hw=16;
+      const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
+      const pos2 = (simMode && inst) ? s.pos===2 : false;
+      line(g,cx,fy2,cx,44); line(g,off,0,off,fy1); line(g,cx,0,cx,fy1);
+      mk('rect',{x:cx-hw,y:fy1,width:hw*2,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      dot(g,cx,t2); dot(g,off,t1); dot(g,cx,t1);
+      const col = simMode && inst ? '#16a34a' : '#1f2937';
+      if (pos2) {
+        line(g,cx,t1,cx,t2,col,1.8); // fluchtend -> gerade
+      } else {
+        line(g,off,t1,off,t1+4,col,1.8);
+        line(g,off,t1+4,cx,t2,col,1.8);
+      }
+      const ax=cx-hw-22, ay=(t1+t2)/2;
+      drawActuatorLink(g, ax, ay, cx-hw, 'hand', col, true);
+    }},
+};
+const CATS = ['Taster/Schalter'];
+
+// Spannungsversorgung: durchgehende Sammelschienen (L1/L2/L3/N/PE) über das ganze Blatt,
+// an die Bauteile an JEDER Stelle entlang der Linie andocken können (wie in einem echten
+// Stromlaufplan üblich) — kein einzelnes Bauteil mit festen Ports.
+const RAIL_TYPES = {
+  L1:{color:'#8B4513',label:'L1'}, L2:{color:'#1f2937',label:'L2'}, L3:{color:'#6b7280',label:'L3'},
+  N:{color:'#1a56db',label:'N'}, PE:{color:'#16a34a',label:'PE'},
+};
+
+// ── State ────────────────────────────────────────────────────────────────────
+let insts = [], wires = [], iid=1, wid=1;
+let rails = [], railConns = [], rid=1, rcid=1;
+let sel = null, selWire = null, selRail = null, selRailConn = null;
+let zoom = 1, panX=80, panY=40;
+let wireStart = null; // {instId, portIdx}
+const lastClickMap = new WeakMap(); // Doppelklick-Erkennung pro Instanz, siehe renderInst-Hitbox
+
+// ── Simulation ───────────────────────────────────────────────────────────────
+// Anders als im Aufbauplan sind Spule und zugehörige Kontakte hier UNABHÄNGIGE Symbole,
+// die nur über eine identische Beschriftung (z.B. "K1") zusammengehören — das ist die
+// reale Konvention in einem Stromlaufplan. Die Engine gruppiert also über Labels statt
+// über feste Bauteil-Ports.
+const POT = { L1:4, L2:8, L3:16, N:2, PE:1, DCP:32, DCM:64 };
+const ANY_L = POT.L1|POT.L2|POT.L3;
+// Verallgemeinerte "stromführend"/"Rückleiter"-Bits, damit Lampen/Motoren & Co. gleich
+// behandelt werden können, egal ob sie an AC (L/N) oder DC (DC+/DC-) hängen.
+const ANY_SRC = ANY_L|POT.DCP;
+const ANY_REF = POT.N|POT.DCM;
+let simMode = false, simState = {};
+let simPortPot = {}, simPortNode = {};
+
+function initSimState(){
+  simState = {};
+  insts.forEach(inst=>{
+    const d = {};
+    if (inst.type==='wechselschalter') d.pos=1;
+    simState[inst.id] = d;
+  });
+}
+
+// Eine Simulationsrunde: Potentiale über Union-Find ausbreiten (Schienen = Quellen,
+// geschlossene Kontakte/Schalter verbinden). Nur Wechselschalter bislang -- weitere
+// Bauteile kommen erst zurück, wenn sie einzeln geprüft/freigegeben sind.
+function computeSimOnce(){
+  const idx = {}; let k=0;
+  insts.forEach(inst=>{ SYM[inst.type].ports.forEach((p,pi)=>{ idx[inst.id+':'+pi]=k++; }); });
+  rails.forEach(r=>{ idx['rail:'+r.id]=k++; });
+  const parent = new Int32Array(k); for(let i=0;i<k;i++) parent[i]=i;
+  const find = x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  const union = (a,b)=>{ if(a==null||b==null) return; a=find(a); b=find(b); if(a!==b) parent[b]=a; };
+
+  wires.forEach(w=> union(idx[w.fid+':'+w.fp], idx[w.tid+':'+w.tp]));
+  railConns.forEach(rc=> union(idx[rc.fid+':'+rc.fp], idx['rail:'+rc.rail]));
+
+  insts.forEach(inst=>{
+    const s = simState[inst.id]||{};
+    const P = pi=>idx[inst.id+':'+pi];
+    if (inst.type==='wechselschalter') union(P(0), P(s.pos===2?2:1));
+  });
+
+  const pot = new Int32Array(k);
+  rails.forEach(r=>{ const n=find(idx['rail:'+r.id]); pot[n] |= POT[r.type]; });
+
+  const gp = (id,pi)=>{ const p=idx[id+':'+pi]; return p!=null?pot[find(p)]:0; };
+  return { idx, find, pot, gp };
+}
+
+function runSim(depth){
+  depth = depth||0;
+  const { idx, find, pot, gp } = computeSimOnce();
+
+  // Port-Potentiale + Knoten für die Anzeige (Leitungsfarbe) merken.
+  simPortPot = {}; simPortNode = {};
+  insts.forEach(inst=>{
+    SYM[inst.type].ports.forEach((p,pi)=>{
+      const key = inst.id+':'+pi;
+      const node = idx[key];
+      simPortPot[key] = node!=null ? pot[find(node)] : 0;
+      simPortNode[key] = node!=null ? find(node) : null;
+    });
+  });
+  rails.forEach(r=>{
+    const node = idx['rail:'+r.id];
+    simPortPot['rail:'+r.id] = node!=null ? pot[find(node)] : 0;
+  });
+  render();
+}
+
+function toggleSim(){
+  simMode = !simMode;
+  document.getElementById('btn-sim').classList.toggle('active', simMode);
+  document.getElementById('normal-hint').style.display = simMode?'none':'inline';
+  document.getElementById('sim-hint').style.display = simMode?'inline':'none';
+  if (simMode) { initSimState(); runSim(); }
+  else { simState={}; simPortPot={}; simPortNode={}; render(); }
+}
+
+function simInstClick(inst, localX){
+  const s = simState[inst.id]||{};
+  switch(inst.type){
+    case 'wechselschalter': simState[inst.id]={...s, pos: s.pos===1?2:1}; break;
+    default: return false;
+  }
+  runSim();
+  return true;
+}
+
+// Leiterfarbe nach Potential (gleiche Konvention wie im Aufbauplan: L1 braun, L2 schwarz,
+// L3 grau, N blau, PE grün — Priorität bei mehreren Bits auf einem Knoten = Fehlerfall).
+function potColor(pot){
+  if (!pot) return null;
+  if (pot & POT.L1) return '#8B4513';
+  if (pot & POT.L2) return '#1f2937';
+  if (pot & POT.L3) return '#6b7280';
+  if (pot & POT.N) return '#1a56db';
+  if (pot & POT.PE) return '#16a34a';
+  if (pot & POT.DCP) return '#dc2626';
+  if (pot & POT.DCM) return '#111827';
+  return null;
+}
+
+// Ob ein Bauteil während der Simulation "aktiv" ist -- für die grüne Hervorhebung im Plan.
+// Wechselschalter zeigt seinen Zustand direkt über die Kontaktzunge (siehe SYM.draw), braucht
+// hier keinen eigenen Fall.
+function isInstActive(inst){
+  return false;
+}
+
+function svgPt(clientX, clientY){
+  const r = document.getElementById('canvasWrap').getBoundingClientRect();
+  return { x:(clientX-r.left-panX)/zoom, y:(clientY-r.top-panY)/zoom };
+}
+function portWorld(inst, pi){
+  const s = SYM[inst.type], p = s.ports[pi];
+  return [inst.x+p.x, inst.y+p.y];
+}
+
+// Rastet ein Bauteil beim Verschieben an den Anschlusspunkten ANDERER Bauteile ein, sobald
+// es nah genug ist — sonst landen unterschiedlich breite Symbole (z.B. Kontakt vs. Spule)
+// nur zufällig exakt untereinander, und Verbindungslinien werden schräg/geknickt statt
+// gerade. Verschiebt inst.x so, dass der nächstgelegene eigene Port exakt mit dem
+// nächstgelegenen fremden Port fluchtet.
+function snapInstX(inst){
+  const SNAP = 6;
+  const s = SYM[inst.type];
+  let best = null;
+  s.ports.forEach(p=>{
+    const myX = inst.x + p.x;
+    insts.forEach(other=>{
+      if (other===inst) return;
+      const os = SYM[other.type];
+      os.ports.forEach(op=>{
+        const otherX = other.x + op.x;
+        const d = Math.abs(myX-otherX);
+        if (d<=SNAP && (!best || d<best.d)) best = { d, delta: otherX-myX };
+      });
+    });
+  });
+  if (best) inst.x += best.delta;
+}
+
+// ── Sidebar aufbauen ─────────────────────────────────────────────────────────
+function buildSidebar(){
+  const sb = document.getElementById('sidebar');
+  sb.innerHTML='';
+  const rh = document.createElement('div'); rh.className='sb-head'; rh.textContent='Spannungsversorgung'; sb.appendChild(rh);
+  Object.entries(RAIL_TYPES).forEach(([key,r])=>{
+    const it = document.createElement('div'); it.className='sb-item'; it.draggable=true;
+    const svg = document.createElementNS(NS,'svg');
+    svg.setAttribute('width',34); svg.setAttribute('height',20); svg.setAttribute('viewBox','0 0 34 20');
+    mk('line',{x1:2,y1:10,x2:32,y2:10,stroke:r.color,'stroke-width':2.5},svg);
+    it.appendChild(svg);
+    const lbl = document.createElement('span'); lbl.textContent=r.label+' (Sammelschiene)'; it.appendChild(lbl);
+    it.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain', 'rail:'+key); });
+    it.addEventListener('click',()=>placeAtViewCenter('rail:'+key));
+    sb.appendChild(it);
+  });
+  CATS.forEach(cat=>{
+    const h = document.createElement('div'); h.className='sb-head'; h.textContent=cat; sb.appendChild(h);
+    Object.entries(SYM).filter(([k,s])=>s.cat===cat).forEach(([key,s])=>{
+      const it = document.createElement('div'); it.className='sb-item'; it.draggable=true;
+      const svg = document.createElementNS(NS,'svg');
+      svg.setAttribute('width',34); svg.setAttribute('height',34);
+      svg.setAttribute('viewBox',`-6 -6 ${Math.max(s.w,20)+12} ${Math.max(s.h,20)+12}`);
+      const g = mk('g',{},svg); s.draw(g);
+      it.appendChild(svg);
+      const lbl = document.createElement('span'); lbl.textContent=s.label; it.appendChild(lbl);
+      it.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain', key); });
+      it.addEventListener('click',()=>placeAtViewCenter(key));
+      sb.appendChild(it);
+    });
+  });
+}
+
+// ── Platzieren: Drag&Drop (Desktop-Maus) + Klick-Fallback (Touch/Tablet, wo
+// natives HTML5-Drag&Drop grundsätzlich nicht funktioniert) ────────────────────
+function placeAt(type, wx, wy){
+  if (type.startsWith('rail:')) {
+    const rtype = type.slice(5);
+    if (!RAIL_TYPES[rtype]) return;
+    const y = Math.round(wy/10)*10;
+    rails.push({ id:rid++, type:rtype, y, x1:Math.round((wx-300)/10)*10, x2:Math.round((wx+300)/10)*10 });
+    selRail = rails[rails.length-1].id; sel=null; selWire=null; selRailConn=null;
+    render(); scheduleAutoSave();
+    return;
+  }
+  if (!SYM[type]) return;
+  insts.push({ id:iid++, type, x:Math.round(wx/10)*10, y:Math.round(wy/10)*10, label:'' });
+  sel = insts[insts.length-1].id; selWire=null; selRail=null; selRailConn=null;
+  render(); scheduleAutoSave();
+}
+const canvasWrap = document.getElementById('canvasWrap');
+canvasWrap.addEventListener('dragover', e=>e.preventDefault());
+canvasWrap.addEventListener('drop', e=>{
+  e.preventDefault();
+  const type = e.dataTransfer.getData('text/plain');
+  const p = svgPt(e.clientX, e.clientY);
+  placeAt(type, p.x, p.y);
+});
+// Klick auf ein Palette-Element: an der Bildschirmmitte der aktuellen Ansicht platzieren
+// (mit kleinem Zufalls-Versatz, damit mehrfaches Klicken nicht exakt übereinander landet).
+function placeAtViewCenter(type){
+  const rect = canvasWrap.getBoundingClientRect();
+  const p = svgPt(rect.left + rect.width/2 + (Math.random()*60-30), rect.top + rect.height/2 + (Math.random()*60-30));
+  placeAt(type, p.x, p.y);
+}
+
+// ── Pan & Zoom ───────────────────────────────────────────────────────────────
+let panDrag = null;
+canvasWrap.addEventListener('pointerdown', e=>{
+  if (e.target === canvasWrap || e.target.id==='svg') {
+    panDrag = {x:e.clientX,y:e.clientY,px:panX,py:panY};
+    sel=null; selWire=null; selRail=null; selRailConn=null; wireStart=null; render();
+  }
+});
+window.addEventListener('pointermove', e=>{
+  if (panDrag){ panX = panDrag.px + (e.clientX-panDrag.x); panY = panDrag.py + (e.clientY-panDrag.y); applyTransform(); }
+});
+window.addEventListener('pointerup', ()=>{ panDrag=null; });
+canvasWrap.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const factor = e.deltaY<0 ? 1.1 : 1/1.1;
+  setZoom(zoom*factor, e.clientX, e.clientY);
+}, {passive:false});
+function setZoom(z, cx, cy){
+  z = Math.max(0.3, Math.min(3, z));
+  const r = canvasWrap.getBoundingClientRect();
+  const px = cx!=null?cx-r.left:r.width/2, py = cy!=null?cy-r.top:r.height/2;
+  const wx = (px-panX)/zoom, wy=(py-panY)/zoom;
+  zoom = z;
+  panX = px - wx*zoom; panY = py - wy*zoom;
+  applyTransform();
+}
+function resetView(){ zoom=1; panX=80; panY=40; applyTransform(); }
+function applyTransform(){ document.getElementById('svg').setAttribute('transform',`translate(${panX},${panY}) scale(${zoom})`); }
+
+// ── Rendern ──────────────────────────────────────────────────────────────────
+function render(){
+  const svg = document.getElementById('svg');
+  svg.innerHTML='';
+  svg.setAttribute('width', 4000); svg.setAttribute('height', 3000);
+  applyTransform();
+
+  // Sammelschienen (L1/L2/L3/N/PE) — durchgehende Linien, an die überall entlang
+  // angedockt werden kann.
+  rails.forEach(r=>{
+    const rt = RAIL_TYPES[r.type];
+    const isSel = selRail===r.id;
+    mk('line',{x1:r.x1,y1:r.y,x2:r.x2,y2:r.y,stroke:rt.color,'stroke-width':isSel?3.2:2.4},svg);
+    mk('rect',{x:r.x1-4,y:r.y-11,width:26,height:14,fill:'#fff',opacity:0.9},svg);
+    mk('text',{x:r.x1,y:r.y-1,'font-size':11,'font-weight':'bold',fill:rt.color},svg).textContent=rt.label;
+    // Ziehfläche für die ganze Schiene (Position/Höhe verschieben) + Auswahl
+    const hit = mk('line',{x1:r.x1,y1:r.y,x2:r.x2,y2:r.y,stroke:'transparent','stroke-width':14,cursor:'pointer'},svg);
+    hit.addEventListener('pointerdown', e=>{
+      e.stopPropagation();
+      if (wireStart){
+        // Bauteil-Anschluss mit der Schiene an dieser Stelle verbinden
+        const p = svgPt(e.clientX,e.clientY);
+        const rx = Math.max(r.x1, Math.min(r.x2, Math.round(p.x/10)*10));
+        railConns.push({ id:rcid++, fid:wireStart.instId, fp:wireStart.portIdx, rail:r.id, rx });
+        wireStart = null; scheduleAutoSave(); render();
+        return;
+      }
+      sel=null; selWire=null; selRailConn=null; selRail=r.id; render();
+      const start = svgPt(e.clientX,e.clientY);
+      const oy = start.y - r.y;
+      const onMove = ev=>{
+        const p = svgPt(ev.clientX,ev.clientY);
+        r.y = Math.round((p.y-oy)/10)*10;
+        render();
+      };
+      const onUp = ()=>{ window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); scheduleAutoSave(); };
+      window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp);
+    });
+    // Endpunkt-Griffe zum Verlängern/Verkürzen
+    [['x1',r.x1],['x2',r.x2]].forEach(([key,xv])=>{
+      const handle = mk('rect',{x:xv-4,y:r.y-4,width:8,height:8,fill:'#fff',stroke:rt.color,'stroke-width':1.5,cursor:'ew-resize'},svg);
+      handle.addEventListener('pointerdown', e=>{
+        e.stopPropagation(); sel=null; selWire=null; selRailConn=null; selRail=r.id; render();
+        const onMove = ev=>{
+          const p = svgPt(ev.clientX,ev.clientY);
+          r[key] = Math.round(p.x/10)*10;
+          render();
+        };
+        const onUp = ()=>{ window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); scheduleAutoSave(); };
+        window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp);
+      });
+    });
+  });
+
+  // Verbindungen von Bauteil-Anschlüssen zu einer Sammelschiene: erst waagerecht auf
+  // Port-Höhe zur Andockstelle, dann senkrecht zur Schiene.
+  railConns.forEach(rc=>{
+    const fi = insts.find(i=>i.id===rc.fid);
+    const rail = rails.find(r=>r.id===rc.rail);
+    if (!fi || !rail) return;
+    const [ax,ay] = portWorld(fi, rc.fp);
+    const rt = RAIL_TYPES[rail.type];
+    const d = `M${ax},${ay} L${rc.rx},${ay} L${rc.rx},${rail.y}`;
+    mk('path',{d,fill:'none',stroke: selRailConn===rc.id?'#2563eb':rt.color,'stroke-width':selRailConn===rc.id?2.4:1.8,opacity:0.85},svg);
+    mk('circle',{cx:rc.rx,cy:rail.y,r:2.5,fill:rt.color},svg);
+    const hit = mk('path',{d,fill:'none',stroke:'transparent','stroke-width':12,cursor:'pointer'},svg);
+    hit.addEventListener('pointerdown',e=>{ e.stopPropagation(); sel=null; selRail=null; selWire=null; selRailConn=rc.id; render(); });
+  });
+
+  // Leitungen
+  wires.forEach(w=>{
+    const fi = insts.find(i=>i.id===w.fid), ti = insts.find(i=>i.id===w.tid);
+    if (!fi||!ti) return;
+    const [ax,ay] = portWorld(fi,w.fp), [bx,by] = portWorld(ti,w.tp);
+    const midY = (ay+by)/2;
+    const d = Math.abs(ax-bx)<2 ? `M${ax},${ay} L${bx},${by}` : `M${ax},${ay} L${ax},${midY} L${bx},${midY} L${bx},${by}`;
+    let stroke = selWire===w.id?'#2563eb':'#374151', sw = selWire===w.id?2.4:1.8;
+    if (simMode) {
+      const pc = potColor(simPortPot[w.fid+':'+w.fp] || simPortPot[w.tid+':'+w.tp] || 0);
+      if (pc) { stroke = pc; sw = 2.6; }
+    }
+    mk('path',{d,fill:'none',stroke,'stroke-width':sw},svg);
+    const hit = mk('path',{d,fill:'none',stroke:'transparent','stroke-width':12,cursor:'pointer'},svg);
+    hit.addEventListener('pointerdown',e=>{ e.stopPropagation(); if(simMode) return; sel=null; selWire=w.id; selRail=null; selRailConn=null; render(); });
+  });
+
+  // Symbole
+  insts.forEach(inst=>{
+    const s = SYM[inst.type];
+    const g = mk('g',{transform:`translate(${inst.x},${inst.y})`},svg);
+    if (sel===inst.id) mk('rect',{x:-6,y:-6,width:s.w+12,height:s.h+12,rx:5,fill:'rgba(37,99,235,0.08)',stroke:'#2563eb','stroke-width':1.3,'stroke-dasharray':'3,2'},g);
+    // Wechselschalter zeigt seinen Zustand direkt über die Kontaktzunge (siehe SYM.draw),
+    // braucht keinen Zusatzrahmen.
+    s.draw(g, inst);
+    const lbl = inst.label || '';
+    if (lbl) mk('text',{x:s.w/2,y:-8,'text-anchor':'middle','font-size':10,'font-weight':'bold',fill:'#111'},g).textContent=lbl;
+    // Body-Drag zum Verschieben + Auswahl + Doppelklick=Beschriften (VOR den Ports einfügen,
+    // damit die Port-Kreise beim Klicken obenauf liegen und nicht von der Drag-Hitbox verdeckt werden)
+    const hitBox = mk('rect',{x:-4,y:-4,width:s.w+8,height:s.h+8,fill:'transparent',cursor: simMode?'pointer':'grab'},g);
+    hitBox.addEventListener('pointerdown', e=>{
+      e.stopPropagation();
+      if (simMode) {
+        const p = svgPt(e.clientX,e.clientY);
+        simInstClick(inst, p.x-inst.x);
+        return;
+      }
+      if (wireStart) return;
+      sel = inst.id; selWire=null; selRail=null; selRailConn=null; render();
+      const now = Date.now();
+      // lastClick in einer WeakMap statt einer lokalen Closure-Variable speichern, da render()
+      // den kompletten SVG-Baum (inkl. dieser Hitbox) bei jedem Klick neu aufbaut und eine lokale
+      // Variable damit nie über zwei Klicks hinweg erhalten bliebe. WeakMap statt inst.-Property,
+      // damit beim Speichern (JSON.stringify(insts)) nichts Zusätzliches mitgespeichert wird.
+      if (now-(lastClickMap.get(inst)||0)<350) { lastClickMap.delete(inst); renameInst(inst); return; }
+      lastClickMap.set(inst, now);
+      const start = svgPt(e.clientX,e.clientY);
+      const ox = start.x-inst.x, oy = start.y-inst.y;
+      const onMove = ev=>{
+        const p = svgPt(ev.clientX,ev.clientY);
+        inst.x = Math.round((p.x-ox)/10)*10; inst.y = Math.round((p.y-oy)/10)*10;
+        snapInstX(inst);
+        render();
+      };
+      const onUp = ()=>{ window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); scheduleAutoSave(); };
+      window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp);
+    });
+    // Ports (nach der Drag-Hitbox eingefügt, damit sie im SVG-Malreihenfolge obenauf liegen)
+    s.ports.forEach((p,pi)=>{
+      const port = mk('g',{class:'port-hit',transform:`translate(${p.x},${p.y})`},g);
+      mk('circle',{r:4,fill:'#fff',stroke:'#6b7280','stroke-width':1.3},port);
+      port.addEventListener('pointerdown', e=>{
+        e.stopPropagation();
+        if (!wireStart){ wireStart = {instId:inst.id, portIdx:pi}; render(); }
+        else {
+          if (!(wireStart.instId===inst.id && wireStart.portIdx===pi)) {
+            wires.push({id:wid++, fid:wireStart.instId, fp:wireStart.portIdx, tid:inst.id, tp:pi});
+            scheduleAutoSave();
+          }
+          wireStart = null; render();
+        }
+      });
+    });
+  });
+
+  // Laufende Leitung beim Verbinden
+  if (wireStart) {
+    const fi = insts.find(i=>i.id===wireStart.instId);
+    if (fi) {
+      const [ax,ay] = portWorld(fi, wireStart.portIdx);
+      mk('circle',{cx:ax,cy:ay,r:6,fill:'none',stroke:'#2563eb','stroke-width':2,opacity:0.6},svg);
+    }
+  }
+}
+document.addEventListener('pointermove', e=>{
+  if (!wireStart) return;
+  // Vorschau-Linie zum Cursor
+  let prev = document.getElementById('wire-preview');
+  const fi = insts.find(i=>i.id===wireStart.instId); if (!fi) return;
+  const [ax,ay] = portWorld(fi, wireStart.portIdx);
+  const p = svgPt(e.clientX,e.clientY);
+  if (!prev) prev = mk('line',{id:'wire-preview',stroke:'#2563eb','stroke-width':1.5,'stroke-dasharray':'4,3','pointer-events':'none'},document.getElementById('svg'));
+  prev.setAttribute('x1',ax); prev.setAttribute('y1',ay); prev.setAttribute('x2',p.x); prev.setAttribute('y2',p.y);
+});
+
+function renameInst(inst){
+  const v = prompt('Beschriftung/Bauteilkennzeichen (z.B. K1, S1, M1):', inst.label||'');
+  if (v!==null){ inst.label=v; render(); scheduleAutoSave(); }
+}
+
+function doDeleteSel(){
+  if (sel!=null){
+    insts = insts.filter(i=>i.id!==sel);
+    wires = wires.filter(w=>w.fid!==sel && w.tid!==sel);
+    railConns = railConns.filter(rc=>rc.fid!==sel);
+    sel=null;
+  } else if (selWire!=null){
+    wires = wires.filter(w=>w.id!==selWire);
+    selWire=null;
+  } else if (selRail!=null){
+    rails = rails.filter(r=>r.id!==selRail);
+    railConns = railConns.filter(rc=>rc.rail!==selRail);
+    selRail=null;
+  } else if (selRailConn!=null){
+    railConns = railConns.filter(rc=>rc.id!==selRailConn);
+    selRailConn=null;
+  }
+  render(); scheduleAutoSave();
+}
+document.addEventListener('keydown', e=>{
+  if (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+  if (e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); doDeleteSel(); }
+  if (e.key==='Escape'){ wireStart=null; render(); }
+});
+
+function doNew(){
+  if (!insts.length && !wires.length && !rails.length) return;
+  if (!confirm('Zeichnung wirklich leeren?')) return;
+  insts=[]; wires=[]; rails=[]; railConns=[]; iid=1; wid=1; rid=1; rcid=1;
+  sel=null; selWire=null; selRail=null; selRailConn=null;
+  render(); scheduleAutoSave();
+}
+
+function buildSaveData(){ return { insts, wires, rails, railConns, iid, wid, rid, rcid }; }
+function doSave(){
+  const blob = new Blob([JSON.stringify(buildSaveData(),null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'stromlaufplan.json'; a.click();
+  URL.revokeObjectURL(a.href);
+}
+function doLoad(){
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange = e=>{
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev=>{ try{ importData(JSON.parse(ev.target.result)); } catch(err){ alert('Ladefehler: '+err.message); } };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+function importData(data){
+  insts = (data.insts||[]).filter(i=>SYM[i.type]);
+  wires = data.wires||[];
+  rails = (data.rails||[]).filter(r=>RAIL_TYPES[r.type]);
+  railConns = data.railConns||[];
+  iid = data.iid || (Math.max(0,...insts.map(i=>i.id))+1);
+  wid = data.wid || (Math.max(0,...wires.map(w=>w.id))+1);
+  rid = data.rid || (Math.max(0,...rails.map(r=>r.id))+1);
+  rcid = data.rcid || (Math.max(0,...railConns.map(rc=>rc.id))+1);
+  sel=null; selWire=null; selRail=null; selRailConn=null;
+  render(); scheduleAutoSave();
+}
+
+let _asTimer=null;
+function scheduleAutoSave(){
+  clearTimeout(_asTimer);
+  _asTimer = setTimeout(()=>{ try{ localStorage.setItem('stromlaufplan2_manual_v1', JSON.stringify(buildSaveData())); }catch(e){} }, 600);
+}
+
+(function initLoad(){
+  try {
+    const raw = localStorage.getItem('stromlaufplan2_manual_v1');
+    if (raw) importData(JSON.parse(raw));
+  } catch(e){}
+})();
+
+function toggleSidebar(){ document.getElementById('sidebar').classList.toggle('open'); }
+if (window.innerWidth<768) document.getElementById('btn-ham').style.display='';
+
+buildSidebar();
+render();
+</script>
+</body>
+</html>
