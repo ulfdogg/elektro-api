@@ -121,82 +121,56 @@ function dot(g,x,y,s){ mk('circle',{cx:x,cy:y,r:2.2,fill:s||'#1f2937'},g); }
 function deviceFrame(g, cx, fy1, fy2, hw){
   mk('rect',{x:cx-hw,y:fy1,width:hw*2,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
 }
-// Betätigungsart nach IEC 60617-7: eigenständiges Symbol NEBEN dem Schaltglied, mechanisch
-// (nicht elektrisch!) über eine gestrichelte Linie verbunden -- so wie es die Norm-Tabelle
-// und reale EPLAN-Symbole zeigen. Frühere Fassung zeichnete stattdessen eine erfundene
-// "Raste"-Markierung direkt AUF den Kontakt -- das war falsch, hier korrigiert.
-// (x,y) = Anschlusspunkt der gestrichelten Linie (rechte/untere Kante des Glyphen).
 function actuatorGlyph(g, type, x, y, col){
-  col = col || '#1f2937';
+  col = col||'#1f2937';
   if (type==='hand') {
-    // Handantrieb, allgemein: Winkel-Hebel (senkrechter Griff mit Fuß oben)
-    line(g,x,y-8,x,y,col,1.3);
-    line(g,x,y-8,x+6,y-8,col,1.3);
+    line(g,x+2,y-1,x+2,y-12,col,1);
+    line(g,x-4,y-12,x+8,y-12,col,1);
   } else if (type==='druck') {
-    // Betätigung durch Drücken: Stößel mit Knopf
-    line(g,x-10,y,x,y,col,1.3);
-    mk('circle',{cx:x-13,cy:y,r:3,fill:'#fff',stroke:col,'stroke-width':1.2},g);
-  } else if (type==='drehen') {
-    // Betätigung durch Drehen: T-Griff (Drehknauf)
-    line(g,x-8,y,x,y,col,1.3);
-    line(g,x-8,y-6,x-8,y+6,col,1.3);
+    line(g,x,y,x+6,y,col,1);
+    mk('circle',{cx:x+9,cy:y,r:3.5,fill:col,stroke:col,'stroke-width':1},g);
   } else if (type==='notaus') {
-    // Antrieb für NOT-AUS-Schalter: Kreis (Pilzkopf) mit Betätigungsstab, rot
-    line(g,x-6,y,x,y,'#dc2626',1.3);
-    mk('circle',{cx:x-11,cy:y,r:5,fill:'none',stroke:'#dc2626','stroke-width':1.6},g);
+    line(g,x,y,x+6,y,col,1);
+    mk('circle',{cx:x+11,cy:y,r:5,fill:'none',stroke:'#dc2626','stroke-width':1.6},g);
+    line(g,x+8,y-2,x+14,y+2,'#dc2626',1.5);
+    line(g,x+8,y+2,x+14,y-2,'#dc2626',1.5);
   }
 }
-// Rastungs-Kennzeichen (kleines "v"): eigenständiges IEC-60617-7-Symbol für "Betätigungsart
-// bleibt in der eingestellten Position stehen" -- wird IN REIHE mit dem eigentlichen
-// Antriebssymbol auf derselben gestrichelten Linie gezeichnet (nicht anstelle davon, siehe
-// drawActuatorLink), z.B. Handantrieb-Haken -- Raste-v -- Gehäuse.
 function rasteV(g, x, y, col){
   col = col||'#1f2937';
-  line(g,x,y,x+3,y+5,col,1.2);
-  line(g,x+3,y+5,x+6,y,col,1.2);
+  line(g,x,y,x+3,y+5,col,1);
+  line(g,x+3,y+5,x+6,y,col,1);
 }
-// Verbindet Betätigungsart-Symbol(e) mechanisch mit dem Gehäuse: bei rastenden (in Stellung
-// verharrenden) Antrieben zusätzlich das Rastungs-"v" auf derselben gestrichelten Linie,
-// zwischen Antrieb und Gehäuse -- genau wie im Referenzbild (Haken -- gestrichelt -- v --
-// gestrichelt -- Gehäuse). Bei federrückstellenden Antrieben (Taster) nur die einfache Linie.
 function drawActuatorLink(g, ax, ay, frameX, type, col, maintained){
   if (maintained) {
     const vx = frameX-8;
-    mk('line',{x1:ax,y1:ay,x2:vx-3,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+    mk('line',{x1:ax,y1:ay,x2:vx-3,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,3'},g);
     rasteV(g, vx-3, ay-3, col);
-    mk('line',{x1:vx+3,y1:ay,x2:frameX,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+    mk('line',{x1:vx+3,y1:ay,x2:frameX,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,3'},g);
   } else {
-    mk('line',{x1:ax,y1:ay,x2:frameX,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,2'},g);
+    mk('line',{x1:ax,y1:ay,x2:frameX,y2:ay,stroke:col,'stroke-width':1,'stroke-dasharray':'2,3'},g);
   }
   actuatorGlyph(g, type, ax, ay, col);
 }
 function contactGlyph(g, nc, actuator, cx, closedNow, maintained){
   cx = cx===undefined?14:cx;
-  const t1=16, t2=28, fy1=8, fy2=36, hw=9;
-  line(g,cx,0,cx,fy1);
-  line(g,cx,fy2,cx,44);
-  deviceFrame(g,cx,fy1,fy2,hw);
+  const t1=16, t2=28;
+  line(g,cx,0,cx,t1);
+  line(g,cx,t2,cx,44);
   dot(g,cx,t1); dot(g,cx,t2);
   const closed = closedNow==null ? nc : closedNow;
   const bladeCol = closedNow==null ? '#1f2937' : (closed?'#16a34a':'#1f2937');
   if (closed) {
-    // Geschlossen: Zunge trifft den Anschlusspunkt exakt (glatte, gerade Verbindung).
     line(g,cx,t2,cx,t1,bladeCol,1.6);
   } else {
-    // Offen: geknickte Zunge (kurzes Stück gerade ab dem unteren Anschluss, dann Schräge,
-    // die sichtbar VOR dem oberen Anschluss endet) — liest sich als bewegliches Scharnier,
-    // näher an professioneller Schaltplan-Darstellung als eine einzelne durchgehende Diagonale.
     line(g,cx,t2,cx,t2-4,bladeCol,1.6);
     line(g,cx,t2-4,cx+6,t1+2,bladeCol,1.6);
   }
-  if (nc) line(g,cx+1,t1-1,cx+7,t1-7,'#1f2937',1.1); // Öffner-Kennzeichen (Bauart, immer sichtbar)
+  if (nc) line(g,cx+1,t1-1,cx+7,t1-7,'#1f2937',1.1);
   if (actuator) {
-    // Betätigungsart-Symbol(e) links neben dem Gehäuse, gestrichelt (mechanisch) angebunden --
-    // siehe drawActuatorLink()/actuatorGlyph(). Während der Simulation zeigt die Kette
-    // denselben Zustand wie die Zunge.
     const actCol = closedNow==null ? '#1f2937' : bladeCol;
-    const ax = cx-hw-22, ay = (t1+t2)/2;
-    drawActuatorLink(g, ax, ay, cx-hw, actuator, actCol, maintained);
+    const ax = cx-16, ay = (t1+t2)/2;
+    drawActuatorLink(g, ax, ay, cx, actuator, actCol, maintained);
   }
 }
 function coilGlyph(g, delay){
@@ -247,9 +221,8 @@ const SYM = {
   contact_co:{cat:'Kontakte',label:'Wechsler',w:38,h:44,ports:[{x:14,y:0,l:'C'},{x:14,y:44,l:'NO'},{x:32,y:44,l:'NC'}],
     draw:(g,inst)=>{
       const cx=14,t1=16,t2=28;
-      const on = simMode && inst ? coilOnForLabel(inst.label) : false; // Ruhezustand = NC verbunden
-      line(g,cx,0,cx,8); line(g,cx,36,cx,44); line(g,32,36,32,44);
-      mk('rect',{x:3,y:8,width:32,height:28,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      const on = simMode && inst ? coilOnForLabel(inst.label) : false;
+      line(g,cx,0,cx,t1); line(g,cx,t2,cx,44); line(g,32,20,32,44);
       dot(g,cx,t1); dot(g,cx,t2); dot(g,32,20);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (on) line(g,cx,t1,cx,t2,col,1.8); else line(g,cx,t1,32,20,col,1.8);
@@ -276,37 +249,32 @@ const SYM = {
   wechselschalter:{cat:'Taster/Schalter',label:'Wechselschalter',w:64,h:44,
     ports:[{x:41,y:44,l:'C'},{x:29,y:0,l:'1'},{x:41,y:0,l:'2'}],
     draw:(g,inst)=>{
-      const cx=41, off=29, t1=16, t2=28, fy1=8, fy2=36, hw=16;
+      const cx=41, off=29, t1=16, t2=28;
       const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
       const pos2 = (simMode && inst) ? s.pos===2 : false;
-      line(g,cx,fy2,cx,44); line(g,off,0,off,fy1); line(g,cx,0,cx,fy1);
-      mk('rect',{x:cx-hw,y:fy1,width:hw*2,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      line(g,cx,t2,cx,44); line(g,off,0,off,t1); line(g,cx,0,cx,t1);
       dot(g,cx,t2); dot(g,off,t1); dot(g,cx,t1);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (pos2) {
-        line(g,cx,t1,cx,t2,col,1.8); // fluchtend -> gerade
+        line(g,cx,t1,cx,t2,col,1.8);
       } else {
         line(g,off,t1,off,t1+4,col,1.8);
         line(g,off,t1+4,cx,t2,col,1.8);
       }
-      const ax=cx-hw-22, ay=(t1+t2)/2;
-      drawActuatorLink(g, ax, ay, cx-hw, 'hand', col, true);
+      drawActuatorLink(g, 3, 22, off, 'hand', col, true);
     }},
   kreuzschalter:{cat:'Taster/Schalter',label:'Kreuzschalter',w:78,h:44,
     ports:[{x:39,y:0,l:'1'},{x:57,y:0,l:'2'},{x:39,y:44,l:'3'},{x:57,y:44,l:'4'}],
     draw:(g,inst)=>{
-      const fy1=8, fy2=36;
       const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
       const crossed = !!s.crossed;
-      line(g,39,0,39,fy1); line(g,57,0,57,fy1);
-      line(g,39,fy2,39,44); line(g,57,fy2,57,44);
-      mk('rect',{x:32,y:fy1,width:32,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      line(g,39,0,39,14); line(g,57,0,57,14);
+      line(g,39,30,39,44); line(g,57,30,57,44);
       dot(g,39,14); dot(g,57,14); dot(g,39,30); dot(g,57,30);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (!crossed) { line(g,39,14,39,30,col,1.6); line(g,57,14,57,30,col,1.6); }
       else { line(g,39,14,57,30,col,1.6); line(g,57,14,39,30,col,1.6); }
-      const ax=10, ay=22;
-      drawActuatorLink(g, ax, ay, 32, 'hand', col, true);
+      drawActuatorLink(g, 10, 22, 39, 'hand', col, true);
     }},
   notaus:{cat:'Taster/Schalter',label:'Not-Aus',w:50,h:44,ports:[{x:36,y:0},{x:36,y:44}],
     draw:(g,inst)=>contactGlyph(g,true,'notaus',36,simClosed(inst),true)},
@@ -315,17 +283,15 @@ const SYM = {
   wechsel_kl:{cat:'Taster/Schalter',label:'Wechselschalter mit Kontrollleuchte',w:64,h:66,
     ports:[{x:41,y:44,l:'C'},{x:29,y:0,l:'1'},{x:41,y:0,l:'2'},{x:25,y:66,l:'N'},{x:57,y:66,l:'KL'}],
     draw:(g,inst)=>{
-      const cx=41, off=29, t1=16, t2=28, fy1=8, fy2=36, hw=16;
+      const cx=41, off=29, t1=16, t2=28;
       const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
       const pos2 = (simMode && inst) ? s.pos===2 : false;
-      line(g,cx,fy2,cx,44); line(g,off,0,off,fy1); line(g,cx,0,cx,fy1);
-      mk('rect',{x:cx-hw,y:fy1,width:hw*2,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      line(g,cx,t2,cx,44); line(g,off,0,off,t1); line(g,cx,0,cx,t1);
       dot(g,cx,t2); dot(g,off,t1); dot(g,cx,t1);
       const col = simMode && inst ? '#16a34a' : '#1f2937';
       if (pos2) { line(g,cx,t1,cx,t2,col,1.8); }
       else { line(g,off,t1,off,t1+4,col,1.8); line(g,off,t1+4,cx,t2,col,1.8); }
-      const ax=cx-hw-22, ay=(t1+t2)/2;
-      drawActuatorLink(g, ax, ay, cx-hw, 'hand', col, true);
+      drawActuatorLink(g, 3, 22, off, 'hand', col, true);
       // Kontrollleuchte: vereinfacht direkt an die Schalterstellung gekoppelt (leuchtet in
       // Stellung 2) statt an eine tatsächlich simulierte Glimmlampen-Verdrahtung über N/KL.
       const lit = simMode && inst && pos2;
@@ -340,16 +306,15 @@ const SYM = {
     draw:(g,inst)=>{
       const s = (simMode && inst) ? (simState[inst.id]||{}) : {};
       const c1 = s.closed1!==false, c2 = s.closed2!==false;
-      const fy1=8, fy2=36, ay=16;
-      line(g,51,0,51,fy1);
-      line(g,34,fy2,34,44); line(g,68,fy2,68,44);
-      mk('rect',{x:25,y:fy1,width:52,height:fy2-fy1,fill:'#fff',stroke:'#1f2937','stroke-width':1.1},g);
+      const ay=16;
+      line(g,51,0,51,16);
+      line(g,34,28,34,44); line(g,68,28,68,44);
       dot(g,51,16); dot(g,34,28); dot(g,68,28);
       const col1 = simMode&&inst ? (c1?'#16a34a':'#1f2937') : '#1f2937';
       const col2 = simMode&&inst ? (c2?'#16a34a':'#1f2937') : '#1f2937';
       if (c1) line(g,51,16,34,28,col1,1.6); else line(g,51,16,42,20,col1,1.6);
       if (c2) line(g,51,16,68,28,col2,1.6); else line(g,51,16,60,20,col2,1.6);
-      drawActuatorLink(g, 25-22, ay, 25, 'hand', col1, true);
+      drawActuatorLink(g, 12, ay, 34, 'hand', col1, true);
       // Rechte Seite: gleicher Aufbau, nur seitenverkehrt (Antrieb liegt rechts vom Gehäuse).
       const vx2 = 77+8;
       mk('line',{x1:77,y1:ay,x2:vx2-3,y2:ay,stroke:col2,'stroke-width':1,'stroke-dasharray':'2,2'},g);
