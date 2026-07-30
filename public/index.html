@@ -3687,10 +3687,8 @@ function render() {
     });
   }
 
-  // ── CEE-Power-Rails: L1/L2/L3 oben, N/PE unten als Sammelschienen, sobald eine
-  // CEE-Kupplung im Plan ist -- nicht mehr an den Simulationsmodus gekoppelt, damit sie
-  // schon beim Einbauen der Kupplung als Orientierung sichtbar sind.
-  if (comps.some(c => c.type === 'cee16_kupplung')) {
+  // ── CEE-Power-Rails: in simMode L1/L2/L3 oben, N/PE unten als Sammelschienen ──
+  if (simMode && comps.some(c => c.type === 'cee16_kupplung')) {
     let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
     comps.forEach(c => {
       if (c.type === 'cee16_kupplung') return;
