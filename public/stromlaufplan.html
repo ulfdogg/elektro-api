@@ -1105,21 +1105,93 @@ function render(){
     hit.addEventListener('pointerdown',e=>{ e.stopPropagation(); sel=null; selRail=null; selWire=null; selRailConn=rc.id; render(); });
   });
 
-  // Leitungen
+  // Leitungen -- wie im Aufbauplan per Segment-/Eckpunkt-Griff frei verschiebbar. Ohne manuellen
+  // Eingriff (w.manual) wird die Route bei jedem Render neu aus den aktuellen Portpositionen
+  // berechnet; nach einem Zug wird der Pfad in w.pts gemerkt und nur noch Anfang/Ende an die
+  // (ggf. neue) Portposition angepasst, die Zwischenpunkte bleiben ortsfest.
   wires.forEach(w=>{
     const fi = insts.find(i=>i.id===w.fid), ti = insts.find(i=>i.id===w.tid);
     if (!fi||!ti) return;
     const [ax,ay] = portWorld(fi,w.fp), [bx,by] = portWorld(ti,w.tp);
-    const midY = (ay+by)/2;
-    const d = Math.abs(ax-bx)<2 ? `M${ax},${ay} L${bx},${by}` : `M${ax},${ay} L${ax},${midY} L${bx},${midY} L${bx},${by}`;
-    let stroke = selWire===w.id?'#2563eb':'#374151', sw = selWire===w.id?2.4:1.8;
+    let pts;
+    if (w.manual && w.pts && w.pts.length>1) {
+      pts = w.pts.map(p=>[...p]);
+      pts[0] = [ax,ay]; pts[pts.length-1] = [bx,by];
+    } else {
+      const midY = (ay+by)/2;
+      pts = Math.abs(ax-bx)<2 ? [[ax,ay],[bx,by]] : [[ax,ay],[ax,midY],[bx,midY],[bx,by]];
+    }
+    w.pts = pts;
+    const isSelW = selWire===w.id;
+    const d = pts.map((p,i)=>(i===0?'M':'L')+p[0]+','+p[1]).join(' ');
+    let stroke = isSelW?'#2563eb':'#374151', sw = isSelW?2.4:1.8;
     if (simMode) {
       const pc = potColor(simPortPot[w.fid+':'+w.fp] || simPortPot[w.tid+':'+w.tp] || 0);
       if (pc) { stroke = pc; sw = 2.6; }
     }
-    mk('path',{d,fill:'none',stroke,'stroke-width':sw},svg);
-    const hit = mk('path',{d,fill:'none',stroke:'transparent','stroke-width':12,cursor:'pointer'},svg);
-    hit.addEventListener('pointerdown',e=>{ e.stopPropagation(); if(simMode) return; sel=null; selWire=w.id; selRail=null; selRailConn=null; render(); });
+    mk('path',{d,fill:'none',stroke,'stroke-width':sw,'stroke-linecap':'round','stroke-linejoin':'round'},svg);
+
+    // Allgemeine Klickfläche ZUERST einfügen, damit die Griffe unten (nur bei Auswahl
+    // gezeichnet) im SVG-Stapel obenauf liegen und beim Ziehen Vorrang vor der Klickfläche haben.
+    const resetManualPath = ()=>{ delete w.pts; delete w.manual; selWire=w.id; render(); scheduleAutoSave(); };
+    const hit = mk('path',{d,fill:'none',stroke:'transparent','stroke-width':12,cursor:isSelW?'grab':'pointer'},svg);
+    hit.addEventListener('pointerdown',e=>{
+      e.stopPropagation();
+      if (simMode) return;
+      sel=null; selRail=null; selRailConn=null; selWire=w.id; render();
+    });
+    hit.addEventListener('dblclick',e=>{ e.stopPropagation(); if (!simMode) resetManualPath(); });
+
+    // Ausgewählte Leitung: Segment-Griffe (verschieben quer zum Segment, erzeugt bei einer
+    // geraden 2-Punkte-Leitung automatisch einen U-Knick) + Eckpunkt-Griffe (frei verschiebbar).
+    if (isSelW && !simMode) {
+      for (let si=0; si<pts.length-1; si++) {
+        const [sax,say]=pts[si], [sbx,sby]=pts[si+1];
+        const isHseg = Math.abs(sby-say) < Math.abs(sbx-sax);
+        const mx=(sax+sbx)/2, my=(say+sby)/2;
+        const sh = mk('line',{x1:sax,y1:say,x2:sbx,y2:sby,stroke:'transparent','stroke-width':14,cursor:isHseg?'ns-resize':'ew-resize'},svg);
+        (isHseg?mk('line',{x1:mx-8,y1:my,x2:mx+8,y2:my,stroke:'#2563eb','stroke-width':2.5,'stroke-linecap':'round','pointer-events':'none'},svg)
+          :mk('line',{x1:mx,y1:my-8,x2:mx,y2:my+8,stroke:'#2563eb','stroke-width':2.5,'stroke-linecap':'round','pointer-events':'none'},svg));
+        mk('circle',{cx:mx,cy:my,r:4,fill:'#fff',stroke:'#2563eb','stroke-width':1.5,'pointer-events':'none'},svg);
+        (si=>sh.addEventListener('pointerdown', e=>{
+          e.stopPropagation();
+          const start = svgPt(e.clientX,e.clientY);
+          const origPts = w.pts.map(p=>[...p]);
+          const onMove = ev=>{
+            const p = svgPt(ev.clientX,ev.clientY);
+            if (origPts.length===2) {
+              const [pax,pay]=origPts[0], [pbx,pby]=origPts[1];
+              if (isHseg) { const dy=Math.round((p.y-start.y)/10)*10; w.pts=[[pax,pay],[pax,pay+dy],[pbx,pby+dy],[pbx,pby]]; }
+              else { const dx=Math.round((p.x-start.x)/10)*10; w.pts=[[pax,pay],[pax+dx,pay],[pax+dx,pby],[pbx,pby]]; }
+            } else {
+              const newPts = origPts.map(pp=>[...pp]);
+              if (isHseg) { const dy=Math.round((p.y-start.y)/10)*10; newPts[si][1]+=dy; newPts[si+1][1]+=dy; }
+              else { const dx=Math.round((p.x-start.x)/10)*10; newPts[si][0]+=dx; newPts[si+1][0]+=dx; }
+              w.pts = newPts;
+            }
+            w.manual = true; render();
+          };
+          const onUp = ()=>{ window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); scheduleAutoSave(); };
+          window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp);
+        }))(si);
+        sh.addEventListener('dblclick', e=>{ e.stopPropagation(); resetManualPath(); });
+      }
+      pts.forEach(([vx,vy],vi)=>{
+        if (vi===0||vi===pts.length-1) return; // Anfang/Ende hängen am Port, nicht frei verschiebbar
+        const vh = mk('circle',{cx:vx,cy:vy,r:5,fill:'#fff',stroke:'#2563eb','stroke-width':1.5,cursor:'move'},svg);
+        (vi=>vh.addEventListener('pointerdown', e=>{
+          e.stopPropagation();
+          const onMove = ev=>{
+            const p = svgPt(ev.clientX,ev.clientY);
+            w.pts[vi] = [Math.round(p.x/10)*10, Math.round(p.y/10)*10];
+            w.manual = true; render();
+          };
+          const onUp = ()=>{ window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); scheduleAutoSave(); };
+          window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp);
+        }))(vi);
+        vh.addEventListener('dblclick', e=>{ e.stopPropagation(); resetManualPath(); });
+      });
+    }
   });
 
   // Symbole
