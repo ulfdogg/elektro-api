@@ -1745,6 +1745,18 @@ function buildFromAufbauplan(ap){
     if (!pis) return;
     pis.forEach(pi=>{ groupHasForcedInput[find(ensure(c.id+':'+pi))] = true; });
   });
+  // Sobald ein FI/RCD (bzw. RCBO) vorhanden ist, soll dessen N-Abgang IMMER eine eigene
+  // Sammelschiene bekommen -- auch wenn nur ein einziges nachgeschaltetes Gerät (z.B. eine
+  // Leuchte) daranhängt und die normale Bus-Erkennung (>=3 Geräte) das sonst nicht als Schiene
+  // werten würde. So docken alle Verbraucher konsequent an einer echten N-Schiene an (die im
+  // Plan automatisch unten landet, siehe arrangeStromlaufplan), statt an Punkt-zu-Punkt-Drähten.
+  const MULTIPOLE_OUTPUT_N = { rcd4:7, rcd2:3, rcbo:3 };
+  const groupHasForcedOutputN = {};
+  comps.forEach(c=>{
+    const pi = MULTIPOLE_OUTPUT_N[c.type];
+    if (pi==null) return;
+    groupHasForcedOutputN[find(ensure(c.id+':'+pi))] = true;
+  });
 
   // Pro Union-Find-Gruppe: entweder eine echte Sammelschiene (Vorlage wie in jedem anderen
   // Stromlaufplan hier: L1/L2/L3/N/PE als durchgehende Linie, Bauteile hängen per railConn
@@ -1758,6 +1770,7 @@ function buildFromAufbauplan(ap){
   // an diesem Port hängt -- die Schiene soll trotzdem entstehen (nur eben ohne weitere railConns).
   Object.keys(groupHasCEE).forEach(root=>{ if (!(root in groups)) groups[root] = []; });
   Object.keys(groupHasForcedInput).forEach(root=>{ if (!(root in groups)) groups[root] = []; });
+  Object.keys(groupHasForcedOutputN).forEach(root=>{ if (!(root in groups)) groups[root] = []; });
   const newWires = []; let wid2=1;
   const newRails = []; let ridN=1;
   const newRailConns = []; let rcidN=1;
@@ -1767,18 +1780,19 @@ function buildFromAufbauplan(ap){
     const roles = rootRoles[root];
     const isCEE = groupHasCEE[root];
     const isForcedInput = groupHasForcedInput[root];
-    if (keys.length<2 && !isCEE && !isForcedInput) return; // unverdrahteter Einzelport ohne Sonderfall -- nichts zu tun
+    const isForcedOutputN = groupHasForcedOutputN[root];
+    if (keys.length<2 && !isCEE && !isForcedInput && !isForcedOutputN) return; // unverdrahteter Einzelport ohne Sonderfall -- nichts zu tun
     // Nur bei >=3 beteiligten GERÄTEN UND einer echten Verzweigung (mind. 3 Leitungen laufen an
     // einem Punkt zusammen, oder ein Durchgangsbauteil ist beteiligt) als Sammelschiene
     // behandeln: eine simple Reihenschaltung LS -> Schalter hat z.B. auch durchgehend
     // erkennbare Rollen (L1), ist aber KEINE geteilte Sammelschiene, sondern eine gewöhnliche
     // Punkt-zu-Punkt-Verbindung -- eine ECHTE Schiene erkennt man daran, dass mehrere Leitungen
     // an einem gemeinsamen Punkt zusammenlaufen, nicht nur daran, dass zufällig mehrere Geräte
-    // in derselben Kette rollenmarkierte Ports haben. ZWEI Ausnahmen: eine CEE-Kupplung/Dose
-    // sowie die Eingangsseite eines mehrpoligen Schutzorgans bekommen immer eigene Schienen
-    // (auch unverdrahtet, auch in einer simplen Kette).
+    // in derselben Kette rollenmarkierte Ports haben. DREI Ausnahmen: eine CEE-Kupplung/Dose,
+    // die Eingangsseite eines mehrpoligen Schutzorgans, sowie dessen N-Abgang bekommen immer
+    // eigene Schienen (auch unverdrahtet, auch in einer simplen Kette).
     const distinctInsts = new Set(keys.map(k=>portLink[k].inst));
-    if (roles && roles.size===1 && (isCEE || isForcedInput || (distinctInsts.size>=3 && groupHasJunction[root]))) {
+    if (roles && roles.size===1 && (isCEE || isForcedInput || isForcedOutputN || (distinctInsts.size>=3 && groupHasJunction[root]))) {
       railGroupRoots.add(root);
       const rail = { id: ridN++, type:[...roles][0], y:railY, x1:20, x2:20+COLS*COLW };
       railY += 20;
