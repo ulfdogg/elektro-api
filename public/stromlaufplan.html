@@ -72,7 +72,8 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;ba
     <button class="bar-btn danger" onclick="doDeleteSel()">✕ Löschen</button>
     <button class="bar-btn" id="btn-sim" onclick="toggleSim()">⚡ Simulation</button>
     <button class="bar-btn" onclick="arrangeStromlaufplanButton()" title="Über Leitungen verbundene Bauteile mit Schienenanschluss untereinander zwischen den Schienen anordnen">↕ Anordnen</button>
-    <span class="hint" id="normal-hint">Symbol ziehen oder antippen = platzieren · Port→Port klicken = verbinden · Doppelklick = beschriften · Entf = löschen</span>
+    <button class="bar-btn" onclick="rotateSel()" title="Ausgewähltes Symbol um 90° drehen (Taste R)">↻ Drehen</button>
+    <span class="hint" id="normal-hint">Symbol ziehen oder antippen = platzieren · Port→Port klicken = verbinden · R = drehen · Doppelklick = beschriften · Entf = löschen</span>
     <span class="hint" id="sim-hint" style="display:none;color:#fbbf24">SIM: Taster/Schalter/Sicherungen anklicken zum Schalten · Spulen-Beschriftung (z.B. "K1") muss mit den zugehörigen Kontakten übereinstimmen</span>
   </div>
   <div id="main">
@@ -914,7 +915,11 @@ function svgPt(clientX, clientY){
 }
 function portWorld(inst, pi){
   const s = SYM[inst.type], p = s.ports[pi];
-  return [inst.x+p.x, inst.y+p.y];
+  const rot = inst.rot||0;
+  if (!rot) return [inst.x+p.x, inst.y+p.y];
+  const rad = rot*Math.PI/180, cos=Math.cos(rad), sin=Math.sin(rad);
+  const cx=s.w/2, cy=s.h/2, dx=p.x-cx, dy=p.y-cy;
+  return [inst.x + dx*cos - dy*sin + cx, inst.y + dx*sin + dy*cos + cy];
 }
 
 // Rastet ein Bauteil beim Verschieben an den Anschlusspunkten ANDERER Bauteile ein, sobald
@@ -1197,7 +1202,9 @@ function render(){
   // Symbole
   insts.forEach(inst=>{
     const s = SYM[inst.type];
-    const g = mk('g',{transform:`translate(${inst.x},${inst.y})`},svg);
+    const rot = inst.rot||0;
+    const rotT = rot ? ` rotate(${rot},${s.w/2},${s.h/2})` : '';
+    const g = mk('g',{transform:`translate(${inst.x},${inst.y})${rotT}`},svg);
     if (sel===inst.id) mk('rect',{x:-6,y:-6,width:s.w+12,height:s.h+12,rx:5,fill:'rgba(37,99,235,0.08)',stroke:'#2563eb','stroke-width':1.3,'stroke-dasharray':'3,2'},g);
     // Zusatzrahmen nur noch für Bauteile ohne eigene Zustandszeichnung (Spulen: keine
     // Kontaktzunge, die sich bewegen könnte). Kontakte/Schalter/Sicherungen zeigen ihren
@@ -1213,7 +1220,11 @@ function render(){
     }
     s.draw(g, inst);
     const lbl = inst.label || '';
-    if (lbl) mk('text',{x:s.w/2,y:-8,'text-anchor':'middle','font-size':10,'font-weight':'bold',fill:'#111'},g).textContent=lbl;
+    if (lbl) {
+      const t = mk('text',{x:s.w/2,y:-8,'text-anchor':'middle','font-size':10,'font-weight':'bold',fill:'#111'},g);
+      t.textContent = lbl;
+      if (rot) t.setAttribute('transform', `rotate(${-rot},${s.w/2},-8)`);
+    }
     // Body-Drag zum Verschieben + Auswahl + Doppelklick=Beschriften (VOR den Ports einfügen,
     // damit die Port-Kreise beim Klicken obenauf liegen und nicht von der Drag-Hitbox verdeckt werden)
     const hitBox = mk('rect',{x:-4,y:-4,width:s.w+8,height:s.h+8,fill:'transparent',cursor: simMode?'pointer':'grab'},g);
@@ -1298,6 +1309,22 @@ function renameInst(inst){
   if (v!==null){ inst.label=v; render(); scheduleAutoSave(); }
 }
 
+function rotateSel(){
+  if (sel==null || simMode) return;
+  const inst = insts.find(i=>i.id===sel);
+  if (!inst) return;
+  inst.rot = ((inst.rot||0)+90)%360;
+  // Manuelle Leitungspfade und die feste Schienenanschluss-X neu berechnen, da sich die
+  // Portposition durch die Drehung verschoben haben kann.
+  wires.forEach(w=>{ if (w.fid===sel || w.tid===sel) { delete w.pts; delete w.manual; } });
+  railConns.forEach(rc=>{
+    if (rc.fid!==sel) return;
+    const [ax] = portWorld(inst, rc.fp);
+    rc.rx = ax;
+  });
+  render(); scheduleAutoSave();
+}
+
 function doDeleteSel(){
   if (sel!=null){
     insts = insts.filter(i=>i.id!==sel);
@@ -1320,6 +1347,7 @@ function doDeleteSel(){
 document.addEventListener('keydown', e=>{
   if (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
   if (e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); doDeleteSel(); }
+  if ((e.key==='r'||e.key==='R') && sel!=null){ e.preventDefault(); rotateSel(); }
   if (e.key==='Escape'){ wireStart=null; render(); }
 });
 
