@@ -1661,6 +1661,13 @@ function buildFromAufbauplan(ap){
     newWires.push({ id: wid2++, fid:a.inst, fp:a.port, tid:b.inst, tp:b.port });
   });
 
+  // Schienen-Reihenfolge fest nach Norm sortieren (L1/L2/L3 oben, N/PE unten) -- die y-Position
+  // beim Erzeugen oben richtet sich nur danach, in welcher Reihenfolge die Gruppen zufällig
+  // durchlaufen wurden, nicht nach der elektrischen Rolle.
+  const RAIL_ROLE_ORDER = { L1:0, L2:1, L3:2, N:3, PE:4 };
+  newRails.sort((a,b)=> (RAIL_ROLE_ORDER[a.type]??99) - (RAIL_ROLE_ORDER[b.type]??99));
+  newRails.forEach((r,i)=>{ r.y = 20 + i*20; });
+
   return { insts:newInsts, wires:newWires, rails:newRails, railConns:newRailConns,
     iid:nid, wid:wid2, rid:ridN, rcid:rcidN,
     _summary:{ imported:importedCount, skipped } };
