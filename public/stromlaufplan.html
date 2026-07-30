@@ -1345,6 +1345,7 @@ function arrangeStromlaufplan(){
   if (!insts.length) { alert('Keine Bauteile im Plan.'); return 0; }
 
   const SAFETY_TYPES = new Set(['ls1','ls3','rcd2','rcd4','rcbo']);
+  const LOAD_TYPES = new Set(['lampe','coil','coil_delay','motor','motor_dahlander','steckdose','motion']);
   const RAIL_ROLE_ORDER = { L1:0, L2:1, L3:2, N:3, PE:4 };
   const isPhaseRail = r => r.type==='L1' || r.type==='L2' || r.type==='L3';
 
@@ -1366,17 +1367,29 @@ function arrangeStromlaufplan(){
     for (let i=1;i<members.length;i++) link(members[0], members[i]);
   });
 
-  // Wurzel-Schiene(n) bestimmen: bevorzugt L1/L2/L3 -- je Phase die mit den MEISTEN
-  // angeschlossenen Bauteilen (die Haupt-Einspeisung, nicht eine nachgeschaltete Schiene wie
-  // eine ehemalige CEE-Kupplung, die selbst erst über ein LS gespeist wird). Gibt es gar keine
-  // Phasenschiene (z.B. reine N-Sammelschiene), wird ersatzweise jeder vorhandene Schienentyp
-  // gleich behandelt, damit trotzdem etwas angeordnet wird.
+  // Wurzel-Schiene(n) bestimmen: eine Schiene ist Wurzel (Haupt-Einspeisung, ganz oben), wenn sie
+  // ausschließlich über die EINGANGSSEITE eines mehrpoligen Schutzorgans (FI/RCD, 3-poliger LS,
+  // RCBO) angeschlossen ist -- die Ausgangsseite (z.B. FI-Ausgang bridgt zu 3 LS) ist elektrisch
+  // "nach" dem Gerät und daher NIE Wurzel, selbst wenn sie zufällig die meisten Bauteile hat (das
+  // war der Grund für das frühere Überkreuzen der Leitungen: die Ausgangs-Sammelschiene landete
+  // fälschlich oberhalb des Symbols, obwohl ihr Anschluss unten am Gerät liegt). Ohne erkennbares
+  // Schutzorgan (z.B. eine reine N-Sammelschiene) wird ersatzweise je Typ die Schiene mit den
+  // meisten angeschlossenen Bauteilen als Wurzel verwendet, damit trotzdem etwas angeordnet wird.
+  const MULTIPOLE_SIDES = { rcd4:[[0,1,2,3],[4,5,6,7]], rcd2:[[0,1],[2,3]], ls3:[[0,1,2],[3,4,5]], rcbo:[[0,2],[1,3]] };
+  const sideOf = (type,fp)=>{ const s=MULTIPOLE_SIDES[type]; return s ? s.findIndex(list=>list.includes(fp)) : -1; };
   let candidateTypes = ['L1','L2','L3'].filter(t=> rails.some(r=>r.type===t));
   if (!candidateTypes.length) candidateTypes = [...new Set(rails.map(r=>r.type))];
   const rootRailIds = new Set();
+  rails.forEach(r=>{
+    const safetySides = railConns.filter(rc=>rc.rail===r.id).map(rc=>{
+      const inst = insts.find(i=>i.id===rc.fid);
+      return inst ? sideOf(inst.type, rc.fp) : -1;
+    }).filter(si=>si>=0);
+    if (safetySides.length && safetySides.every(si=>si===0)) rootRailIds.add(r.id);
+  });
   candidateTypes.forEach(type=>{
     const candidates = rails.filter(r=>r.type===type);
-    if (!candidates.length) return;
+    if (!candidates.length || candidates.some(r=>rootRailIds.has(r.id))) return; // schon per Schutzorgan-Eingang bestimmt
     let best = candidates[0], bestCount = (railMembers[best.id]||[]).length;
     candidates.forEach(r=>{
       const cnt = (railMembers[r.id]||[]).length;
@@ -1414,7 +1427,8 @@ function arrangeStromlaufplan(){
   });
   Object.values(rows).forEach(row=>{
     row.sort((a,b)=>{
-      const sa = SAFETY_TYPES.has(a.type)?0:1, sb = SAFETY_TYPES.has(b.type)?0:1;
+      const rank = t => SAFETY_TYPES.has(t)?0 : LOAD_TYPES.has(t)?2 : 1;
+      const sa = rank(a.type), sb = rank(b.type);
       if (sa!==sb) return sa-sb;
       return a.id-b.id;
     });
@@ -1435,16 +1449,16 @@ function arrangeStromlaufplan(){
   }
 
   // Schienen neu staffeln:
-  // - Wurzel-Schienen (Haupt-Einspeisung) eng gestaffelt ganz oben, über Zeile 1.
+  // - Wurzel-Schienen (Haupt-Einspeisung, s.o.) eng gestaffelt ganz oben, über Zeile 1 -- das
+  //   umfasst jetzt auch N (bzw. PE), wenn es die Eingangsseite eines Schutzorgans ist.
   // - Nicht-Wurzel Phasenschienen (z.B. eine ehemalige CEE-Kupplung mitten in der Kette) genau
   //   zwischen die Zeile, die sie speist, und die Zeile, die sie versorgt -- statt pauschal oben.
-  // - N/PE immer UNTER der tiefsten Bauteilzeile, unabhängig davon, welche Bauteile daranhängen
-  //   (gemeinsamer Rückleiter, kein Zwischenschritt in der Kette).
+  // - Übrige N/PE immer UNTER der tiefsten Bauteilzeile (gemeinsamer Rückleiter/Abgang).
   const rootTop = [], bottomRails = [];
   const midRails = {};
   rails.forEach(r=>{
-    if (r.type==='N' || r.type==='PE') { bottomRails.push(r); return; }
     if (rootRailIds.has(r.id)) { rootTop.push(r); return; }
+    if (r.type==='N' || r.type==='PE') { bottomRails.push(r); return; }
     const memberDepths = (railMembers[r.id]||[]).map(m=>depth[m]).filter(d=>d!=null);
     const gapIndex = memberDepths.length ? Math.min(...memberDepths) : 0;
     (midRails[gapIndex] = midRails[gapIndex] || []).push(r);
@@ -1718,6 +1732,19 @@ function buildFromAufbauplan(ap){
     const roles = AP_ROLE[c.type] || {};
     Object.keys(roles).forEach(pi=>{ groupHasCEE[find(ensure(c.id+':'+pi))] = true; });
   });
+  // Mehrpolige Schutzorgane (FI/RCD, 3-poliger LS, RCBO) sind per Definition der Anfang der
+  // Kette -- ihre EINGANGSSEITE (im Aufbauplan oft gar nicht extra verdrahtet, weil sie einfach
+  // "die Einspeisung" ist) bekommt daher wie bei einer CEE-Kupplung immer eine eigene Schiene je
+  // Ader, unabhängig davon, ob dort tatsächlich etwas angeschlossen ist. Die AUSGANGSSEITE (z.B.
+  // FI-Ausgang -> 3x LS) bleibt bewusst außen vor und folgt weiter der normalen Bus-Erkennung
+  // unten -- sie ist elektrisch "nach" dem Gerät, nicht die Einspeisung selbst.
+  const MULTIPOLE_INPUT = { rcd4:[0,1,2,3], rcd2:[0,1], ls3:[0,1,2], rcbo:[0,2] };
+  const groupHasForcedInput = {};
+  comps.forEach(c=>{
+    const pis = MULTIPOLE_INPUT[c.type];
+    if (!pis) return;
+    pis.forEach(pi=>{ groupHasForcedInput[find(ensure(c.id+':'+pi))] = true; });
+  });
 
   // Pro Union-Find-Gruppe: entweder eine echte Sammelschiene (Vorlage wie in jedem anderen
   // Stromlaufplan hier: L1/L2/L3/N/PE als durchgehende Linie, Bauteile hängen per railConn
@@ -1727,12 +1754,10 @@ function buildFromAufbauplan(ap){
     const root = find(ensure(key));
     (groups[root] = groups[root]||[]).push(key);
   });
-  // CEE-Wurzeln immer aufnehmen, auch wenn (noch) kein anderes Bauteil an diesem Port hängt --
-  // die Schiene soll trotzdem entstehen (nur eben ohne railConns), weil die CEE-Kupplung/Dose
-  // selbst kein Symbol mehr bekommt und komplett durch die 5 Schienen ersetzt wird.
-  Object.keys(groupHasCEE).forEach(root=>{
-    if (!(root in groups)) groups[root] = [];
-  });
+  // CEE- und erzwungene Eingangs-Wurzeln immer aufnehmen, auch wenn (noch) kein anderes Bauteil
+  // an diesem Port hängt -- die Schiene soll trotzdem entstehen (nur eben ohne weitere railConns).
+  Object.keys(groupHasCEE).forEach(root=>{ if (!(root in groups)) groups[root] = []; });
+  Object.keys(groupHasForcedInput).forEach(root=>{ if (!(root in groups)) groups[root] = []; });
   const newWires = []; let wid2=1;
   const newRails = []; let ridN=1;
   const newRailConns = []; let rcidN=1;
@@ -1741,19 +1766,19 @@ function buildFromAufbauplan(ap){
   Object.entries(groups).forEach(([root, keys])=>{
     const roles = rootRoles[root];
     const isCEE = groupHasCEE[root];
-    if (keys.length<2 && !isCEE) return; // unverdrahteter Einzelport ohne CEE-Bezug -- nichts zu tun
+    const isForcedInput = groupHasForcedInput[root];
+    if (keys.length<2 && !isCEE && !isForcedInput) return; // unverdrahteter Einzelport ohne Sonderfall -- nichts zu tun
     // Nur bei >=3 beteiligten GERÄTEN UND einer echten Verzweigung (mind. 3 Leitungen laufen an
     // einem Punkt zusammen, oder ein Durchgangsbauteil ist beteiligt) als Sammelschiene
     // behandeln: eine simple Reihenschaltung LS -> Schalter hat z.B. auch durchgehend
     // erkennbare Rollen (L1), ist aber KEINE geteilte Sammelschiene, sondern eine gewöhnliche
     // Punkt-zu-Punkt-Verbindung -- eine ECHTE Schiene erkennt man daran, dass mehrere Leitungen
     // an einem gemeinsamen Punkt zusammenlaufen, nicht nur daran, dass zufällig mehrere Geräte
-    // in derselben Kette rollenmarkierte Ports haben. EINE Ausnahme: eine CEE-Kupplung/Dose
-    // bekommt immer eigene Schienen (auch unverdrahtet, auch in einer simplen Kette), weil sie
-    // per Definition ein Verteilpunkt für alle 5 Adern ist -- das entspricht der Vorlage, die
-    // vorher im Aufbauplan galt ("CEE-Kupplung da -> Schienen zeigen").
+    // in derselben Kette rollenmarkierte Ports haben. ZWEI Ausnahmen: eine CEE-Kupplung/Dose
+    // sowie die Eingangsseite eines mehrpoligen Schutzorgans bekommen immer eigene Schienen
+    // (auch unverdrahtet, auch in einer simplen Kette).
     const distinctInsts = new Set(keys.map(k=>portLink[k].inst));
-    if (roles && roles.size===1 && (isCEE || (distinctInsts.size>=3 && groupHasJunction[root]))) {
+    if (roles && roles.size===1 && (isCEE || isForcedInput || (distinctInsts.size>=3 && groupHasJunction[root]))) {
       railGroupRoots.add(root);
       const rail = { id: ridN++, type:[...roles][0], y:railY, x1:20, x2:20+COLS*COLW };
       railY += 20;
