@@ -1416,8 +1416,6 @@ const AP_MAP = {
   kreuzschalter: { to:'kreuzschalter', portMap:{0:0,1:1,2:2,3:3} },
   serienschalter: { to:'serienschalter', portMap:{0:0,1:1,2:2} },
   steckdose: { to:'steckdose', portMap:{0:0,2:1} },
-  cee16_dose: { to:'cee16_dose', portMap:{0:0,1:1,2:2,3:3,4:4} },
-  cee16_kupplung: { to:'cee16_kupplung', portMap:{0:0,1:1,2:2,3:3,4:4} },
   motor: { to:'motor', portMap:{0:0,1:1,2:2,3:6,4:4,5:5,6:3} },
   dahlander: { to:'motor_dahlander', portMap:{0:0,1:1,2:2,3:3,4:4,5:5,6:6} },
   frequenzumrichter: { to:'frequenzumrichter', portMap:{0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7} },
@@ -1502,6 +1500,7 @@ function buildFromAufbauplan(ap){
   let importedCount=0; const skipped={};
   comps.forEach(c=>{
     if (AP_PASSTHROUGH.has(c.type)) return; // nur Verbindungsknoten, kein Symbol
+    if (c.type==='cee16_kupplung' || c.type==='cee16_dose') return; // wird durch die 5 Schienen ersetzt, kein eigenes Symbol
     if (c.type==='schuetz') {
       importedCount++;
       const main = addInst('schuetz3', c.label);
@@ -1595,6 +1594,12 @@ function buildFromAufbauplan(ap){
   Object.keys(portLink).forEach(key=>{
     const root = find(ensure(key));
     (groups[root] = groups[root]||[]).push(key);
+  });
+  // CEE-Wurzeln immer aufnehmen, auch wenn (noch) kein anderes Bauteil an diesem Port hängt --
+  // die Schiene soll trotzdem entstehen (nur eben ohne railConns), weil die CEE-Kupplung/Dose
+  // selbst kein Symbol mehr bekommt und komplett durch die 5 Schienen ersetzt wird.
+  Object.keys(groupHasCEE).forEach(root=>{
+    if (!(root in groups)) groups[root] = [];
   });
   const newWires = []; let wid2=1;
   const newRails = []; let ridN=1;
