@@ -560,6 +560,13 @@ let rails = [], railConns = [], rid=1, rcid=1;
 let sel = null, selWire = null, selRail = null, selRailConn = null;
 let zoom = 1, panX=80, panY=40;
 let wireStart = null; // {instId, portIdx}
+let wireWaypoints = []; // beim Verlegen bereits gesetzte Knick-Punkte (vor dem Zielport)
+let wireHFirst = true; // H-zuerst (true) oder V-zuerst (false) für den nächsten Knick
+function addWireCorner(pts, lx, ly, ex, ey, hFirst) {
+  if (ex===lx || ey===ly) { pts.push([ex,ey]); return; }
+  if (hFirst) { pts.push([ex,ly]); pts.push([ex,ey]); }
+  else        { pts.push([lx,ey]); pts.push([ex,ey]); }
+}
 const lastClickMap = new WeakMap(); // Doppelklick-Erkennung pro Instanz, siehe renderInst-Hitbox
 
 // ── Simulation ───────────────────────────────────────────────────────────────
@@ -1016,8 +1023,24 @@ function placeAtViewCenter(type){
 let panDrag = null;
 canvasWrap.addEventListener('pointerdown', e=>{
   if (e.target === canvasWrap || e.target.id==='svg') {
+    // Beim Leitung-Verlegen fügt ein Klick auf den Hintergrund einen Knickpunkt hinzu, statt
+    // die Leitung abzubrechen oder zu verschieben (wie im Aufbauplan) -- so lässt sich der
+    // Verlauf schon beim Ziehen selbst bestimmen, nicht erst danach per Griff.
+    if (wireStart) {
+      const fi = insts.find(i=>i.id===wireStart.instId);
+      if (fi) {
+        const [sx,sy] = portWorld(fi, wireStart.portIdx);
+        const p = svgPt(e.clientX,e.clientY);
+        const cx = Math.round(p.x/10)*10, cy = Math.round(p.y/10)*10;
+        const [lx,ly] = wireWaypoints.length>0 ? wireWaypoints[wireWaypoints.length-1] : [sx,sy];
+        addWireCorner(wireWaypoints, lx, ly, cx, cy, wireHFirst);
+        wireHFirst = !wireHFirst;
+        render();
+      }
+      return;
+    }
     panDrag = {x:e.clientX,y:e.clientY,px:panX,py:panY};
-    sel=null; selWire=null; selRail=null; selRailConn=null; wireStart=null; render();
+    sel=null; selWire=null; selRail=null; selRailConn=null; render();
   }
 });
 window.addEventListener('pointermove', e=>{
@@ -1065,7 +1088,7 @@ function render(){
         const p = svgPt(e.clientX,e.clientY);
         const rx = Math.max(r.x1, Math.min(r.x2, Math.round(p.x/10)*10));
         railConns.push({ id:rcid++, fid:wireStart.instId, fp:wireStart.portIdx, rail:r.id, rx });
-        wireStart = null; scheduleAutoSave(); render();
+        wireStart = null; wireWaypoints = []; scheduleAutoSave(); render();
         return;
       }
       sel=null; selWire=null; selRailConn=null; selRail=r.id; render();
@@ -1272,36 +1295,57 @@ function render(){
       mk('circle',{r:4,fill:'#fff',stroke:'#6b7280','stroke-width':1.3},port);
       port.addEventListener('pointerdown', e=>{
         e.stopPropagation();
-        if (!wireStart){ wireStart = {instId:inst.id, portIdx:pi}; render(); }
-        else {
-          if (!(wireStart.instId===inst.id && wireStart.portIdx===pi)) {
-            wires.push({id:wid++, fid:wireStart.instId, fp:wireStart.portIdx, tid:inst.id, tp:pi});
-            scheduleAutoSave();
+        if (!wireStart){ wireStart = {instId:inst.id, portIdx:pi}; wireWaypoints=[]; wireHFirst=true; render(); }
+        else if (wireStart.instId===inst.id && wireStart.portIdx===pi) {
+          // Klick auf denselben Startport = Verlegen abbrechen (wie Escape).
+          wireStart = null; wireWaypoints = []; render();
+        } else {
+          const newWire = { id:wid++, fid:wireStart.instId, fp:wireStart.portIdx, tid:inst.id, tp:pi };
+          if (wireWaypoints.length>0) {
+            const fromInst = insts.find(i=>i.id===wireStart.instId);
+            const [sx,sy] = portWorld(fromInst, wireStart.portIdx);
+            const [ex,ey] = portWorld(inst, pi);
+            const pathPts = [[sx,sy], ...wireWaypoints];
+            const [lx,ly] = pathPts[pathPts.length-1];
+            addWireCorner(pathPts, lx, ly, ex, ey, wireHFirst);
+            newWire.pts = pathPts; newWire.manual = true;
           }
-          wireStart = null; render();
+          wires.push(newWire);
+          scheduleAutoSave();
+          wireStart = null; wireWaypoints = []; render();
         }
       });
     });
   });
 
-  // Laufende Leitung beim Verbinden
+  // Laufende Leitung beim Verbinden -- bereits gesetzte Knickpunkte als Linie + Punkte anzeigen,
+  // damit man den Verlauf schon beim Klicken sieht (Vorschau bis zum Cursor kommt per pointermove).
   if (wireStart) {
     const fi = insts.find(i=>i.id===wireStart.instId);
     if (fi) {
       const [ax,ay] = portWorld(fi, wireStart.portIdx);
       mk('circle',{cx:ax,cy:ay,r:6,fill:'none',stroke:'#2563eb','stroke-width':2,opacity:0.6},svg);
+      if (wireWaypoints.length>0) {
+        const d = [[ax,ay],...wireWaypoints].map((pt,i)=>(i===0?'M':'L')+pt[0]+','+pt[1]).join(' ');
+        mk('path',{d,fill:'none',stroke:'#2563eb','stroke-width':1.5,'stroke-dasharray':'4,3','pointer-events':'none'},svg);
+        wireWaypoints.forEach(([wx,wy])=>{ mk('circle',{cx:wx,cy:wy,r:3,fill:'#2563eb','pointer-events':'none'},svg); });
+      }
     }
   }
 }
 document.addEventListener('pointermove', e=>{
   if (!wireStart) return;
-  // Vorschau-Linie zum Cursor
+  // Vorschau-Pfad vom Start über bereits gesetzte Knickpunkte bis zum Cursor (im aktuellen
+  // H/V-Modus), damit der Verlauf schon beim Verlegen sichtbar ist -- wie im Aufbauplan.
   let prev = document.getElementById('wire-preview');
+  if (!prev) prev = mk('path',{id:'wire-preview',fill:'none',stroke:'#2563eb','stroke-width':1.5,'stroke-dasharray':'4,3','pointer-events':'none'},document.getElementById('svg'));
   const fi = insts.find(i=>i.id===wireStart.instId); if (!fi) return;
   const [ax,ay] = portWorld(fi, wireStart.portIdx);
   const p = svgPt(e.clientX,e.clientY);
-  if (!prev) prev = mk('line',{id:'wire-preview',stroke:'#2563eb','stroke-width':1.5,'stroke-dasharray':'4,3','pointer-events':'none'},document.getElementById('svg'));
-  prev.setAttribute('x1',ax); prev.setAttribute('y1',ay); prev.setAttribute('x2',p.x); prev.setAttribute('y2',p.y);
+  const previewPts = [[ax,ay], ...wireWaypoints];
+  const [lx,ly] = previewPts[previewPts.length-1];
+  addWireCorner(previewPts, lx, ly, p.x, p.y, wireHFirst);
+  prev.setAttribute('d', previewPts.map((pt,i)=>(i===0?'M':'L')+pt[0]+','+pt[1]).join(' '));
 });
 
 function renameInst(inst){
@@ -1346,9 +1390,12 @@ function doDeleteSel(){
 }
 document.addEventListener('keydown', e=>{
   if (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+  if ((e.key==='Delete'||e.key==='Backspace') && wireStart && wireWaypoints.length>0) {
+    e.preventDefault(); wireWaypoints.pop(); render(); return;
+  }
   if (e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); doDeleteSel(); }
   if ((e.key==='r'||e.key==='R') && sel!=null){ e.preventDefault(); rotateSel(); }
-  if (e.key==='Escape'){ wireStart=null; render(); }
+  if (e.key==='Escape'){ wireStart=null; wireWaypoints=[]; render(); }
 });
 
 function doNew(){
