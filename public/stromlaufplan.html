@@ -1577,6 +1577,16 @@ function buildFromAufbauplan(ap){
       groupHasPassthrough[root] = true;
     }
   });
+  // Eine CEE-Kupplung/Dose ist per Definition ein Verteilpunkt für alle 5 Adern -- die soll
+  // im Stromlaufplan immer eigene L1/L2/L3/N/PE-Schienen bekommen, unabhängig davon, ob die
+  // strengere Bus-Erkennung (Verzweigung + >=3 Geräte) sonst zuschlagen würde. Das entspricht
+  // der Vorlage, die am Aufbauplan schon galt: "CEE-Kupplung vorhanden -> Schienen zeigen".
+  const groupHasCEE = {};
+  comps.forEach(c=>{
+    if (c.type!=='cee16_kupplung' && c.type!=='cee16_dose') return;
+    const roles = AP_ROLE[c.type] || {};
+    Object.keys(roles).forEach(pi=>{ groupHasCEE[find(ensure(c.id+':'+pi))] = true; });
+  });
 
   // Pro Union-Find-Gruppe: entweder eine echte Sammelschiene (Vorlage wie in jedem anderen
   // Stromlaufplan hier: L1/L2/L3/N/PE als durchgehende Linie, Bauteile hängen per railConn
@@ -1592,17 +1602,21 @@ function buildFromAufbauplan(ap){
   let railY = 20;
   const railGroupRoots = new Set();
   Object.entries(groups).forEach(([root, keys])=>{
-    if (keys.length<2) return; // unverdrahteter Einzelport -- nichts zu tun
     const roles = rootRoles[root];
+    const isCEE = groupHasCEE[root];
+    if (keys.length<2 && !isCEE) return; // unverdrahteter Einzelport ohne CEE-Bezug -- nichts zu tun
     // Nur bei >=3 beteiligten GERÄTEN UND einer echten Verzweigung (mind. 3 Leitungen laufen an
     // einem Punkt zusammen, oder ein Durchgangsbauteil ist beteiligt) als Sammelschiene
-    // behandeln: eine simple Reihenschaltung LS -> CEE-Kupplung -> Schalter hat z.B. auch
-    // durchgehend erkennbare Rollen (L1), ist aber KEINE geteilte Sammelschiene, sondern eine
-    // gewöhnliche Punkt-zu-Punkt-Verbindung -- eine ECHTE Schiene erkennt man daran, dass
-    // mehrere Leitungen an einem gemeinsamen Punkt zusammenlaufen, nicht nur daran, dass
-    // zufällig mehrere Geräte in derselben Kette rollenmarkierte Ports haben.
+    // behandeln: eine simple Reihenschaltung LS -> Schalter hat z.B. auch durchgehend
+    // erkennbare Rollen (L1), ist aber KEINE geteilte Sammelschiene, sondern eine gewöhnliche
+    // Punkt-zu-Punkt-Verbindung -- eine ECHTE Schiene erkennt man daran, dass mehrere Leitungen
+    // an einem gemeinsamen Punkt zusammenlaufen, nicht nur daran, dass zufällig mehrere Geräte
+    // in derselben Kette rollenmarkierte Ports haben. EINE Ausnahme: eine CEE-Kupplung/Dose
+    // bekommt immer eigene Schienen (auch unverdrahtet, auch in einer simplen Kette), weil sie
+    // per Definition ein Verteilpunkt für alle 5 Adern ist -- das entspricht der Vorlage, die
+    // vorher im Aufbauplan galt ("CEE-Kupplung da -> Schienen zeigen").
     const distinctInsts = new Set(keys.map(k=>portLink[k].inst));
-    if (roles && roles.size===1 && distinctInsts.size>=3 && groupHasJunction[root]) {
+    if (roles && roles.size===1 && (isCEE || (distinctInsts.size>=3 && groupHasJunction[root]))) {
       railGroupRoots.add(root);
       const rail = { id: ridN++, type:[...roles][0], y:railY, x1:20, x2:20+COLS*COLW };
       railY += 20;
