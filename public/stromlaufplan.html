@@ -1259,84 +1259,144 @@ function doNew(){
   render(); scheduleAutoSave();
 }
 
-// Ordnet über Leitungen zusammenhängende Bauteil-Ketten, die einen Schienenanschluss haben,
-// untereinander zwischen den Schienen an -- die Vorlage, die jeder Stromlaufplan hier
-// verwendet (Bauteile hängen senkrecht zwischen Versorgung oben/unten). Für jede Kette wird
-// die JEWEILS verbindende Anschlussstelle exakt auf die Ziel-X ausgerichtet, damit die
-// Leitungen gerade werden (Wires werden hier immer live aus den aktuellen Portpositionen
-// gezeichnet, keine manuelle Wegführung wie im Aufbauplan -- daher reicht reines Verschieben).
+// Ordnet die Bauteile in waagerechten Ebenen an, die dem elektrischen Signalfluss folgen:
+// Ebene 1 = direkt an der Haupt-Versorgungsschiene (L1/L2/L3) angeschlossen -- z.B. FI + mehrere
+// LS nebeneinander auf gleicher Höhe --, jede weitere Leitung oder nachgeschaltete Schiene
+// (z.B. eine ehemalige CEE-Kupplung) rutscht eine Ebene tiefer (Wechselschalter, Leuchte, ...).
+// Innerhalb einer Ebene stehen Sicherheitsgeräte (LS/FI/RCBO) zuerst. N/PE werden danach unter
+// die tiefste Bauteilzeile gelegt, L1/L2/L3 bleiben eng gestaffelt ganz oben. Wires werden hier
+// immer live aus den aktuellen Portpositionen gezeichnet (keine manuelle Wegführung wie im
+// Aufbauplan) -- daher reicht reines Verschieben der Bauteile/Schienen.
 // Wird sowohl über den Button als auch automatisch direkt nach einem Aufbauplan-Import
 // aufgerufen, damit der Entwurf schon beim Erstellen sauber aussieht.
 function arrangeStromlaufplan(){
-  if (!insts.length) { alert('Keine Bauteile im Plan.'); return; }
+  if (!insts.length) { alert('Keine Bauteile im Plan.'); return 0; }
 
+  const SAFETY_TYPES = new Set(['ls1','ls3','rcd2','rcd4','rcbo']);
+  const RAIL_ROLE_ORDER = { L1:0, L2:1, L3:2, N:3, PE:4 };
+  const isPhaseRail = r => r.type==='L1' || r.type==='L2' || r.type==='L3';
+
+  // Instanz-Adjazenz aus direkten Leitungen UND gemeinsamer Schienen-Mitgliedschaft aufbauen --
+  // Bauteile, die dieselbe Schiene teilen (z.B. FI-Ausgang bridgt zu 3 LS), gelten als
+  // "Geschwister" und werden über diese Kanten transitiv weiterverbunden.
   const adj = {};
-  wires.forEach(w=>{
-    (adj[w.fid]=adj[w.fid]||new Set()).add(w.tid);
-    (adj[w.tid]=adj[w.tid]||new Set()).add(w.fid);
+  const link = (a,b)=>{ if(a===b) return; (adj[a]=adj[a]||new Set()).add(b); (adj[b]=adj[b]||new Set()).add(a); };
+  wires.forEach(w=> link(w.fid, w.tid));
+  const railMembers = {};
+  railConns.forEach(rc=> (railMembers[rc.rail]=railMembers[rc.rail]||[]).push(rc.fid));
+  // N/PE sind ein gemeinsamer Rückleiter, den praktisch jedes Bauteil berührt -- über sie zu
+  // verlinken würde als Abkürzung quer durch die Ebenen wirken (z.B. Leuchte direkt neben den
+  // FI ziehen, weil beide an derselben N-Schiene hängen, obwohl die Leuchte elektrisch erst
+  // hinter dem Wechselschalter kommt). Für die Ebenen-Berechnung zählen daher nur L1/L2/L3.
+  Object.entries(railMembers).forEach(([railId, members])=>{
+    const rail = rails.find(r=>r.id===Number(railId));
+    if (!rail || rail.type==='N' || rail.type==='PE') return;
+    for (let i=1;i<members.length;i++) link(members[0], members[i]);
   });
 
-  // Bauteil-Cluster über die Leitungen bilden (Union-Find).
-  const parent = {};
-  const find = x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
-  insts.forEach(i=> parent[i.id]=i.id);
-  wires.forEach(w=>{ const a=find(w.fid), b=find(w.tid); if(a!==b) parent[b]=a; });
-  const clusters = {};
-  insts.forEach(i=>{ const r=find(i.id); (clusters[r]=clusters[r]||[]).push(i.id); });
+  // Wurzel-Schiene(n) bestimmen: bevorzugt L1/L2/L3 -- je Phase die mit den MEISTEN
+  // angeschlossenen Bauteilen (die Haupt-Einspeisung, nicht eine nachgeschaltete Schiene wie
+  // eine ehemalige CEE-Kupplung, die selbst erst über ein LS gespeist wird). Gibt es gar keine
+  // Phasenschiene (z.B. reine N-Sammelschiene), wird ersatzweise jeder vorhandene Schienentyp
+  // gleich behandelt, damit trotzdem etwas angeordnet wird.
+  let candidateTypes = ['L1','L2','L3'].filter(t=> rails.some(r=>r.type===t));
+  if (!candidateTypes.length) candidateTypes = [...new Set(rails.map(r=>r.type))];
+  const rootRailIds = new Set();
+  candidateTypes.forEach(type=>{
+    const candidates = rails.filter(r=>r.type===type);
+    if (!candidates.length) return;
+    let best = candidates[0], bestCount = (railMembers[best.id]||[]).length;
+    candidates.forEach(r=>{
+      const cnt = (railMembers[r.id]||[]).length;
+      if (cnt > bestCount) { best = r; bestCount = cnt; }
+    });
+    rootRailIds.add(best.id);
+  });
+
+  // Ebene (Zeile) je Bauteil per Mehrquellen-BFS: Ebene 1 = direkt an einer Wurzel-Schiene,
+  // jede weitere Kante erhöht die Ebene um 1. Bauteile ohne jeden Bezug zu einer Schiene
+  // bleiben unangetastet (wie zuvor bei unverbundenen Clustern).
+  const depth = {};
+  const queue = [];
+  insts.forEach(i=>{
+    const onRoot = railConns.some(rc=>rc.fid===i.id && rootRailIds.has(rc.rail));
+    if (onRoot) { depth[i.id]=1; queue.push(i.id); }
+  });
+  let qi=0;
+  while (qi<queue.length) {
+    const cur = queue[qi++];
+    (adj[cur]||new Set()).forEach(nb=>{
+      if (depth[nb]==null) { depth[nb]=depth[cur]+1; queue.push(nb); }
+    });
+  }
+  let maxDepth = 0;
+  Object.values(depth).forEach(d=>{ if(d>maxDepth) maxDepth=d; });
+
+  // Pro Ebene sammeln, Sicherheitsgeräte zuerst (danach stabil nach ID), dann als Zeile
+  // nebeneinander anordnen.
+  const rows = {};
+  insts.forEach(i=>{
+    const d = depth[i.id];
+    if (d==null) return;
+    (rows[d]=rows[d]||[]).push(i);
+  });
+  Object.values(rows).forEach(row=>{
+    row.sort((a,b)=>{
+      const sa = SAFETY_TYPES.has(a.type)?0:1, sb = SAFETY_TYPES.has(b.type)?0:1;
+      if (sa!==sb) return sa-sb;
+      return a.id-b.id;
+    });
+  });
+
+  const railTopY = 20, railTopGap = 20, rowGap = 140, colW = 140, colX0 = 60;
+  const phaseRailCount = rails.filter(isPhaseRail).length;
+  const rowY0 = railTopY + Math.max(1, phaseRailCount)*railTopGap + 40;
 
   let moved = 0;
-  Object.values(clusters).forEach(memberIds=>{
-    const rcs = railConns.filter(rc=>memberIds.includes(rc.fid));
-    if (!rcs.length) return; // kein Schienenanschluss -> bleibt unangetastet
-
-    // Oberste Schiene zuerst als Kettenanfang (kleinstes rail.y).
-    let best = rcs[0], bestRail = rails.find(r=>r.id===best.rail);
-    rcs.forEach(rc=>{
-      const rail = rails.find(r=>r.id===rc.rail);
-      if (rail && bestRail && rail.y < bestRail.y) { best = rc; bestRail = rail; }
+  for (let d=1; d<=maxDepth; d++) {
+    const row = rows[d] || [];
+    row.forEach((inst,i)=>{
+      const nx = colX0 + i*colW, ny = rowY0 + (d-1)*rowGap;
+      if (inst.x!==nx || inst.y!==ny) moved++;
+      inst.x = nx; inst.y = ny;
     });
-    const anchorInst = insts.find(i=>i.id===best.fid);
-    if (!anchorInst || !bestRail) return;
-    const targetX = best.rx;
+  }
 
-    // Kette per BFS ab dem Anker aufbauen, dabei je Schritt merken, über welchen Port das
-    // Bauteil an sein Vorgänger-Bauteil angebunden ist -- genau dieser Port wird nachher auf
-    // targetX ausgerichtet, damit die Verbindung gerade verläuft.
-    const order = [{id:best.fid, portIdx:best.fp}];
-    const seen = new Set([best.fid]);
-    const queue = [best.fid];
-    while (queue.length) {
-      const curId = queue.shift();
-      wires.forEach(w=>{
-        let nid=null, nPort=null;
-        if (w.fid===curId && !seen.has(w.tid)) { nid=w.tid; nPort=w.tp; }
-        else if (w.tid===curId && !seen.has(w.fid)) { nid=w.fid; nPort=w.fp; }
-        if (nid!=null) { seen.add(nid); order.push({id:nid, portIdx:nPort}); queue.push(nid); }
-      });
-    }
+  // Schienen neu staffeln:
+  // - Wurzel-Schienen (Haupt-Einspeisung) eng gestaffelt ganz oben, über Zeile 1.
+  // - Nicht-Wurzel Phasenschienen (z.B. eine ehemalige CEE-Kupplung mitten in der Kette) genau
+  //   zwischen die Zeile, die sie speist, und die Zeile, die sie versorgt -- statt pauschal oben.
+  // - N/PE immer UNTER der tiefsten Bauteilzeile, unabhängig davon, welche Bauteile daranhängen
+  //   (gemeinsamer Rückleiter, kein Zwischenschritt in der Kette).
+  const rootTop = [], bottomRails = [];
+  const midRails = {};
+  rails.forEach(r=>{
+    if (r.type==='N' || r.type==='PE') { bottomRails.push(r); return; }
+    if (rootRailIds.has(r.id)) { rootTop.push(r); return; }
+    const memberDepths = (railMembers[r.id]||[]).map(m=>depth[m]).filter(d=>d!=null);
+    const gapIndex = memberDepths.length ? Math.min(...memberDepths) : 0;
+    (midRails[gapIndex] = midRails[gapIndex] || []).push(r);
+  });
+  const byRole = (a,b)=>(RAIL_ROLE_ORDER[a.type]??99)-(RAIL_ROLE_ORDER[b.type]??99);
+  rootTop.sort(byRole).forEach((r,i)=>{ r.y = railTopY + i*railTopGap; });
+  Object.keys(midRails).forEach(gi=>{
+    const list = midRails[gi].sort(byRole);
+    const baseY = gi>0 ? (rowY0 + Number(gi)*rowGap - rowGap/2) : (rowY0 - 30);
+    list.forEach((r,i)=>{ r.y = Math.round(baseY + i*railTopGap); });
+  });
+  const neutralY0 = rowY0 + maxDepth*rowGap + 20;
+  bottomRails.sort(byRole).forEach((r,i)=>{ r.y = neutralY0 + i*railTopGap; });
 
-    const gapY = 90;
-    let y = bestRail.y + 50;
-    order.forEach(({id,portIdx})=>{
-      const inst = insts.find(i=>i.id===id);
-      if (!inst) return;
-      const s = SYM[inst.type];
-      const port = s.ports[portIdx] || {x: s.w/2};
-      inst.x = Math.round(targetX - port.x);
-      inst.y = Math.round(y);
-      y += gapY;
-      moved++;
-    });
+  // Schienenlänge an die tatsächlich am weitesten rechts stehende Bauteilspalte anpassen.
+  let maxRight = 0;
+  insts.forEach(i=>{ const s=SYM[i.type]; if(s) maxRight = Math.max(maxRight, i.x + (s.w||100)); });
+  rails.forEach(r=>{ if (maxRight+40 > r.x2) r.x2 = maxRight+40; });
 
-    // Jeden Schienenanschluss auf die TATSÄCHLICHE (neue) Weltposition SEINES EIGENEN Ports
-    // ausrichten -- nicht pauschal auf targetX, denn ein Bauteil kann mehrere Schienenanschlüsse
-    // auf unterschiedlichen Ports haben (z.B. Wechselschalter: C an einer Schiene, Pos.2 an
-    // einer anderen), die nicht zwangsläufig auf derselben X liegen wie der Ketten-Anschlusspunkt.
-    rcs.forEach(rc=>{
-      const inst = insts.find(i=>i.id===rc.fid);
-      const port = inst && SYM[inst.type].ports[rc.fp];
-      if (inst && port) rc.rx = inst.x + port.x;
-    });
+  // Jeden Schienenanschluss auf die tatsächliche neue Weltposition seines Ports ausrichten.
+  railConns.forEach(rc=>{
+    const inst = insts.find(i=>i.id===rc.fid);
+    const port = inst && SYM[inst.type] && SYM[inst.type].ports[rc.fp];
+    if (inst && port) rc.rx = inst.x + port.x;
   });
 
   return moved;
