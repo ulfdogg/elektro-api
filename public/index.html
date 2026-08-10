@@ -3866,6 +3866,24 @@ SVG.addEventListener('pointerdown', e=>{
     if (t) { texts.push({id:++txid,x:snp(p.x),y:snp(p.y),text:t,size:14}); render(); }
     setMode('select'); return;
   }
+  // Leitung-Modus: Klick auf Hintergrund fügt einen Knickpunkt hinzu -- über pointerdown statt
+  // click, weil das synthetische click-Event bei Stift-/Touch-Eingabe unterdrückt wird, sobald
+  // sich der Kontaktpunkt zwischen Down und Up minimal verschiebt (normale Handzittern-Toleranz
+  // eines physischen Stifts) -- der Knick ging dadurch beim Verlegen mit dem Apple Pencil verloren.
+  if (mode==='wire' && wfrom) {
+    const isBackground = e.target===SVG || e.target.id==='bg'
+      || !!e.target.closest('#fg')
+      || (e.target.closest('.comp-g') && !e.target.classList.contains('port-c'));
+    if (isBackground) {
+      const p = svgPt(e);
+      const cx=snp(p.x), cy=snp(p.y);
+      const [lx,ly] = wpts.length>0 ? wpts[wpts.length-1] : [wfrom.x, wfrom.y];
+      addCorner(wpts, lx, ly, cx, cy, wHfirst);
+      wHfirst = !wHfirst;
+      e.stopPropagation();
+      return;
+    }
+  }
 
   if (!onBg || mode!=='select') return;
 
@@ -4220,18 +4238,9 @@ SVG.addEventListener('click',e=>{
     }
     sbCancelTap(); render(); return;
   }
-  // In wire mode: any click on non-port background (including UV interior) adds a waypoint
-  const isBackground = e.target===SVG || e.target.id==='bg'
-    || !!e.target.closest('#fg')
-    || (e.target.closest('.comp-g') && !e.target.classList.contains('port-c'));
-  if (mode==='wire' && wfrom && isBackground) {
-    const p = svgPt(e);
-    const cx=snp(p.x), cy=snp(p.y);
-    const [lx,ly] = wpts.length>0 ? wpts[wpts.length-1] : [wfrom.x, wfrom.y];
-    addCorner(wpts, lx, ly, cx, cy, wHfirst);
-    wHfirst = !wHfirst;
-    return;
-  }
+  // Knickpunkt-Klick im Leitung-Modus wird jetzt im pointerdown-Handler behandelt (siehe dort) --
+  // hier nur noch die Klick-auf-Hintergrund-Abwahl außerhalb des Leitung-Modus.
+  if (mode==='wire' && wfrom) return;
   if (e.target===SVG||e.target.id==='bg') {
     sel=null; selSet.clear(); selFrame=null; selText=null; selWire=null; render();
   }
