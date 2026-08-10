@@ -89,8 +89,8 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;fo
 #sim-status.live{color:#22c55e}
 
 /* ── SVG canvas ── */
-#svg-wrap{flex:1;overflow:hidden;position:relative;cursor:default}
-svg#cv{width:100%;height:100%;display:block}
+#svg-wrap{flex:1;overflow:hidden;position:relative;cursor:default;touch-action:none}
+svg#cv{width:100%;height:100%;display:block;touch-action:none}
 
 /* ── Context menu ── */
 #ctx{position:fixed;background:#fff;border:1px solid #808080;box-shadow:2px 2px 6px rgba(0,0,0,.25);z-index:500;display:none;min-width:130px}
@@ -592,17 +592,16 @@ function drawBlock(b){
     if(b.type==='tonoff'){
       const box1=mkEl('rect',{x:b.x+4,y:b.y+h-37,width:w-8,height:15,rx:2,fill:'#dbeafe',stroke:'#2563eb','stroke-width':1,cursor:'pointer'},g);
       mkEl('text',{x:b.x+w/2,y:b.y+h-26,'text-anchor':'middle','font-size':7.5,fill:'#1e40af','font-weight':'700','pointer-events':'none'},g).textContent='TH='+fmt(b.paramMin,b.paramSec,b.paramUnit);
-      box1.addEventListener('click',e=>{ e.stopPropagation(); openDlg(b); });
-      box1.addEventListener('pointerdown',e=>e.stopPropagation());
+      // pointerdown statt click -- click wird bei Stift-/Touch-Eingabe unterdrückt, sobald sich
+      // der Kontaktpunkt zwischen Down und Up minimal verschiebt.
+      box1.addEventListener('pointerdown',e=>{ e.stopPropagation(); openDlg(b); });
       const box2=mkEl('rect',{x:b.x+4,y:b.y+h-19,width:w-8,height:15,rx:2,fill:'#dbeafe',stroke:'#2563eb','stroke-width':1,cursor:'pointer'},g);
       mkEl('text',{x:b.x+w/2,y:b.y+h-8,'text-anchor':'middle','font-size':7.5,fill:'#1e40af','font-weight':'700','pointer-events':'none'},g).textContent='TL='+fmt(b.paramMin2,b.paramSec2,b.paramUnit2);
-      box2.addEventListener('click',e=>{ e.stopPropagation(); openDlg(b); });
-      box2.addEventListener('pointerdown',e=>e.stopPropagation());
+      box2.addEventListener('pointerdown',e=>{ e.stopPropagation(); openDlg(b); });
     } else {
       const tpBox=mkEl('rect',{x:b.x+4,y:b.y+h-20,width:w-8,height:14,rx:2,fill:'#dbeafe',stroke:'#2563eb','stroke-width':1,cursor:'pointer'},g);
       mkEl('text',{x:b.x+w/2,y:b.y+h-10,'text-anchor':'middle','font-size':7.5,fill:'#1e40af','font-weight':'700','pointer-events':'none'},g).textContent='T='+fmt(b.paramMin,b.paramSec,b.paramUnit);
-      tpBox.addEventListener('click',e=>{ e.stopPropagation(); openDlg(b); });
-      tpBox.addEventListener('pointerdown',e=>e.stopPropagation());
+      tpBox.addEventListener('pointerdown',e=>{ e.stopPropagation(); openDlg(b); });
     }
   }
 
@@ -660,18 +659,10 @@ function drawBlock(b){
   rect.addEventListener('pointerdown', e=>{ if(e.button!==0) return; e.stopPropagation(); startBlkDrag(b.id,e); });
   rect.addEventListener('contextmenu', e=>{ e.preventDefault(); ctxTargetId=b.id; ctxTargetType='block'; showCtxBlock(b,e.clientX,e.clientY); });
   rect.addEventListener('dblclick', e=>{ e.stopPropagation(); onBlockDblClick(b); });
-  // Test mode: click input block to toggle test state
-  if(b.type==='input'){
-    rect.style.cursor='pointer';
-    rect.addEventListener('click', e=>{
-      if(simLive) return;
-      e.stopPropagation();
-      const ii=parseInt(b.port.slice(1))-1;
-      testInputs[ii]=!testInputs[ii];
-      _evalCache=null;
-      updateSpslive();
-    });
-  }
+  // Testmodus: Eingabe-Baustein antippen schaltet den Testzustand um -- die eigentliche
+  // Umschaltung passiert im pointerup-Handler (Tippen-vs-Ziehen per Distanzmessung erkannt),
+  // hier nur der Cursor-Hinweis.
+  if(b.type==='input') rect.style.cursor='pointer';
 
   // Sim state overlay on block
   drawBlockSimState(g,b);
@@ -893,7 +884,11 @@ function startBlkDrag(id,e){
   const b=prog.blocks.find(x=>x.id===id); if(!b) return;
   const p=svgPt(e.clientX,e.clientY);
   selId=id;
-  dragBlk={ id, ox:p.x-b.x, oy:p.y-b.y };
+  // sx/sy (Bildschirmkoordinaten, bewegungsunabhängig) merken, um bei pointerup zu erkennen, ob
+  // es ein Tippen (kaum Bewegung) statt eines echten Ziehens war -- eigene Messung statt des
+  // synthetischen 'click'-Events, das der Browser bei Stift-/Touch-Eingabe unterdrückt, sobald
+  // sich der Kontaktpunkt zwischen Down und Up minimal verschiebt.
+  dragBlk={ id, ox:p.x-b.x, oy:p.y-b.y, sx:e.clientX, sy:e.clientY };
   cv.setPointerCapture(e.pointerId);
   render();
 }
@@ -964,7 +959,22 @@ cv.addEventListener('pointermove',e=>{
 });
 
 cv.addEventListener('pointerup',e=>{
-  if(dragBlk){ dragBlk=null; broadcastProg(); }
+  if(dragBlk){
+    // Kaum Bewegung zwischen Down und Up = Tippen, kein Ziehen -- bei einem Eingabe-Baustein
+    // (im Testmodus) dessen Zustand umschalten. Eigene Distanzmessung statt 'click', das bei
+    // Stift-/Touch-Eingabe unterdrückt wird, sobald sich der Kontaktpunkt minimal verschiebt.
+    const dist=Math.hypot(e.clientX-dragBlk.sx,e.clientY-dragBlk.sy);
+    if(dist<6){
+      const b=prog.blocks.find(x=>x.id===dragBlk.id);
+      if(b&&b.type==='input'&&!simLive){
+        const ii=parseInt(b.port.slice(1))-1;
+        testInputs[ii]=!testInputs[ii];
+        _evalCache=null;
+        updateSpslive();
+      }
+    }
+    dragBlk=null; broadcastProg();
+  }
   if(panDrag){ panDrag=null; }
   if(connDrag){
     // Check if released on an input port
