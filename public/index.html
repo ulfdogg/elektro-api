@@ -3277,8 +3277,6 @@ function render() {
   });
   const renderedLabels = []; // track placed labels for overlap avoidance
   sorted.forEach(comp => {
-    // In simMode CEE-Kupplung nicht zeichnen — stattdessen Sammelschienen
-    if (simMode && comp.type === 'cee16_kupplung') return;
     const rot=comp.rot||0;
     const rotT=rot&&!comp.def.isCable&&!comp.def.isKanal?` rotate(${rot},${comp.def.w/2},${comp.def.h/2})`:'';
     const g = mk('g',{class:'comp-g',transform:`translate(${comp.x},${comp.y})${rotT}`,'data-id':comp.id},CG);
@@ -3683,42 +3681,6 @@ function render() {
         mk('text',{x:cx,y:bb.y1-5,'text-anchor':'middle','font-size':8,
           fill:'#fbbf24','pointer-events':'none'},CG).textContent='⚡ QUELLE';
       }
-    });
-  }
-
-  // ── CEE-Power-Rails: in simMode L1/L2/L3 oben, N/PE unten als Sammelschienen ──
-  if (simMode && comps.some(c => c.type === 'cee16_kupplung')) {
-    let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
-    comps.forEach(c => {
-      if (c.type === 'cee16_kupplung') return;
-      const bb = compBBox(c);
-      if (bb.x1 < minX) minX = bb.x1;
-      if (bb.x2 > maxX) maxX = bb.x2;
-      if (bb.y2 > maxY) maxY = bb.y2;
-    });
-    if (minX === Infinity) { minX = 0; maxX = 800; maxY = 400; }
-    const pad = 40;
-    const x1 = minX - pad;
-    const x2 = maxX + pad;
-    const topRails = [
-      { label: 'L1', y: -10, color: '#8B4513' },
-      { label: 'L2', y: 5,  color: '#1f2937' },
-      { label: 'L3', y: 20, color: '#6b7280' },
-    ];
-    topRails.forEach(r => {
-      mk('line', {x1, y1: r.y, x2, y2: r.y, stroke: r.color, 'stroke-width': 2.5, opacity: 0.7, 'pointer-events':'none'}, CG);
-      mk('rect', {x: x1 - 24, y: r.y - 9, width: 24, height: 18, fill: '#fff', opacity: 0.92, rx: 3, 'pointer-events':'none'}, CG);
-      mk('text', {x: x1 - 12, y: r.y + 4, 'text-anchor':'middle', 'font-size': 11, 'font-weight':'bold', fill: r.color, 'pointer-events':'none'}, CG).textContent = r.label;
-    });
-    const bottomY = Math.max(maxY + 60, 500);
-    const botRails = [
-      { label: 'N',  y: bottomY,     color: '#1a56db' },
-      { label: 'PE', y: bottomY + 20, color: '#16a34a' },
-    ];
-    botRails.forEach(r => {
-      mk('line', {x1, y1: r.y, x2, y2: r.y, stroke: r.color, 'stroke-width': 2.5, opacity: 0.7, 'pointer-events':'none'}, CG);
-      mk('rect', {x: x1 - 24, y: r.y - 9, width: 24, height: 18, fill: '#fff', opacity: 0.92, rx: 3, 'pointer-events':'none'}, CG);
-      mk('text', {x: x1 - 12, y: r.y + 4, 'text-anchor':'middle', 'font-size': 11, 'font-weight':'bold', fill: r.color, 'pointer-events':'none'}, CG).textContent = r.label;
     });
   }
 
