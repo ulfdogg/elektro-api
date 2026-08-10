@@ -854,6 +854,20 @@ document.querySelectorAll('.sb-item').forEach(el=>{
     e.dataTransfer.setData('text/plain','block');
   });
   el.addEventListener('dragend',()=>{ sbDragData=null; });
+  // Tap-Fallback für Touch/Stift: natives HTML5-Drag&Drop feuert auf iOS/touch überhaupt nicht,
+  // ohne das ließ sich in der SPS-Programmierung per Touch kein einziger Baustein platzieren.
+  // Antippen setzt den Baustein direkt in die Mitte der aktuellen Ansicht (mit kleinem
+  // Zufalls-Versatz, damit mehrfaches Antippen nicht exakt übereinander landet).
+  el.addEventListener('pointerdown', e=>{
+    if (e.pointerType==='mouse') return; // Maus nutzt weiterhin natives Drag&Drop
+    e.stopPropagation();
+    const r = cv.getBoundingClientRect();
+    const cx = r.left + r.width/2 + (Math.random()*60-30);
+    const cy = r.top + r.height/2 + (Math.random()*60-30);
+    const p = svgPt(cx, cy);
+    const type = el.dataset.type, port = el.dataset.port||null;
+    addBlock(type, p.x-bW({type})/2, p.y-15, port);
+  });
 });
 cv.addEventListener('dragover',e=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
 cv.addEventListener('drop',e=>{
