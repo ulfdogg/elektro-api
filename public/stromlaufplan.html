@@ -49,8 +49,8 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;ba
 .sb-item svg{flex-shrink:0}
 #canvasWrap{flex:1;overflow:hidden;position:relative;background:
   linear-gradient(#dbe2ea 1px,transparent 1px),linear-gradient(90deg,#dbe2ea 1px,transparent 1px);
-  background-size:20px 20px;background-color:#eef1f5;cursor:default}
-#svg{position:absolute;top:0;left:0}
+  background-size:20px 20px;background-color:#eef1f5;cursor:default;touch-action:none}
+#svg{position:absolute;top:0;left:0;touch-action:none}
 .port-hit{cursor:crosshair}
 .port-hit:hover circle{stroke:#2563eb!important;stroke-width:2.5!important}
 #tip{position:fixed;background:#1a202c;color:#e2e8f0;font-size:11px;padding:3px 8px;border-radius:4px;pointer-events:none;display:none;z-index:1000}
@@ -1023,6 +1023,9 @@ function placeAtViewCenter(type){
 let panDrag = null;
 canvasWrap.addEventListener('pointerdown', e=>{
   if (e.target === canvasWrap || e.target.id==='svg') {
+    // Apple Pencil/Touch: Pointer explizit einfangen, damit ein schneller Zug nicht die
+    // Verfolgung verliert (Pencil-Eingaben können sich sehr schnell bewegen).
+    if (e.pointerType!=='mouse') canvasWrap.setPointerCapture(e.pointerId);
     // Beim Leitung-Verlegen fügt ein Klick auf den Hintergrund einen Knickpunkt hinzu, statt
     // die Leitung abzubrechen oder zu verschieben (wie im Aufbauplan) -- so lässt sich der
     // Verlauf schon beim Ziehen selbst bestimmen, nicht erst danach per Griff.
@@ -1083,6 +1086,7 @@ function render(){
     const hit = mk('line',{x1:r.x1,y1:r.y,x2:r.x2,y2:r.y,stroke:'transparent','stroke-width':14,cursor:'pointer'},svg);
     hit.addEventListener('pointerdown', e=>{
       e.stopPropagation();
+      if (e.pointerType!=='mouse') hit.setPointerCapture(e.pointerId);
       if (wireStart){
         // Bauteil-Anschluss mit der Schiene an dieser Stelle verbinden
         const p = svgPt(e.clientX,e.clientY);
@@ -1106,7 +1110,9 @@ function render(){
     [['x1',r.x1],['x2',r.x2]].forEach(([key,xv])=>{
       const handle = mk('rect',{x:xv-4,y:r.y-4,width:8,height:8,fill:'#fff',stroke:rt.color,'stroke-width':1.5,cursor:'ew-resize'},svg);
       handle.addEventListener('pointerdown', e=>{
-        e.stopPropagation(); sel=null; selWire=null; selRailConn=null; selRail=r.id; render();
+        e.stopPropagation();
+        if (e.pointerType!=='mouse') handle.setPointerCapture(e.pointerId);
+        sel=null; selWire=null; selRailConn=null; selRail=r.id; render();
         const onMove = ev=>{
           const p = svgPt(ev.clientX,ev.clientY);
           r[key] = Math.round(p.x/10)*10;
@@ -1183,6 +1189,7 @@ function render(){
         mk('circle',{cx:mx,cy:my,r:4,fill:'#fff',stroke:'#2563eb','stroke-width':1.5,'pointer-events':'none'},svg);
         (si=>sh.addEventListener('pointerdown', e=>{
           e.stopPropagation();
+          if (e.pointerType!=='mouse') sh.setPointerCapture(e.pointerId);
           const start = svgPt(e.clientX,e.clientY);
           const origPts = w.pts.map(p=>[...p]);
           const onMove = ev=>{
@@ -1209,6 +1216,7 @@ function render(){
         const vh = mk('circle',{cx:vx,cy:vy,r:5,fill:'#fff',stroke:'#2563eb','stroke-width':1.5,cursor:'move'},svg);
         (vi=>vh.addEventListener('pointerdown', e=>{
           e.stopPropagation();
+          if (e.pointerType!=='mouse') vh.setPointerCapture(e.pointerId);
           const onMove = ev=>{
             const p = svgPt(ev.clientX,ev.clientY);
             w.pts[vi] = [Math.round(p.x/10)*10, Math.round(p.y/10)*10];
@@ -1253,6 +1261,7 @@ function render(){
     const hitBox = mk('rect',{x:-4,y:-4,width:s.w+8,height:s.h+8,fill:'transparent',cursor: simMode?'pointer':'grab'},g);
     hitBox.addEventListener('pointerdown', e=>{
       e.stopPropagation();
+      if (e.pointerType!=='mouse') hitBox.setPointerCapture(e.pointerId);
       if (simMode) {
         if (inst.type==='taster_no' || inst.type==='taster_nc') {
           simState[inst.id] = { ...(simState[inst.id]||{}), pressed:true };
@@ -1295,6 +1304,7 @@ function render(){
       mk('circle',{r:4,fill:'#fff',stroke:'#6b7280','stroke-width':1.3},port);
       port.addEventListener('pointerdown', e=>{
         e.stopPropagation();
+        if (e.pointerType!=='mouse') port.setPointerCapture(e.pointerId);
         if (!wireStart){ wireStart = {instId:inst.id, portIdx:pi}; wireWaypoints=[]; wireHFirst=true; render(); }
         else if (wireStart.instId===inst.id && wireStart.portIdx===pi) {
           // Klick auf denselben Startport = Verlegen abbrechen (wie Escape).
