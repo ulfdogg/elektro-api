@@ -33,6 +33,15 @@ jobs:
           npx cap add ios
           npx cap sync ios
 
+      - name: Export-Compliance-Frage dauerhaft beantworten
+        # Die App nutzt nur Standard-HTTPS über die iOS-Systembibliotheken, keine eigene
+        # Verschlüsselung -- ITSAppUsesNonExemptEncryption=false sagt das direkt in der
+        # Info.plist, damit App Store Connect nie wieder "Fehlende Compliance" anzeigt.
+        working-directory: android-app/ios/App/App
+        run: |
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" Info.plist \
+            || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" Info.plist
+
       - name: Disable code signing for Pod library targets
         # Pods/Capacitor/CapacitorCordova are static libraries, not signed app bundles -- they
         # must never get a provisioning profile requirement. Without this, the manual signing
