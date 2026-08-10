@@ -102,7 +102,7 @@ jobs:
             CODE_SIGN_IDENTITY="Apple Distribution" \
             PROVISIONING_PROFILE_SPECIFIER=ff517007-42ce-44ed-b882-7d8ec833b142 \
             DEVELOPMENT_TEAM=PFPJHZQH4E \
-            MARKETING_VERSION=1.1-beta \
+            MARKETING_VERSION=1.1 \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             archive
 
