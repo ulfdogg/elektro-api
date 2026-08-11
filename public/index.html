@@ -206,7 +206,6 @@ kbd { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
       <button class="t-btn" onclick="delSel()">✕ Löschen</button>
       <button class="t-btn" onclick="clearAll()">🗑 Neu</button>
       <select class="t-btn" id="tpl-select" onchange="loadTemplate(this.value,this)" title="Vorlage laden"><option value="">📋 Vorlage…</option></select>
-      <a href="/stromlaufplan" class="t-btn" style="text-decoration:none" title="Leerer Stromlaufplan-Editor (Schaltzeichen nach Norm zeichnen)">📐 Stromlaufplan</a>
       <span style="flex:1"></span>
       <span id="es-username" style="font-size:11px;color:#9ca3af;padding:0 6px;white-space:nowrap"></span>
       <a id="es-admin-link" href="/admin.html" class="t-btn" style="display:none;text-decoration:none;color:#93c5fd">🛠 Admin</a>
@@ -1468,7 +1467,7 @@ function ortho(x1, y1, d1, x2, y2, d2) {
 
 // ── Obstacle-aware wire routing ───────────────────────────────────────────────
 function wireRoute(x1, y1, dir1, x2, y2, dir2, skipIds, softOccupied) {
-  const STEP = 10, OPAD = 5, M = 60;
+  const STEP = 10, OPAD = 8, M = 60;
 
   // Return ALL enclosing component ids (a port can be inside LS AND inside UV)
   function enclosers(x, y) {
@@ -1531,10 +1530,21 @@ function wireRoute(x1, y1, dir1, x2, y2, dir2, skipIds, softOccupied) {
         blocked[key(col,r)]=1;
   }
   if (softOccupied) {
+    // Nicht nur die exakte Zelle, sondern auch die direkten Nachbarn mit einer (etwas
+    // schwächeren) Strafe belegen -- sonst könnte eine neue Leitung direkt neben einer
+    // bestehenden herlaufen und sie optisch "übermalen"/kaum sichtbar überlappen. Das Raster
+    // (10) entspricht dem Sampling-Abstand in pathToSoftCells, damit keine Lücken entlang
+    // einer Leitung entstehen, durch die eine andere unbestraft hindurchschlüpfen könnte.
     for (const cell of softOccupied) {
       const [wgx,wgy] = cell.split(',').map(Number);
-      const lx=Math.round((wgx*15-ox)/STEP), ly=Math.round((wgy*15-oy)/STEP);
-      if (lx>=0&&lx<GW&&ly>=0&&ly<GH&&!blocked[key(lx,ly)]) penalty[key(lx,ly)]=12;
+      const lx=Math.round((wgx*10-ox)/STEP), ly=Math.round((wgy*10-oy)/STEP);
+      for (const [dx,dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]) {
+        const nx=lx+dx, ny=ly+dy;
+        if (nx<0||nx>=GW||ny<0||ny>=GH) continue;
+        const pk=key(nx,ny);
+        if (blocked[pk]) continue;
+        penalty[pk]=Math.max(penalty[pk], (dx===0&&dy===0)?40:20);
+      }
     }
   }
 
@@ -1561,7 +1571,7 @@ function wireRoute(x1, y1, dir1, x2, y2, dir2, skipIds, softOccupied) {
   const heap=[[heur(sgx,sgy),0,sgx,sgy,-1]];
   let found=false;
 
-  for (let iter=0; iter<40000&&heap.length>0; iter++) {
+  for (let iter=0; iter<80000&&heap.length>0; iter++) {
     let bi=0;
     for (let i=1;i<heap.length;i++) if(heap[i][0]<heap[bi][0]) bi=i;
     const [,g,cx,cy,pdi]=heap.splice(bi,1)[0];
@@ -1672,13 +1682,16 @@ function parsePath(d) {
 }
 
 function pathToSoftCells(d) {
+  // Sampling-Raster (10) entspricht STEP in wireRoute() -- sonst blieben zwischen den
+  // Stichproben Lücken, durch die eine andere Leitung unbestraft "hindurchschlüpfen" könnte.
+  const GRID = 10;
   const cells=new Set(), pts=parsePath(d);
   for (let i=0;i<pts.length-1;i++){
     const [x1,y1]=pts[i],[x2,y2]=pts[i+1];
-    const steps=Math.max(1,Math.round(Math.sqrt((x2-x1)**2+(y2-y1)**2)/15));
+    const steps=Math.max(1,Math.round(Math.sqrt((x2-x1)**2+(y2-y1)**2)/GRID));
     for (let j=0;j<=steps;j++){
       const t=j/steps;
-      cells.add(`${Math.round((x1+(x2-x1)*t)/15)},${Math.round((y1+(y2-y1)*t)/15)}`);
+      cells.add(`${Math.round((x1+(x2-x1)*t)/GRID)},${Math.round((y1+(y2-y1)*t)/GRID)}`);
     }
   }
   return cells;
