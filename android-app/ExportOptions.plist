@@ -3,14 +3,12 @@
 <plist version="1.0">
 <dict>
     <key>method</key>
-    <string>ad-hoc</string>
+    <string>app-store</string>
     <key>teamID</key>
-    <string>TEAM_ID_PLACEHOLDER</string>
+    <string>PFPJHZQH4E</string>
     <key>uploadSymbols</key>
-    <false/>
+    <true/>
     <key>compileBitcode</key>
     <false/>
-    <key>thinning</key>
-    <string>&lt;none&gt;</string>
 </dict>
 </plist>
